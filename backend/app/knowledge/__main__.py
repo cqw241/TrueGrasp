@@ -17,7 +17,7 @@ from sqlmodel import Session
 from app.config import get_settings
 from app.db import get_engine, init_db
 from app.knowledge.content import Content, check_math, load_dir
-from app.knowledge.ingest import ingest
+from app.knowledge.ingest import IngestError, ingest
 from app.knowledge.skeleton import write_skeleton
 from app.verify.tools import SympyMathTools
 
@@ -43,12 +43,17 @@ def _draft(directory: Path, misconception_id: str) -> int:
     from app.llm.client import OpenAICompatClient
 
     content = load_dir(directory)
+    if content.errors:
+        for issue in content.errors:
+            print(issue)
+        return 1
     if misconception_id not in content.misconceptions:
         print(f"错因不存在：{misconception_id}")
         return 1
-    result = asyncio.run(
-        draft_probe(content, misconception_id, OpenAICompatClient(get_settings()), SympyMathTools())
-    )
+    drafts = directory.parent / "drafts"
+    taken = {path.stem for path in drafts.glob("*.yaml")}
+    llm = OpenAICompatClient(get_settings())
+    result = asyncio.run(draft_probe(content, misconception_id, llm, SympyMathTools(), taken))
     for reason in result.failures:
         print(f"未通过：{reason}")
     if result.item is None:
@@ -68,14 +73,21 @@ def _draft(directory: Path, misconception_id: str) -> int:
             }
         ]
     }
-    out = directory.parent / "drafts" / f"{item.id}.yaml"
+    out = drafts / f"{item.id}.yaml"
     out.parent.mkdir(parents=True, exist_ok=True)
-    header = (
-        f"# 模型起草，待教师审核。设计思路：{result.rationale}\n"
-        f"# 审核通过后，把题目移入讲次文件，"
-        f"并在错因 {misconception_id} 的 probes 中加上 {item.id}\n"
-    )
-    out.write_text(header + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), "utf-8")
+    lines = [
+        "模型起草，待教师审核。",
+        f"审核通过后，把题目移入讲次文件，并在错因 {misconception_id} 的 probes 中加上 {item.id}",
+        "设计思路：",
+        *result.rationale.splitlines(),
+    ]
+    header = "".join(f"# {line}\n" for line in lines)
+    try:
+        with out.open("x", encoding="utf-8") as f:  # 不覆盖待审稿
+            f.write(header + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False))
+    except FileExistsError:
+        print(f"待审稿已存在，未覆盖：{out}")
+        return 1
     print(f"已导出：{out}")
     return 0
 
@@ -106,9 +118,15 @@ def main(argv: list[str] | None = None) -> int:
         engine = get_engine()
         init_db(engine)
         with Session(engine) as session:
-            for notice in ingest(session, content):
-                print(notice)
+            try:
+                notices = ingest(session, content)
+            except IngestError as exc:
+                for issue in exc.issues:
+                    print(issue)
+                return 1
             session.commit()
+        for notice in notices:
+            print(notice)
         print("已入库")
     return 0
 

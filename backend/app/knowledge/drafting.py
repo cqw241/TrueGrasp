@@ -93,8 +93,13 @@ def _review(content: Content, misconception_id: str, draft: ProbeDraft, tools: M
 
 
 async def draft_probe(
-    content: Content, misconception_id: str, llm: LLMClient, tools: MathTools
+    content: Content,
+    misconception_id: str,
+    llm: LLMClient,
+    tools: MathTools,
+    taken_ids: set[str] = frozenset(),
 ) -> DraftResult:
+    """``taken_ids`` 是内容之外已经占用的题目 ID，如尚未审核的草稿，新题目的编号会避开它们。"""
     target = content.misconceptions[misconception_id]
     failures: list[str] = []
     for _ in range(MAX_ATTEMPTS):
@@ -108,7 +113,9 @@ async def draft_probe(
         if reason := _review(content, misconception_id, draft, tools):
             failures.append(reason)
             continue
-        number = len(target.probe_item_ids) + 1
+        number = 1
+        while f"{misconception_id}.probe{number}" in content.items.keys() | taken_ids:
+            number += 1
         item = Item(
             id=f"{misconception_id}.probe{number}",
             knowledge_point_id=target.knowledge_point_id,

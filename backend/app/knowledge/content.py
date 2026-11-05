@@ -128,7 +128,13 @@ def load(paths: Iterable[Path]) -> Content:
 
 
 def load_dir(directory: Path) -> Content:
-    return load(directory.glob("*.yaml"))
+    paths = list(directory.glob("*.yaml"))
+    if not paths:
+        content = Content()
+        state = "没有 YAML 文件" if directory.is_dir() else "不存在"
+        content.issues.append(Issue(str(directory), "", f"内容目录{state}"))
+        return content
+    return load(paths)
 
 
 def _register(content: Content, table: dict, file: str, key: str, value: object) -> bool:

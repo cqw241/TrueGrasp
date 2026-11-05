@@ -199,7 +199,8 @@ async def test_draft_probe_retries_until_distinct():
             probe("cos(5*x)**2", r"-10\cos(5x)\sin(5x)", r"-2\cos(5x)\sin(5x)"),
         ]
     )
-    result = await draft_probe(content, "calc.ch2.chain.miss_inner", llm, TEMPLATE_TOOLS)
+    taken = {"calc.ch2.chain.miss_inner.probe1"}  # 已有一份待审稿
+    result = await draft_probe(content, "calc.ch2.chain.miss_inner", llm, TEMPLATE_TOOLS, taken)
 
     assert result.item is not None
     assert result.item.spec.expr == "cos(5*x)**2"
@@ -209,3 +210,45 @@ async def test_draft_probe_retries_until_distinct():
     ).separates("calc.ch2.chain.miss_inner")
     assert len(result.failures) == 1  # 第一稿只能分出正确答案组，被退回
     assert result.failures[0] in llm.prompts[1]
+
+
+def test_ingest_rejects_changing_answered_item(tmp_path):
+    from datetime import date
+
+    from app.contracts.entities import Evidence, Student
+    from app.contracts.enums import EvidenceKind, JudgedBy
+    from app.knowledge.ingest import IngestError
+
+    engine = make_engine(f"sqlite:///{tmp_path / 'business.db'}")
+    init_db(engine)
+    content = load([*LECTURES, CONTENT / "template.yaml"])
+    with Session(engine) as session:
+        ingest(session, content)
+        session.add(Student(id="A", name="学生 A"))
+        session.flush()
+        session.add(
+            Evidence(
+                student_id="A",
+                knowledge_point_id="calc.ch2.chain_rule_multi",
+                kind=EvidenceKind.VERIFICATION,
+                item_id="calc.ch2.chain_multi.seed1",
+                student_answer=r"6\sin^2(2x)\cos(2x)",
+                is_correct=True,
+                judged_by=JudgedBy.TOOL,
+                teaching_date=date(2026, 9, 7),
+            )
+        )
+        session.commit()
+
+    ingest(Session(engine), content)  # 内容不变时可以重复入库
+    changed = load([*LECTURES, CONTENT / "template.yaml"])
+    changed.items["calc.ch2.chain_multi.seed1"].stem = "求 $\\sin^3(4x)$ 的导数"
+    with Session(engine) as session, pytest.raises(IngestError) as exc:
+        ingest(session, changed)
+    assert [i.ref for i in exc.value.issues] == ["calc.ch2.chain_multi.seed1"]
+
+
+def test_missing_content_directory_is_an_error(tmp_path):
+    from app.knowledge.content import load_dir
+
+    assert load_dir(tmp_path / "nope").errors[0].message == "内容目录不存在"
