@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 class RunState(TypedDict, total=False):
     kind: str
+    dispatch: bool
     event_id: int
     task_id: int
     teaching_date: str

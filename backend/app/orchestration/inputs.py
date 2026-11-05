@@ -6,6 +6,7 @@ from app.contracts.agents import ConfirmedMisconception, VerifierInput
 from app.contracts.entities import Evidence, Item, Misconception
 from app.contracts.enums import Dimension
 from app.contracts.values import SLIP
+from app.orchestration.storage import ItemExposure
 
 
 def build_verifier_input(
@@ -36,10 +37,13 @@ def build_verifier_input(
     fingerprints = session.exec(
         select(Item.fingerprint).where(Item.id.in_(item_ids), Item.fingerprint.is_not(None))
     ).all()
+    exposed_fingerprints = session.exec(
+        select(ItemExposure.fingerprint).where(ItemExposure.student_id == student_id)
+    ).all()
     return VerifierInput(
         knowledge_point_id=knowledge_point_id,
         dimensions=dimensions,
         confirmed_misconceptions=misconceptions,
-        used_fingerprints=sorted(set(fingerprints)),
+        used_fingerprints=sorted(set(fingerprints) | set(exposed_fingerprints)),
         context_knowledge_point_id=context_knowledge_point_id,
     )

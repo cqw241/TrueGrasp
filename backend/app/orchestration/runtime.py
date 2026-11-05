@@ -52,6 +52,13 @@ from app.contracts.values import SLIP
 from app.orchestration.bus import EventBus
 from app.orchestration.graphs import RunState, build_graph
 from app.orchestration.inputs import build_verifier_input
+from app.orchestration.storage import (
+    NodeReceipt,
+    PendingWork,
+    init_storage,
+    queue_work,
+    record_exposure,
+)
 
 logger = logging.getLogger(__name__)
 INTERACTIVE_TYPES = {TaskType.TUTORING, TaskType.VERIFICATION, TaskType.RETEST, TaskType.PRECHECK}
@@ -103,12 +110,14 @@ class Orchestrator:
     async def open(
         cls, engine: Engine, checkpoint_path: str, bus: EventBus, **dependencies: Any
     ) -> AsyncIterator[Orchestrator]:
+        init_storage(engine)
         if checkpoint_path != ":memory:":
             Path(checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
         async with AsyncSqliteSaver.from_conn_string(checkpoint_path) as saver:
             await saver.setup()
             runtime = cls(engine, saver, bus, **dependencies)
             try:
+                runtime.recover_pending()
                 yield runtime
             finally:
                 await runtime.close()
@@ -127,10 +136,10 @@ class Orchestrator:
             raise OrchestrationError(404, f"任务不存在：{task_id}")
         return task
 
-    def _check_task(self, task_id: int) -> Task:
+    def _check_task(self, task_id: int, *, recovering: bool = False) -> Task:
         with Session(self.engine) as session:
             task = self._task(session, task_id)
-            if task.status in (TaskStatus.DONE, TaskStatus.CANCELLED):
+            if task.status in (TaskStatus.DONE, TaskStatus.CANCELLED) and not recovering:
                 raise OrchestrationError(409, f"任务已结束：{task.status}")
             if task.type not in INTERACTIVE_TYPES or task.student_id is None:
                 raise OrchestrationError(409, "该任务不接受学生交互")
@@ -144,6 +153,77 @@ class Orchestrator:
     @staticmethod
     def _config(key: str) -> dict:
         return {"configurable": {"thread_id": key}}
+
+    def _pending(self, key: str) -> bool:
+        with Session(self.engine) as session:
+            work = session.get(PendingWork, key)
+            return work is not None and work.pending
+
+    def _acknowledge(self, key: str) -> None:
+        with Session(self.engine) as session:
+            if work := session.get(PendingWork, key):
+                work.pending = False
+                session.commit()
+
+    @staticmethod
+    def _queue_task(session: Session, state: RunState) -> None:
+        queue_work(
+            session,
+            f"task:{state['task_id']}",
+            {"teaching_date": state["teaching_date"]},
+            reactivate=True,
+        )
+
+    def _recovering_terminal(self, task_id: int, snapshot) -> bool:
+        if snapshot.values.get("task_id") != task_id or snapshot.interrupts:
+            return False
+        with Session(self.engine) as session:
+            task = self._task(session, task_id)
+            node = {TaskStatus.DONE: "finish", TaskStatus.CANCELLED: "replan"}.get(task.status)
+            if node is None or session.get(NodeReceipt, f"task:{task_id}:{node}") is None:
+                return False
+            work = session.get(PendingWork, f"task:{task_id}")
+            return (
+                work is not None
+                and work.pending
+                and (not snapshot.next or snapshot.next == (node,))
+            )
+
+    def recover_pending(self) -> None:
+        """只恢复事务中已登记的工作；缺少真实 Agent 时保留待办，不生成模拟结果。"""
+        if self.planner is None:
+            return
+        with Session(self.engine) as session:
+            work_items = session.exec(select(PendingWork).where(PendingWork.pending)).all()
+            for work in work_items:
+                kind, _, target = work.key.partition(":")
+                if kind == "task":
+                    task = self._task(session, int(target))
+                    if self.verifier is None or (
+                        task.type == TaskType.TUTORING
+                        and (self.tutor is None or self.knowledge is None)
+                    ):
+                        continue
+                self._spawn(
+                    work.key,
+                    lambda key=work.key, payload=work.payload: self._run_work(key, payload),
+                )
+
+    async def _run_work(self, key: str, payload: dict[str, Any]) -> None:
+        if not self._pending(key):
+            return
+        kind, _, target = key.partition(":")
+        try:
+            if kind == "event":
+                await self.handle_event(int(target), dispatch=payload["dispatch"])
+            else:
+                await self.start_task(
+                    int(target), teaching_date=date.fromisoformat(payload["teaching_date"])
+                )
+        except OrchestrationError:
+            # 直接调用和后台恢复可能先后处理同一工作；已经确认的工作不再重开任务。
+            if self._pending(key):
+                raise
 
     def _spawn(self, key: str, action: Callable[[], Coroutine[Any, Any, Any]]) -> None:
         if self._closed or key in self._jobs:
@@ -184,30 +264,18 @@ class Orchestrator:
                 if event is None:
                     raise OrchestrationError(404, f"事件不存在：{event_id}")
                 read_payload(event)
-                teaching_date = event.teaching_date
                 processed = event.processed
             snapshot = await self.graph.aget_state(self._config(key))
             if not processed or snapshot.next:
-                result = await self.graph.ainvoke(
-                    None if snapshot.next else RunState(kind="event", event_id=event_id),
+                await self.graph.ainvoke(
+                    None
+                    if snapshot.next
+                    else RunState(kind="event", event_id=event_id, dispatch=dispatch),
                     self._config(key),
                     durability="sync",
                 )
-            else:
-                result = snapshot.values
-            for task_id in result.get("task_ids", []) if dispatch else []:
-                with Session(self.engine) as session:
-                    task = self._task(session, task_id)
-                    runnable = (
-                        task.status in (TaskStatus.PENDING, TaskStatus.ACTIVE)
-                        and task.type in INTERACTIVE_TYPES
-                        and (task.due_date is None or task.due_date <= teaching_date)
-                    )
-                if runnable:
-                    self._spawn(
-                        f"task:{task_id}",
-                        lambda tid=task_id: self.start_task(tid, teaching_date=teaching_date),
-                    )
+            self._acknowledge(key)
+            self.recover_pending()
 
     async def start_task(
         self,
@@ -219,9 +287,14 @@ class Orchestrator:
     ) -> None:
         key = f"task:{task_id}"
         async with self._lock(key):
-            task = self._check_task(task_id)
             snapshot = await self.graph.aget_state(self._config(key))
+            recovering = self._recovering_terminal(task_id, snapshot)
+            task = self._check_task(task_id, recovering=recovering)
+            if recovering:
+                await self._run_task(key, None)
+                return
             if snapshot.interrupts:
+                self._acknowledge(key)
                 return
             if teaching_date is None:
                 teaching_date = (
@@ -275,11 +348,14 @@ class Orchestrator:
     async def enqueue_start(self, task_id: int) -> None:
         key = f"task:{task_id}"
         if key in self._jobs:
-            self._check_task(task_id)
+            snapshot = await self.graph.aget_state(self._config(key))
+            self._check_task(task_id, recovering=self._recovering_terminal(task_id, snapshot))
             return
         async with self._lock(key):
-            task = self._check_task(task_id)
             snapshot = await self.graph.aget_state(self._config(key))
+            task = self._check_task(
+                task_id, recovering=self._recovering_terminal(task_id, snapshot)
+            )
             if snapshot.interrupts:
                 return
             today = (
@@ -328,10 +404,11 @@ class Orchestrator:
                 await self.bus.publish(MessageDone(task_id=result["task_id"]))
         for event_id in result.get("followup_event_ids", []):
             dispatch = event_id != result.get("replan_event_id")
-            self._spawn(
-                f"event:{event_id}",
-                lambda eid=event_id, run=dispatch: self.handle_event(eid, dispatch=run),
-            )
+            with Session(self.engine) as session:
+                queue_work(session, f"event:{event_id}", {"dispatch": dispatch})
+                session.commit()
+        self._acknowledge(key)
+        self.recover_pending()
 
     async def plan(self, state: RunState) -> dict:
         with Session(self.engine) as session:
@@ -353,6 +430,9 @@ class Orchestrator:
         plan = PlannerOutput.model_validate(state["plan"])
         changed = []
         with Session(self.engine) as session:
+            receipt_key = f"event:{state['event_id']}:save_plan"
+            if receipt := session.get(NodeReceipt, receipt_key):
+                return receipt.result
             event = session.get(Event, state["event_id"])
             if event.processed:
                 return {"task_ids": state.get("task_ids", [])}
@@ -361,6 +441,8 @@ class Orchestrator:
                 if task.status not in (TaskStatus.DONE, TaskStatus.CANCELLED):
                     task.status = TaskStatus.CANCELLED
                     changed.append(task)
+                    if work := session.get(PendingWork, f"task:{task_id}"):
+                        work.pending = False
             created = []
             for planned in plan.tasks:
                 if (planned.type == TaskType.CLASS_REVIEW) != (planned.student_id is None):
@@ -378,10 +460,28 @@ class Orchestrator:
                 self._task(session, payload.task_id)
                 task_ids.append(payload.task_id)
             changed.extend(created)
+            dispatch = state.get("dispatch", True)
+            result = {"task_ids": task_ids}
+            session.add(NodeReceipt(key=receipt_key, result=result))
+            queue_work(session, f"event:{event.id}", {"dispatch": dispatch})
+            if dispatch:
+                for task_id in task_ids:
+                    task = self._task(session, task_id)
+                    if (
+                        task.status in (TaskStatus.PENDING, TaskStatus.ACTIVE)
+                        and task.type in INTERACTIVE_TYPES
+                        and (task.due_date is None or task.due_date <= event.teaching_date)
+                    ):
+                        queue_work(
+                            session,
+                            f"task:{task_id}",
+                            {"teaching_date": event.teaching_date.isoformat()},
+                            reactivate=True,
+                        )
             session.commit()
             for task in changed:
                 await self._publish_task(task)
-        return {"task_ids": task_ids}
+        return result
 
     async def _publish_task(self, task: Task) -> None:
         await self.bus.publish(
@@ -397,6 +497,7 @@ class Orchestrator:
         with Session(self.engine) as session:
             task = self._task(session, state["task_id"])
             task.status = TaskStatus.ACTIVE
+            self._queue_task(session, state)
             session.commit()
             await self._publish_task(task)
             return {"phase": "tutoring" if task.type == TaskType.TUTORING else "verifying"}
@@ -432,19 +533,22 @@ class Orchestrator:
         turn = TutorTurn.model_validate(state["tutor_turn"])
         item = None
         shown = state["shown_item_ids"]
-        if turn.awaiting_item_id is not None:
-            with Session(self.engine) as session:
+        with Session(self.engine) as session:
+            task = self._task(session, state["task_id"])
+            if turn.awaiting_item_id is not None:
                 item = session.get(Item, turn.awaiting_item_id)
                 if item is None:
                     raise ValueError(f"辅导 Agent 返回的题目不存在：{turn.awaiting_item_id}")
-            shown = list(dict.fromkeys([*shown, item.id]))
-        if turn.outcome == TutorOutcome.REQUEST_VERIFICATION:
-            if not turn.confirmed_misconception_ids:
-                raise ValueError("申请验证时必须给出已确认错因，偶发失误使用 slip")
-            with Session(self.engine) as session:
-                task = self._task(session, state["task_id"])
+                record_exposure(session, task.student_id, task.id, item)
+                shown = list(dict.fromkeys([*shown, item.id]))
+            if turn.outcome == TutorOutcome.REQUEST_VERIFICATION:
+                if not turn.confirmed_misconception_ids:
+                    raise ValueError("申请验证时必须给出已确认错因，偶发失误使用 slip")
                 task.misconception_ids = turn.confirmed_misconception_ids
-                session.commit()
+            self._queue_task(session, state)
+            session.commit()
+            if item is not None:
+                session.refresh(item)
         return {
             "messages": [
                 *state["messages"],
@@ -505,6 +609,11 @@ class Orchestrator:
 
     def present_item(self, state: RunState) -> dict:
         item = Item.model_validate(state["verification_items"][state["item_index"]])
+        with Session(self.engine) as session:
+            task = self._task(session, state["task_id"])
+            record_exposure(session, task.student_id, task.id, item)
+            self._queue_task(session, state)
+            session.commit()
         return {
             "messages": [
                 *state["messages"],
@@ -567,6 +676,9 @@ class Orchestrator:
                     task.student_id,
                 )
                 session.add(event)
+            session.flush()
+            queue_work(session, f"event:{event.id}", {"dispatch": True})
+            self._queue_task(session, state)
             session.commit()
             await self.bus.publish(
                 EvidenceAdded(
@@ -583,11 +695,17 @@ class Orchestrator:
 
     async def finish(self, state: RunState) -> dict:
         with Session(self.engine) as session:
+            receipt_key = f"task:{state['task_id']}:finish"
+            if receipt := session.get(NodeReceipt, receipt_key):
+                return receipt.result
             task = self._task(session, state["task_id"])
             task.status = TaskStatus.DONE
+            result = {"awaiting_item_id": None, "incoming_message": None}
+            session.add(NodeReceipt(key=receipt_key, result=result))
+            self._queue_task(session, state)
             session.commit()
             await self._publish_task(task)
-        return {"awaiting_item_id": None, "incoming_message": None}
+        return result
 
     async def replan(self, state: RunState) -> dict:
         self._require("planner")
@@ -595,6 +713,9 @@ class Orchestrator:
         if not reason:
             raise ValueError("申请重规划时必须说明原因")
         with Session(self.engine) as session:
+            receipt_key = f"task:{state['task_id']}:replan"
+            if receipt := session.get(NodeReceipt, receipt_key):
+                return receipt.result
             task = self._task(session, state["task_id"])
             task.status = TaskStatus.CANCELLED
             task.reason = f"{task.reason}\n重规划：{reason}"
@@ -605,11 +726,15 @@ class Orchestrator:
                 task.student_id,
             )
             session.add(event)
+            session.flush()
+            result = {
+                "awaiting_item_id": None,
+                "followup_event_ids": [*state["followup_event_ids"], event.id],
+                "replan_event_id": event.id,
+            }
+            session.add(NodeReceipt(key=receipt_key, result=result))
+            queue_work(session, f"event:{event.id}", {"dispatch": False})
+            self._queue_task(session, state)
             session.commit()
             await self._publish_task(task)
-            event_id = event.id
-        return {
-            "awaiting_item_id": None,
-            "followup_event_ids": [*state["followup_event_ids"], event_id],
-            "replan_event_id": event_id,
-        }
+        return result

@@ -34,6 +34,7 @@ from app.contracts.values import Prediction
 from app.db import init_db, make_engine
 from app.main import create_app
 from app.orchestration import EventBus, OrchestrationError, Orchestrator, build_verifier_input
+from app.orchestration.storage import PendingWork
 
 TODAY = date(2026, 9, 7)
 pytestmark = pytest.mark.anyio
@@ -666,3 +667,257 @@ async def test_replanning_does_not_start_another_tutoring_loop(business, tmp_pat
         assert len(planner.calls) == 2
         with Session(business) as session:
             assert session.get(Task, 5).status == TaskStatus.PENDING
+
+
+async def cancel_after_task_commit(runtime, action, target_status):
+    """在业务 commit 之后、节点返回 checkpoint 之前模拟取消进程执行。"""
+    committed = asyncio.Event()
+    publish = runtime._publish_task
+
+    async def pause(task):
+        if task.status == target_status:
+            committed.set()
+            await asyncio.Event().wait()
+        await publish(task)
+
+    runtime._publish_task = pause
+    execution = asyncio.create_task(action())
+    async with asyncio.timeout(3):
+        await committed.wait()
+    execution.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await execution
+
+
+async def test_recover_plan_after_business_commit_before_checkpoint(
+    business, tmp_path, dependencies
+):
+    path = str(tmp_path / "checkpoint.db")
+    async with Orchestrator.open(business, path, EventBus(), **dependencies) as runtime:
+        await cancel_after_task_commit(runtime, lambda: runtime.handle_event(1), TaskStatus.PENDING)
+        with Session(business) as session:
+            assert session.get(Event, 1).processed
+            assert len(session.exec(select(Task)).all()) == 4
+    async with Orchestrator.open(business, path, EventBus(), **dependencies) as runtime:
+        await runtime.handle_event(1)
+        await runtime.wait_idle()
+        assert len(dependencies["tutor"].calls) == 1
+        assert len(dependencies["planner"].calls) == 1
+        with Session(business) as session:
+            assert len(session.exec(select(Task)).all()) == 4
+            assert session.get(Task, 1).status == TaskStatus.ACTIVE
+
+
+@pytest.mark.parametrize("outcome", ["finish", "replan"])
+async def test_recover_terminal_commit_before_checkpoint(business, tmp_path, dependencies, outcome):
+    with Session(business) as session:
+        task = Task(
+            type=TaskType.TUTORING if outcome == "replan" else TaskType.VERIFICATION,
+            student_id="A",
+            knowledge_point_id="kp",
+            misconception_ids=["slip"],
+            created_on=TODAY,
+        )
+        session.add(task)
+        session.commit()
+        task_id = task.id
+    path = str(tmp_path / "checkpoint.db")
+    async with Orchestrator.open(business, path, EventBus(), **dependencies) as runtime:
+        if outcome == "replan":
+            dependencies["tutor"].replanning = True
+
+            async def action():
+                await runtime.start_task(task_id)
+
+            terminal_status = TaskStatus.CANCELLED
+        else:
+            await runtime.start_task(task_id)
+            item_id = (await runtime.get_messages(task_id))[-1].item.id
+
+            async def action():
+                await runtime.submit_message(
+                    task_id, MessageCreate(content="independent-answer", answering_item_id=item_id)
+                )
+
+            terminal_status = TaskStatus.DONE
+        await cancel_after_task_commit(runtime, action, terminal_status)
+    async with Orchestrator.open(business, path, EventBus(), **dependencies) as runtime:
+        await runtime.start_task(task_id)
+        await runtime.wait_idle()
+        with Session(business) as session:
+            assert session.get(Task, task_id).status == terminal_status
+            events = session.exec(select(Event).where(Event.id != 1)).all()
+            assert len(events) == 1
+            assert events[0].processed
+            if outcome == "replan":
+                assert session.get(Task, task_id).reason.count("重规划：") == 1
+            else:
+                assert (
+                    len(session.exec(select(Evidence).where(Evidence.task_id == task_id)).all())
+                    == 1
+                )
+        snapshot = await runtime.graph.aget_state(runtime._config(f"task:{task_id}"))
+        assert not snapshot.next
+
+
+async def test_verifier_excludes_unanswered_items_from_other_sessions(
+    business, tmp_path, dependencies
+):
+    class RepeatingVerifier(SpyVerifier):
+        async def compose(self, inp):
+            items = await super().compose(inp)
+            items[0].fingerprint = (
+                "new-fingerprint"
+                if "shared-fingerprint" in inp.used_fingerprints
+                else "shared-fingerprint"
+            )
+            return items
+
+    verifier = RepeatingVerifier()
+    dependencies["verifier"] = verifier
+    with Session(business) as session:
+        for student_id in ["A", "A", "B"]:
+            session.add(
+                Task(
+                    type=TaskType.VERIFICATION,
+                    student_id=student_id,
+                    knowledge_point_id="kp",
+                    misconception_ids=["slip"],
+                    created_on=TODAY,
+                )
+            )
+        session.commit()
+    path = str(tmp_path / "checkpoint.db")
+    async with Orchestrator.open(business, path, EventBus(), **dependencies) as runtime:
+        await runtime.start_task(1)
+        first_item = (await runtime.get_messages(1))[-1].item
+        assert first_item.fingerprint == "shared-fingerprint"
+    async with Orchestrator.open(business, path, EventBus(), **dependencies) as runtime:
+        await runtime.start_task(2)
+        second_item = (await runtime.get_messages(2))[-1].item
+        assert "shared-fingerprint" in verifier.inputs[-1].used_fingerprints
+        assert first_item.id != second_item.id
+        assert first_item.fingerprint != second_item.fingerprint
+        await runtime.start_task(3)
+        assert "shared-fingerprint" not in verifier.inputs[-1].used_fingerprints
+        assert (await runtime.get_messages(3))[-1].item.fingerprint == "shared-fingerprint"
+
+
+@pytest.mark.parametrize("stage", ["plan", "finish", "replan"])
+async def test_startup_recovers_after_checkpoint_before_dispatch(
+    business, tmp_path, dependencies, stage
+):
+    path = str(tmp_path / "checkpoint.db")
+    async with Orchestrator.open(business, path, EventBus(), **dependencies) as runtime:
+        if stage == "plan":
+            key = "event:1"
+
+            async def action():
+                await runtime.handle_event(1)
+
+        else:
+            with Session(business) as session:
+                session.add(
+                    Task(
+                        type=TaskType.TUTORING if stage == "replan" else TaskType.VERIFICATION,
+                        student_id="A",
+                        knowledge_point_id="kp",
+                        misconception_ids=["slip"],
+                        created_on=TODAY,
+                    )
+                )
+                session.commit()
+            key = "task:1"
+            if stage == "replan":
+                dependencies["tutor"].replanning = True
+
+                async def action():
+                    await runtime.start_task(1)
+
+            else:
+                await runtime.start_task(1)
+                item_id = (await runtime.get_messages(1))[-1].item.id
+
+                async def action():
+                    await runtime.submit_message(
+                        1, MessageCreate(content="independent-answer", answering_item_id=item_id)
+                    )
+
+        acknowledge = runtime._acknowledge
+
+        def stop_before_dispatch(work_key):
+            if work_key == key:
+                raise RuntimeError("模拟 checkpoint 保存后中断")
+            acknowledge(work_key)
+
+        runtime._acknowledge = stop_before_dispatch
+        with pytest.raises(RuntimeError, match="checkpoint 保存后中断"):
+            await action()
+        snapshot = await runtime.graph.aget_state(runtime._config(key))
+        assert not snapshot.next
+    async with Orchestrator.open(business, path, EventBus(), **dependencies) as runtime:
+        # 不再次发起原请求，仅依靠持久待办自动恢复。
+        await runtime.wait_idle()
+        with Session(business) as session:
+            assert session.exec(select(PendingWork).where(PendingWork.pending)).all() == []
+            if stage == "plan":
+                assert len(session.exec(select(Task)).all()) == 4
+                assert session.get(Task, 1).status == TaskStatus.ACTIVE
+                assert len(dependencies["tutor"].calls) == 1
+            else:
+                status = TaskStatus.CANCELLED if stage == "replan" else TaskStatus.DONE
+                assert session.get(Task, 1).status == status
+                events = session.exec(select(Event).where(Event.id != 1)).all()
+                assert len(events) == 1
+                assert events[0].processed
+        if stage != "plan":
+            with pytest.raises(OrchestrationError, match="任务已结束"):
+                await runtime.start_task(1)
+
+
+async def test_startup_recovers_evidence_commit_without_rejudging(business, tmp_path, dependencies):
+    with Session(business) as session:
+        session.add(
+            Task(
+                type=TaskType.VERIFICATION,
+                student_id="A",
+                knowledge_point_id="kp",
+                misconception_ids=["slip"],
+                created_on=TODAY,
+            )
+        )
+        session.commit()
+    path = str(tmp_path / "checkpoint.db")
+    bus = EventBus()
+    async with Orchestrator.open(business, path, bus, **dependencies) as runtime:
+        await runtime.start_task(1)
+        item_id = (await runtime.get_messages(1))[-1].item.id
+        committed = asyncio.Event()
+        publish = bus.publish
+
+        async def pause(event):
+            if event.type == "evidence_added":
+                committed.set()
+                await asyncio.Event().wait()
+            await publish(event)
+
+        bus.publish = pause
+        execution = asyncio.create_task(
+            runtime.submit_message(
+                1, MessageCreate(content="independent-answer", answering_item_id=item_id)
+            )
+        )
+        async with asyncio.timeout(3):
+            await committed.wait()
+        execution.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await execution
+    async with Orchestrator.open(business, path, EventBus(), **dependencies) as runtime:
+        await runtime.wait_idle()
+        with Session(business) as session:
+            assert session.get(Task, 1).status == TaskStatus.DONE
+            assert len(session.exec(select(Evidence).where(Evidence.task_id == 1)).all()) == 1
+            assert len(session.exec(select(Event).where(Event.id != 1)).all()) == 1
+            assert session.get(Event, 2).processed
+            assert session.exec(select(PendingWork).where(PendingWork.pending)).all() == []
+        assert len(dependencies["verifier"].judgements) == 1
