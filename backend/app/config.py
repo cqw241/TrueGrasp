@@ -1,5 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +13,10 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.deepseek.com"
     llm_api_key: str = ""
     llm_model: str = "deepseek-flash"
+    llm_response_format: Literal["json_object", "json_schema"] = "json_object"
+    llm_timeout: float = Field(default=60, gt=0)
+    llm_validation_retries: int = Field(default=2, ge=0, le=5)
+    llm_max_tool_rounds: int = Field(default=8, ge=1, le=32)
 
     database_url: str = "sqlite:///./data/truegrasp.db"
     checkpoint_db_path: str = "./data/checkpoints.db"

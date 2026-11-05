@@ -7,12 +7,34 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+
+class TextPart(BaseModel):
+    type: Literal["text"] = "text"
+    text: str
+
+
+class ImageURL(BaseModel):
+    url: str
+    detail: Literal["auto", "low", "high"] = "auto"
+
+    @field_validator("url")
+    @classmethod
+    def valid_url(cls, value: str) -> str:
+        if not value.startswith(("https://", "http://", "data:image/")):
+            raise ValueError("Expected an HTTP image URL or image data URL")
+        return value
+
+
+class ImagePart(BaseModel):
+    type: Literal["image_url"] = "image_url"
+    image_url: ImageURL
 
 
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant"]
-    content: str
+    content: str | list[TextPart | ImagePart]
 
 
 @dataclass(frozen=True)
