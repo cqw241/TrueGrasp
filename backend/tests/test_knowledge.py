@@ -1,14 +1,16 @@
 """T04 验收：内容骨架、入库检查、依赖图查询与判别追问题起草。
 
-核验工具（T05）和模型接入（T06）尚未实现，测试用按字符串比较的假工具和预设回复的假模型。
+数学内容用真实核验工具检查；起草的重试逻辑使用预设回复，不调用远程模型。
 """
 
 from pathlib import Path
 
 import pytest
+import yaml
 from httpx2 import ASGITransport, AsyncClient
 from sqlmodel import Session
 
+from app.contracts.enums import ItemPurpose
 from app.contracts.values import ItemSpec, Prediction
 from app.contracts.verify import AnswerGroup, Distinctness, ItemCheck
 from app.db import init_db, make_engine
@@ -20,12 +22,38 @@ from app.main import create_app
 
 CONTENT = Path(__file__).resolve().parents[2] / "content"
 LECTURES = sorted((CONTENT / "lectures").glob("*.yaml"))
+REFINED_POINTS = {
+    "calc.ch1.function",
+    "calc.ch1.composition",
+    "calc.ch2.derivative_rules",
+    "calc.ch2.chain_rule",
+    "calc.ch2.chain_rule_multi",
+    "calc.ch2.implicit_diff",
+    "calc.ch9.partial_derivative",
+    "calc.ch9.multivar_chain",
+    "calc.ch4.substitution",
+    "calc.ch5.substitution",
+    "calc.ch5.integration_by_parts",
+    "calc.ch10.double_integral_cartesian",
+    "calc.ch10.polar",
+}
 pytestmark = pytest.mark.anyio
 
 
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture
+def template_content(tmp_path):
+    """模板是独立示例，不能与已经复制进讲次文件的同 ID 内容重复加载。"""
+    skeletons = []
+    for path in LECTURES:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        skeleton = {k: v for k, v in doc.items() if k in {"lecture", "title", "sections", "points"}}
+        skeletons.append(write(tmp_path, path.name, yaml.safe_dump(skeleton, allow_unicode=True)))
+    return load([*skeletons, CONTENT / "template.yaml"])
 
 
 class FakeTools:
@@ -66,8 +94,8 @@ def write(tmp_path: Path, name: str, text: str) -> Path:
     return path
 
 
-def test_book_skeleton_and_template_pass_checks():
-    content = load([*LECTURES, CONTENT / "template.yaml"])
+def test_book_skeleton_and_template_pass_checks(template_content):
+    content = template_content
     check_math(content, TEMPLATE_TOOLS)
     assert content.errors == []
     assert len(content.sections) == 75
@@ -112,19 +140,68 @@ items:
     assert ("p1", "追问题没有区分度") in messages
 
 
-def test_real_math_checks_validate_teacher_template():
+def test_real_math_checks_validate_teacher_template(template_content):
     from app.verify.tools import SympyMathTools
 
-    content = load([*LECTURES, CONTENT / "template.yaml"])
-    check_math(content, SympyMathTools())
+    for content in (template_content, load(LECTURES)):
+        check_math(content, SympyMathTools())
+        assert content.issues == []
+
+
+def test_c2_diagnostic_coverage_and_fresh_seeds():
+    """每个精修错因可被追问证伪，验证回退题不重复教学中使用的题。"""
+    from app.verify.tools import SympyMathTools
+
+    content = load(LECTURES)
     assert content.errors == []
-    assert content.issues == []
+    tools = SympyMathTools()
+    graph = NxKnowledgeGraph(
+        list(content.points.values()),
+        list(content.misconceptions.values()),
+        list(content.strategies.values()),
+        list(content.items.values()),
+    )
+    teaching_fingerprints = {
+        tools.fingerprint(i.spec)
+        for i in content.items.values()
+        if i.spec and i.purpose != ItemPurpose.VERIFICATION
+    }
+    seed_fingerprints = set()
+    for kp in sorted(REFINED_POINTS):
+        misconceptions = graph.misconceptions(kp)
+        assert 2 <= len(misconceptions) <= 4, kp
+        for mis in misconceptions:
+            assert mis.examples and mis.recurs_in, mis.id
+            cards = graph.strategies(mis.id)
+            assert cards and all(s.principles and s.constraints and s.rubric for s in cards), mis.id
+            assert any(
+                tools.check_distinct(probe.spec, probe.answer, probe.predictions).separates(mis.id)
+                for probe in (content.items[pid] for pid in mis.probe_item_ids)
+            ), mis.id
+        seeds = [i for i in graph.seed_items(kp) if i.purpose == ItemPurpose.VERIFICATION]
+        assert 1 <= len(seeds) <= 2, kp
+        for seed in seeds:
+            assert seed.spec is not None, seed.id
+            fingerprint = tools.fingerprint(seed.spec)
+            assert fingerprint not in teaching_fingerprints | seed_fingerprints, seed.id
+            seed_fingerprints.add(fingerprint)
+            if seed.dimension.value == "distractor":
+                assert seed.predictions, seed.id
+                distinct = tools.check_distinct(seed.spec, seed.answer, seed.predictions)
+                assert all(distinct.separates(p.misconception_id) for p in seed.predictions), (
+                    seed.id
+                )
+
+    for mid in ("calc.ch2.chain.miss_inner", "calc.ch2.chain.formula_sub"):
+        assert "calc.ch9.multivar_chain" in content.misconceptions[mid].recurs_in
+    series = [i for i in content.items.values() if i.knowledge_point_id.startswith("calc.ch12.")]
+    assert series and all(i.spec is None and i.rubric for i in series)
 
 
 def test_graph_paths_and_lookups(tmp_path):
     engine = make_engine(f"sqlite:///{tmp_path / 'business.db'}")
     init_db(engine)
-    content = load([*LECTURES, CONTENT / "template.yaml"])
+    content = load(LECTURES)
     with Session(engine) as session:
         ingest(session, content)
         session.commit()
@@ -145,7 +222,9 @@ def test_graph_paths_and_lookups(tmp_path):
         "numeric_slope_conflict"
     ]
     assert len(graph.misconceptions("calc.ch2.chain_rule_multi")) == 2
-    assert [i.id for i in graph.seed_items("calc.ch2.chain_rule_multi")][-1].endswith("seed1")
+    assert "calc.ch2.chain_multi.seed1" in {
+        i.id for i in graph.seed_items("calc.ch2.chain_rule_multi")
+    }
 
 
 async def test_knowledge_endpoints(tmp_path):
@@ -191,8 +270,8 @@ def probe(expr: str, answer: str, predicted: str) -> ProbeDraft:
     )
 
 
-async def test_draft_probe_retries_until_distinct():
-    content = load([*LECTURES, CONTENT / "template.yaml"])
+async def test_draft_probe_retries_until_distinct(template_content):
+    content = template_content
     llm = FakeLLM(
         [
             probe("sin(3*x)", r"3\cos(3x)", r"3\cos(3x)"),  # 目标错因的预测等于正确答案
@@ -225,7 +304,7 @@ def test_ingest_rejects_changing_answered_item(tmp_path, field, value):
 
     engine = make_engine(f"sqlite:///{tmp_path / 'business.db'}")
     init_db(engine)
-    content = load([*LECTURES, CONTENT / "template.yaml"])
+    content = load(LECTURES)
     with Session(engine) as session:
         ingest(session, content)
         session.add(Student(id="A", name="学生 A"))
@@ -245,7 +324,7 @@ def test_ingest_rejects_changing_answered_item(tmp_path, field, value):
         session.commit()
 
     ingest(Session(engine), content)  # 内容不变时可以重复入库
-    changed = load([*LECTURES, CONTENT / "template.yaml"])
+    changed = load(LECTURES)
     setattr(changed.items["calc.ch2.chain_multi.seed1"], field, value)
     with Session(engine) as session, pytest.raises(IngestError) as exc:
         ingest(session, changed)

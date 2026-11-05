@@ -42,3 +42,353 @@ points:
 - id: calc.ch2.s5
   section: 5
   name: 函数的微分
+misconceptions:
+- id: calc.ch2.derivative_rules.product_of_derivatives
+  knowledge_point: calc.ch2.derivative_rules
+  family: 误用求导运算法则
+  description: 把乘积的导数误写成两个因子导数的乘积
+  triggers: [两个随 x 变化的因子]
+  examples:
+  - question: '求 $x^2e^x$ 的导数'
+    wrong: '2xe^x'
+    correct: '(x^2+2x)e^x'
+  probes: [calc.ch2.derivative_rules.probe_product]
+  recurs_in: [calc.ch2.implicit_diff, calc.ch9.partial_derivative, calc.ch5.integration_by_parts]
+  strategies: [derivative_algebra]
+- id: calc.ch2.derivative_rules.quotient_unsquared
+  knowledge_point: calc.ch2.derivative_rules
+  family: 误用求导运算法则
+  description: 使用商法则时分母漏平方
+  triggers: [分母不是常数]
+  examples:
+  - question: '求 $x/(x+1)$ 的导数，$x\ne-1$'
+    wrong: '\frac{1}{x+1}'
+    correct: '\frac{1}{(x+1)^2}'
+  probes: [calc.ch2.derivative_rules.probe_quotient]
+  recurs_in: [calc.ch9.partial_derivative, calc.ch2.implicit_diff]
+  strategies: [derivative_algebra]
+- id: calc.ch2.chain_rule.omit_inner
+  knowledge_point: calc.ch2.chain_rule
+  family: 遗漏内层变化率
+  description: 只在内层值处求外层导数，遗漏内层对自变量的导数
+  triggers: [内层不是 x 加常数]
+  examples:
+  - question: '求 $\sin(x^2)$ 的导数'
+    wrong: '\cos(x^2)'
+    correct: '2x\cos(x^2)'
+  probes: [calc.ch2.chain_rule.probe_square_sine]
+  recurs_in: [calc.ch2.chain_rule_multi, calc.ch2.implicit_diff, calc.ch4.substitution, calc.ch9.multivar_chain]
+  strategies: [inner_rate]
+- id: calc.ch2.chain_rule.outer_at_x
+  knowledge_point: calc.ch2.chain_rule
+  family: 误读复合结构
+  description: 虽乘内层导数，却把外层导数取在 x 而不是内层函数值处
+  triggers: [内层非恒等函数]
+  examples:
+  - question: '求 $\sin(x^2)$ 的导数'
+    wrong: '2x\cos x'
+    correct: '2x\cos(x^2)'
+  probes: [calc.ch2.chain_rule.probe_square_sine]
+  recurs_in: [calc.ch2.chain_rule_multi, calc.ch9.multivar_chain]
+  strategies: [composition_structure]
+- id: calc.ch2.chain.miss_inner
+  knowledge_point: calc.ch2.chain_rule_multi
+  family: 多层复合漏层
+  description: 能处理两层复合，但在三层及以上漏乘最内层导数
+  triggers: [三层及以上复合, 外层为幂函数]
+  examples:
+  - question: '求 $\sin^2(3x)$ 的导数'
+    wrong: '2\sin(3x)\cos(3x)'
+    correct: '6\sin(3x)\cos(3x)'
+  probes: [calc.ch2.chain_multi.probe_cos2_5x]
+  strategies: [layered_decomposition]
+  recurs_in: [calc.ch2.implicit_diff, calc.ch9.multivar_chain]
+- id: calc.ch2.chain.formula_sub
+  knowledge_point: calc.ch2.chain_rule_multi
+  family: 把求导当作公式代换
+  description: '把以 u 为自变量的熟悉导数公式直接做 u=g(x) 代换，却不乘 g''(x)；简单两层复合也如此'
+  triggers: [见到复合函数便套基本导数公式]
+  examples:
+  - question: '求 $\sin^2(3x)$ 的导数'
+    wrong: '2\sin(3x)\cos(3x)'
+    correct: '6\sin(3x)\cos(3x)'
+  probes: [calc.ch2.chain_multi.probe_sin3x, calc.ch2.chain_multi.probe_cos2_5x]
+  recurs_in: [calc.ch9.multivar_chain, calc.ch4.substitution]
+  strategies: [numeric_slope_conflict]
+- id: calc.ch2.implicit_diff.y_constant
+  knowledge_point: calc.ch2.implicit_diff
+  family: 混淆变量依赖
+  description: 在 y 随 x 变化的隐函数关系中把 y 当常量，直接令 dy/dx=0
+  triggers: [未写出 y=y(x), 曲线上的局部分支]
+  examples:
+  - question: '由 $x^2+y^2=4$ 确定 $y>0$ 的分支，求 $y\prime$，$|x|<2$'
+    wrong: '0'
+    correct: '-\frac{x}{\sqrt{4-x^2}}'
+  probes: [calc.ch2.implicit_diff.probe_circle]
+  recurs_in: [calc.ch9.multivar_chain, calc.ch9.s5]
+  strategies: [variable_dependency]
+- id: calc.ch2.implicit_diff.sign_transfer
+  knowledge_point: calc.ch2.implicit_diff
+  family: 隐式关系移项符号错误
+  description: 对隐式关系求导后，移项解导数时漏掉负号
+  triggers: [导数项与非导数项位于等式同侧]
+  examples:
+  - question: '由 $x^2+y^2=4$ 确定 $y>0$ 的分支，求 $y\prime$，$|x|<2$'
+    wrong: '\frac{x}{\sqrt{4-x^2}}'
+    correct: '-\frac{x}{\sqrt{4-x^2}}'
+  probes: [calc.ch2.implicit_diff.probe_circle]
+  recurs_in: [calc.ch9.s5]
+  strategies: [implicit_balance]
+strategies:
+- id: derivative_algebra
+  families: [误用求导运算法则]
+  principles:
+  - 导数满足加法线性，但乘积和商的变化涉及因子间的共同变化。
+  - 与求导变量无关的加项求导为零，固定系数可以提出。
+  - 等价改写前后的函数应有同一导数，可用简单点或恒等改写检验法则。
+  constraints:
+  - 不把求导视作对任意运算逐项分配。
+  - 不只以最后数值相等判断学生已理解乘积或商法则。
+  rubric:
+  - 出现乘积时能说清两项分别来自哪个因子的变化；出现常量加项时能说明其导数为零。
+  - 出现商时分子次序与分母平方均正确，且注意原函数定义域。
+- id: inner_rate
+  families: [遗漏内层变化率]
+  principles:
+  - 复合变化率由外层对中间量的变化率与中间量对自变量的变化率共同决定。
+  - 线性内层的斜率可由图像横向伸缩或局部数值变化解释。
+  constraints:
+  - 不把内层导数仅说成需要记忆的附加系数。
+  - 不因某题内层导数为 1 就认为可以普遍省略。
+  rubric:
+  - 能说明导数中每个因子的来源。
+  - 外层导数的自变量仍是完整内层函数。
+- id: layered_decomposition
+  families: [多层复合漏层]
+  principles:
+  - 表达式的每一层都对应一段依赖关系，总变化率必须包含每段变化率。
+  - 分层表示应保持原函数不变，并让每个导数因子有明确来源。
+  constraints:
+  - 不直接给出完整结果让学生照抄。
+  - 不把机械多乘一个系数当作理解每层依赖。
+  rubric:
+  - 能区分两层和三层复合。
+  - 能解释为什么最内层的变化率不能省略。
+- id: numeric_slope_conflict
+  families: [把求导当作公式代换]
+  principles:
+  - 局部差商与符号导数表达同一个局部变化率，可用于暴露只套外层公式的矛盾。
+  - 复合函数的横向伸缩会改变斜率，内层不是装饰性的符号。
+  constraints:
+  - 不把数值差商近似当作一般性证明。
+  - 不先给公式要求背诵来替代变化率解释。
+  rubric:
+  - 能解释简单复合也要乘内层变化率。
+  - 能把分层依赖和局部变化率联系起来。
+- id: variable_dependency
+  families: [混淆变量依赖]
+  principles:
+  - 可独立变化的变量、暂时固定的参数和依赖变量必须由题目关系决定。
+  - y(x) 的导数包含其对 x 的变化率，偏导数中其他独立变量则保持不变。
+  constraints:
+  - 不因表达式中出现两个字母就把二者都当作独立自变量。
+  rubric:
+  - 能说明当前求导变量以及哪些量随它变化。
+  - 能在隐函数与偏导数情境中采用不同的变量依赖约定。
+- id: implicit_balance
+  families: [隐式关系移项符号错误]
+  principles:
+  - 对恒等关系求导后仍须保持等式平衡，解导数与解线性方程遵循同一移项规则。
+  - 几何斜率符号可用于检验结果是否符合曲线局部走势。
+  constraints:
+  - 不靠背诵特例的正负号判断一般隐函数导数。
+  rubric:
+  - 能从求导后的等式解释负号来源。
+  - 明确局部分支与分母非零条件。
+items:
+- id: calc.ch2.derivative_rules.probe_product
+  knowledge_point: calc.ch2.derivative_rules
+  purpose: probe
+  stem: '求 $xe^x$ 的导数'
+  spec:
+    operation: derivative
+    expr: x*exp(x)
+    variables: [x]
+  answer: '(x+1)e^x'
+  predictions:
+  - misconception_id: calc.ch2.derivative_rules.product_of_derivatives
+    answer: 'e^x'
+  - misconception_id: calc.ch2.derivative_rules.quotient_unsquared
+    answer: '(x+1)e^x'
+- id: calc.ch2.derivative_rules.probe_quotient
+  knowledge_point: calc.ch2.derivative_rules
+  purpose: probe
+  stem: '求 $x/(x+2)$ 的导数，$x\ne-2$'
+  spec:
+    operation: derivative
+    expr: x/(x+2)
+    variables: [x]
+  answer: '\frac{2}{(x+2)^2}'
+  predictions:
+  - misconception_id: calc.ch2.derivative_rules.product_of_derivatives
+    answer: '\frac{2}{(x+2)^2}'
+  - misconception_id: calc.ch2.derivative_rules.quotient_unsquared
+    answer: '\frac{2}{x+2}'
+- id: calc.ch2.derivative_rules.seed_product
+  knowledge_point: calc.ch2.derivative_rules
+  purpose: verification
+  dimension: correctness
+  stem: '求 $x^2\sin x$ 的导数'
+  spec:
+    operation: derivative
+    expr: x**2*sin(x)
+    variables: [x]
+  answer: '2x\sin x+x^2\cos x'
+- id: calc.ch2.derivative_rules.seed_quotient
+  knowledge_point: calc.ch2.derivative_rules
+  purpose: verification
+  dimension: distractor
+  stem: '求 $(x+1)/(x+3)$ 的导数，$x\ne-3$'
+  spec:
+    operation: derivative
+    expr: (x+1)/(x+3)
+    variables: [x]
+  answer: '\frac{2}{(x+3)^2}'
+  predictions:
+  - misconception_id: calc.ch2.derivative_rules.quotient_unsquared
+    answer: '\frac{2}{x+3}'
+- id: calc.ch2.chain_rule.probe_square_sine
+  knowledge_point: calc.ch2.chain_rule
+  purpose: probe
+  stem: '求 $\sin(x^2)$ 的导数'
+  spec:
+    operation: derivative
+    expr: sin(x**2)
+    variables: [x]
+  answer: '2x\cos(x^2)'
+  predictions:
+  - misconception_id: calc.ch2.chain_rule.omit_inner
+    answer: '\cos(x^2)'
+  - misconception_id: calc.ch2.chain_rule.outer_at_x
+    answer: '2x\cos x'
+- id: calc.ch2.chain_rule.seed_exp_square
+  knowledge_point: calc.ch2.chain_rule
+  purpose: verification
+  dimension: correctness
+  stem: '求 $e^{3x^2}$ 的导数'
+  spec:
+    operation: derivative
+    expr: exp(3*x**2)
+    variables: [x]
+  answer: '6xe^{3x^2}'
+- id: calc.ch2.chain_rule.seed_log
+  knowledge_point: calc.ch2.chain_rule
+  purpose: verification
+  dimension: near_transfer
+  stem: '求 $\ln(1+2x)$ 的导数，$x>-1/2$'
+  spec:
+    operation: derivative
+    expr: log(1+2*x)
+    variables: [x]
+  answer: '\frac{2}{1+2x}'
+- id: calc.ch2.chain_rule_multi.demo_homework
+  knowledge_point: calc.ch2.chain_rule_multi
+  purpose: practice
+  stem: '求 $\sin^2(3x)$ 的导数'
+  spec:
+    operation: derivative
+    expr: sin(3*x)**2
+    variables: [x]
+  answer: '6\sin(3x)\cos(3x)'
+  predictions:
+  - misconception_id: calc.ch2.chain.miss_inner
+    answer: '2\sin(3x)\cos(3x)'
+  - misconception_id: calc.ch2.chain.formula_sub
+    answer: '2\sin(3x)\cos(3x)'
+- id: calc.ch2.chain_multi.probe_sin3x
+  knowledge_point: calc.ch2.chain_rule_multi
+  purpose: probe
+  stem: '求 $\sin(3x)$ 的导数'
+  spec:
+    operation: derivative
+    expr: sin(3*x)
+    variables: [x]
+  answer: '3\cos(3x)'
+  predictions:
+  - misconception_id: calc.ch2.chain.miss_inner
+    answer: '3\cos(3x)'
+  - misconception_id: calc.ch2.chain.formula_sub
+    answer: '\cos(3x)'
+- id: calc.ch2.chain_multi.probe_cos2_5x
+  knowledge_point: calc.ch2.chain_rule_multi
+  purpose: probe
+  stem: '求 $\cos^2(5x)$ 的导数'
+  spec:
+    operation: derivative
+    expr: cos(5*x)**2
+    variables: [x]
+  answer: '-10\cos(5x)\sin(5x)'
+  predictions:
+  - misconception_id: calc.ch2.chain.miss_inner
+    answer: '-2\cos(5x)\sin(5x)'
+  - misconception_id: calc.ch2.chain.formula_sub
+    answer: '-2\cos(5x)\sin(5x)'
+- id: calc.ch2.chain_rule_multi.seed_square_inner
+  knowledge_point: calc.ch2.chain_rule_multi
+  purpose: verification
+  dimension: distractor
+  stem: '求 $\cos^2(x^2)$ 的导数'
+  spec:
+    operation: derivative
+    expr: cos(x**2)**2
+    variables: [x]
+  answer: '-4x\cos(x^2)\sin(x^2)'
+  predictions:
+  - misconception_id: calc.ch2.chain.miss_inner
+    answer: '-2\cos(x^2)\sin(x^2)'
+  - misconception_id: calc.ch2.chain.formula_sub
+    answer: '-2\cos(x^2)\sin(x^2)'
+- id: calc.ch2.chain_multi.seed1
+  knowledge_point: calc.ch2.chain_rule_multi
+  purpose: verification
+  dimension: correctness
+  stem: '求 $\sin^3(2x)$ 的导数'
+  spec:
+    operation: derivative
+    expr: sin(2*x)**3
+    variables: [x]
+  answer: '6\sin^2(2x)\cos(2x)'
+- id: calc.ch2.implicit_diff.probe_circle
+  knowledge_point: calc.ch2.implicit_diff
+  purpose: probe
+  stem: '由 $x^2+y^2=4$ 确定 $y>0$ 的分支，求 $dy/dx$，$|x|<2$'
+  spec:
+    operation: derivative
+    expr: sqrt(4-x**2)
+    variables: [x]
+  answer: '-\frac{x}{\sqrt{4-x^2}}'
+  predictions:
+  - misconception_id: calc.ch2.implicit_diff.y_constant
+    answer: '0'
+  - misconception_id: calc.ch2.implicit_diff.sign_transfer
+    answer: '\frac{x}{\sqrt{4-x^2}}'
+- id: calc.ch2.implicit_diff.seed_circle
+  knowledge_point: calc.ch2.implicit_diff
+  purpose: verification
+  dimension: correctness
+  stem: '由 $x^2+y^2=9$ 确定 $y>0$ 的分支，求 $dy/dx$，$|x|<3$'
+  spec:
+    operation: derivative
+    expr: sqrt(9-x**2)
+    variables: [x]
+  answer: '-\frac{x}{\sqrt{9-x^2}}'
+- id: calc.ch2.implicit_diff.seed_product
+  knowledge_point: calc.ch2.implicit_diff
+  purpose: verification
+  dimension: near_transfer
+  stem: '由 $xy=2$ 确定 $y=y(x)$，求 $dy/dx$，$x\ne0$'
+  spec:
+    operation: derivative
+    expr: 2/x
+    variables: [x]
+  answer: '-\frac{2}{x^2}'

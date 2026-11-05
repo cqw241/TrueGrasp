@@ -31,3 +31,210 @@ points:
 - id: calc.ch10.s4
   section: 4
   name: 重积分的应用
+misconceptions:
+- id: calc.ch10.double_integral_cartesian.freeze_inner_bound
+  knowledge_point: calc.ch10.double_integral_cartesian
+  family: 忽略积分区域依赖
+  description: 把三角形区域的变上限误当成矩形区域的固定上限
+  triggers: [内层积分上限依赖外层变量]
+  examples:
+  - question: '计算 $\int_0^1\int_0^x(x+2y)\,dy\,dx$'
+    wrong: '\frac{3}{2}'
+    correct: '\frac{2}{3}'
+  probes: [calc.ch10.double_integral_cartesian.probe_triangle]
+  recurs_in: [calc.ch10.polar, calc.ch10.s3]
+  strategies: [region_slices]
+- id: calc.ch10.double_integral_cartesian.transpose_region
+  knowledge_point: calc.ch10.double_integral_cartesian
+  family: 误读积分区域方向
+  description: 把 0≤y≤x≤1 错认成 0≤x≤y≤1，积分区域越过对角线反转
+  triggers: [交换积分次序, 三角形区域]
+  examples:
+  - question: '计算 $\iint_{0\le y\le x\le1}(x+2y)\,dA$'
+    wrong: '\frac{5}{6}'
+    correct: '\frac{2}{3}'
+  probes: [calc.ch10.double_integral_cartesian.probe_triangle]
+  recurs_in: [calc.ch10.polar, calc.ch10.s3]
+  strategies: [region_slices]
+- id: calc.ch10.polar.miss_r
+  knowledge_point: calc.ch10.polar
+  family: 忽略面积元缩放
+  description: 极坐标换元时遗漏雅可比因子 r，把 dA 写成 dr dθ
+  triggers: [圆盘或圆环区域, 被积函数只依赖半径]
+  examples:
+  - question: '计算 $\iint_{x^2+y^2\le1}(x^2+y^2)\,dA$'
+    wrong: '\frac{2\pi}{3}'
+    correct: '\frac{\pi}{2}'
+  probes: [calc.ch10.polar.probe_disk_area]
+  recurs_in: [calc.ch10.s3, calc.ch10.s4]
+  strategies: [polar_area_measure]
+- id: calc.ch10.polar.half_angle
+  knowledge_point: calc.ch10.polar
+  family: 误读积分区域方向
+  description: 对完整圆盘或圆环只取 0≤θ≤π，遗漏下半平面且未补对称倍数
+  triggers: [区域关于 x 轴对称, 完整圆域]
+  examples:
+  - question: '计算 $\iint_{x^2+y^2\le1}(x^2+y^2)\,dA$'
+    wrong: '\frac{\pi}{4}'
+    correct: '\frac{\pi}{2}'
+  probes: [calc.ch10.polar.probe_disk_area]
+  recurs_in: [calc.ch10.s3, calc.ch10.s4]
+  strategies: [region_slices]
+strategies:
+- id: region_slices
+  families: [忽略积分区域依赖, 误读积分区域方向]
+  principles:
+  - 累次积分的内层界限描述一条截线与区域的交段，外层变量在该次内层积分中固定。
+  - 交换积分次序须保持原区域的点集不变，不能只交换微分符号。
+  constraints:
+  - 不把变上限直接替换为外层变量的最大值。
+  - 不在未核对区域的情况下套用矩形积分限。
+  rubric:
+  - 能用不等式或图形说明区域，并给出一条截线。
+  - 积分次序、内外变量和界限的依赖相互一致。
+- id: polar_area_measure
+  families: [忽略面积元缩放]
+  principles:
+  - 半径 r 处角宽 dθ 对应弧长约 r dθ，局部面积约为 dr 乘 r dθ。
+  - 雅可比描述面积缩放，必须与被积函数的坐标替换分别处理。
+  constraints:
+  - 不把 dA 直接替换成 dr dθ。
+  - 不以死记 r 取代面积解释，也不因被积函数已有 r 就省略面积因子。
+  rubric:
+  - 能从扇形小块面积解释 r 的来源。
+  - 被积函数、面积元和区域界限三者均完成换元。
+items:
+- id: calc.ch10.double_integral_cartesian.probe_triangle
+  knowledge_point: calc.ch10.double_integral_cartesian
+  purpose: probe
+  stem: '计算 $\int_0^1\int_0^x(x+2y)\,dy\,dx$'
+  spec:
+    operation: double_integral
+    expr: x+2*y
+    variables: [y, x]
+    bounds:
+    - var: y
+      lower: '0'
+      upper: x
+    - var: x
+      lower: '0'
+      upper: '1'
+  answer: '\frac{2}{3}'
+  predictions:
+  - misconception_id: calc.ch10.double_integral_cartesian.freeze_inner_bound
+    answer: '\frac{3}{2}'
+  - misconception_id: calc.ch10.double_integral_cartesian.transpose_region
+    answer: '\frac{5}{6}'
+- id: calc.ch10.double_integral_cartesian.seed_triangle
+  knowledge_point: calc.ch10.double_integral_cartesian
+  purpose: verification
+  dimension: correctness
+  stem: '计算 $\iint_D xy\,dA$，$D=\{0\le y\le x\le2\}$'
+  spec:
+    operation: double_integral
+    expr: x*y
+    variables: [y, x]
+    bounds:
+    - var: y
+      lower: '0'
+      upper: x
+    - var: x
+      lower: '0'
+      upper: '2'
+  answer: '2'
+- id: calc.ch10.double_integral_cartesian.seed_slanted
+  knowledge_point: calc.ch10.double_integral_cartesian
+  purpose: verification
+  dimension: near_transfer
+  stem: '计算 $\iint_D x\,dA$，$D=\{x\ge0,y\ge0,x+y\le1\}$'
+  spec:
+    operation: double_integral
+    expr: x
+    variables: [y, x]
+    bounds:
+    - var: y
+      lower: '0'
+      upper: 1-x
+    - var: x
+      lower: '0'
+      upper: '1'
+  answer: '\frac{1}{6}'
+- id: calc.ch10.polar.demo_homework
+  knowledge_point: calc.ch10.polar
+  purpose: practice
+  stem: '用极坐标计算 $\iint_D(x^2+y^2)\,dA$，$D=\{x^2+y^2\le1\}$'
+  spec:
+    operation: double_integral
+    expr: x**2+y**2
+    variables: [y, x]
+    bounds:
+    - var: y
+      lower: -sqrt(1-x**2)
+      upper: sqrt(1-x**2)
+    - var: x
+      lower: '-1'
+      upper: '1'
+  answer: '\frac{\pi}{2}'
+  predictions:
+  - misconception_id: calc.ch10.polar.miss_r
+    answer: '\frac{2\pi}{3}'
+  - misconception_id: calc.ch10.polar.half_angle
+    answer: '\frac{\pi}{4}'
+- id: calc.ch10.polar.probe_disk_area
+  knowledge_point: calc.ch10.polar
+  purpose: probe
+  stem: '用极坐标计算单位圆盘面积 $\iint_{x^2+y^2\le1}1\,dA$'
+  spec:
+    operation: double_integral
+    expr: '1'
+    variables: [y, x]
+    bounds:
+    - var: y
+      lower: -sqrt(1-x**2)
+      upper: sqrt(1-x**2)
+    - var: x
+      lower: '-1'
+      upper: '1'
+  answer: '\pi'
+  predictions:
+  - misconception_id: calc.ch10.polar.miss_r
+    answer: '2\pi'
+  - misconception_id: calc.ch10.polar.half_angle
+    answer: '\frac{\pi}{2}'
+- id: calc.ch10.polar.seed_quarter_disk
+  knowledge_point: calc.ch10.polar
+  purpose: verification
+  dimension: correctness
+  stem: '用极坐标计算 $\iint_D x\,dA$，$D=\{x,y\ge0,x^2+y^2\le1\}$'
+  spec:
+    operation: double_integral
+    expr: x
+    variables: [y, x]
+    bounds:
+    - var: y
+      lower: '0'
+      upper: sqrt(1-x**2)
+    - var: x
+      lower: '0'
+      upper: '1'
+  answer: '\frac{1}{3}'
+- id: calc.ch10.polar.seed_large_disk
+  knowledge_point: calc.ch10.polar
+  purpose: verification
+  dimension: distractor
+  stem: '用极坐标计算 $\iint_D(x^2+y^2)\,dA$，$D=\{x^2+y^2\le4\}$'
+  spec:
+    operation: double_integral
+    expr: x**2+y**2
+    variables: [y, x]
+    bounds:
+    - var: y
+      lower: -sqrt(4-x**2)
+      upper: sqrt(4-x**2)
+    - var: x
+      lower: '-2'
+      upper: '2'
+  answer: '8\pi'
+  predictions:
+  - misconception_id: calc.ch10.polar.miss_r
+    answer: '\frac{16\pi}{3}'

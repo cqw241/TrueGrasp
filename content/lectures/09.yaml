@@ -58,3 +58,133 @@ points:
 - id: calc.ch9.s9
   section: 9
   name: 二元函数的泰勒公式
+misconceptions:
+- id: calc.ch9.partial_derivative.vary_other
+  knowledge_point: calc.ch9.partial_derivative
+  family: 混淆变量依赖
+  description: 求对 x 的偏导时把独立变量 y 也视作随 x 变化，并擅自取 dy/dx=1
+  triggers: [二元函数求偏导, 未注明保持哪个变量不变]
+  examples:
+  - question: '求 $z=x^2y+y^3$ 对 $x$ 的偏导'
+    wrong: '2xy+x^2+3y^2'
+    correct: 2xy
+  probes: [calc.ch9.partial_derivative.probe_fixed_y]
+  recurs_in: [calc.ch9.multivar_chain, calc.ch9.s5, calc.ch9.s8]
+  strategies: [variable_dependency]
+- id: calc.ch9.partial_derivative.keep_constant_term
+  knowledge_point: calc.ch9.partial_derivative
+  family: 误用求导运算法则
+  description: 求偏导时把与求导变量无关的加项原样保留，而不是求导为零
+  triggers: [含纯 y 加项的函数]
+  examples:
+  - question: '求 $z=x^2y+y^3$ 对 $x$ 的偏导'
+    wrong: '2xy+y^3'
+    correct: 2xy
+  probes: [calc.ch9.partial_derivative.probe_fixed_y]
+  recurs_in: [calc.ch9.multivar_chain, calc.ch9.s8]
+  strategies: [derivative_algebra]
+- id: calc.ch9.multivar_chain.omit_path
+  knowledge_point: calc.ch9.multivar_chain
+  family: 遗漏复合依赖路径
+  description: 中间变量有多条依赖路径时只计算第一条路径的贡献
+  triggers: [两个及以上中间变量依赖同一自变量]
+  examples:
+  - question: '$z=u^2+v,u=t^2,v=3t$，求 $dz/dt$'
+    wrong: '4t^3'
+    correct: '4t^3+3'
+  probes: [calc.ch9.multivar_chain.probe_two_paths]
+  recurs_in: [calc.ch9.s5, calc.ch9.s7]
+  strategies: [dependency_paths]
+- id: calc.ch9.multivar_chain.omit_edge_rate
+  knowledge_point: calc.ch9.multivar_chain
+  family: 遗漏内层变化率
+  description: 将外层对各中间变量的偏导直接相加，遗漏中间变量对自变量的导数
+  triggers: [树形复合依赖]
+  examples:
+  - question: '$z=u^2+v,u=t^2,v=3t$，求 $dz/dt$'
+    wrong: '2t^2+1'
+    correct: '4t^3+3'
+  probes: [calc.ch9.multivar_chain.probe_two_paths]
+  recurs_in: [calc.ch9.s5, calc.ch9.s7]
+  strategies: [inner_rate]
+strategies:
+- id: dependency_paths
+  families: [遗漏复合依赖路径]
+  principles:
+  - 总导数包含从自变量到结果的所有依赖路径，各路径贡献相加，同一路径的变化率相乘。
+  - 偏导数是在中间变量相互独立的表示中定义的，复合后的总变化须另计依赖。
+  constraints:
+  - 不因为某路径在图上较短就忽略它。
+  - 不把全导数与对某一中间变量的偏导数混写。
+  rubric:
+  - 每条依赖路径均有对应导数项。
+  - 能解释路径内相乘与路径间相加，并说明保持不变的变量。
+items:
+- id: calc.ch9.partial_derivative.probe_fixed_y
+  knowledge_point: calc.ch9.partial_derivative
+  purpose: probe
+  stem: '$x,y$ 独立，求 $z=x^2y+y^3$ 对 $x$ 的偏导'
+  spec:
+    operation: derivative
+    expr: x**2*y+y**3
+    variables: [x]
+  answer: 2xy
+  predictions:
+  - misconception_id: calc.ch9.partial_derivative.vary_other
+    answer: '2xy+x^2+3y^2'
+  - misconception_id: calc.ch9.partial_derivative.keep_constant_term
+    answer: '2xy+y^3'
+- id: calc.ch9.partial_derivative.seed_product
+  knowledge_point: calc.ch9.partial_derivative
+  purpose: verification
+  dimension: correctness
+  stem: '$x,y$ 独立，求 $z=x^3y^2+\sin y$ 对 $x$ 的偏导'
+  spec:
+    operation: derivative
+    expr: x**3*y**2+sin(y)
+    variables: [x]
+  answer: '3x^2y^2'
+- id: calc.ch9.partial_derivative.seed_mixed
+  knowledge_point: calc.ch9.partial_derivative
+  purpose: verification
+  dimension: near_transfer
+  stem: '$x,y$ 独立，求 $z=x^2y^3$ 的混合偏导 $\partial_y(\partial_x z)$'
+  spec:
+    operation: derivative
+    expr: x**2*y**3
+    variables: [x, y]
+  answer: '6xy^2'
+- id: calc.ch9.multivar_chain.probe_two_paths
+  knowledge_point: calc.ch9.multivar_chain
+  purpose: probe
+  stem: '$z=u^2+v,u=t^2,v=3t$，求 $dz/dt$'
+  spec:
+    operation: derivative
+    expr: t**4+3*t
+    variables: [t]
+  answer: '4t^3+3'
+  predictions:
+  - misconception_id: calc.ch9.multivar_chain.omit_path
+    answer: '4t^3'
+  - misconception_id: calc.ch9.multivar_chain.omit_edge_rate
+    answer: '2t^2+1'
+- id: calc.ch9.multivar_chain.seed_product
+  knowledge_point: calc.ch9.multivar_chain
+  purpose: verification
+  dimension: correctness
+  stem: '$z=uv,u=s,v=s^2$，求 $dz/ds$'
+  spec:
+    operation: derivative
+    expr: s**3
+    variables: [s]
+  answer: '3s^2'
+- id: calc.ch9.multivar_chain.seed_partial_composite
+  knowledge_point: calc.ch9.multivar_chain
+  purpose: verification
+  dimension: near_transfer
+  stem: '$z=u^2+v,u=x+y,v=xy$，$x,y$ 独立，求复合后 $z$ 对 $x$ 的偏导'
+  spec:
+    operation: derivative
+    expr: (x+y)**2+x*y
+    variables: [x]
+  answer: 2x+3y
