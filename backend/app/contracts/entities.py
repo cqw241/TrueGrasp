@@ -112,7 +112,7 @@ class StrategyCard(SQLModel, table=True):
     id: str = Field(primary_key=True)
     misconception_ids: list[str] = _json_list(str)
     families: list[str] = _json_list(str)  # 适用的错因族
-    steps: list[str] = _json_list(str)  # 教学步骤，具体讲解由模型按步骤现场生成
+    principles: list[str] = _json_list(str)  # 教学原则，具体讲解由模型按原则现场生成
     constraints: list[str] = _json_list(str)
     rubric: list[str] = _json_list(str)  # 解释题的评分要点
 
