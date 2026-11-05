@@ -9,7 +9,7 @@
 | `backend/` | FastAPI 后端，uv 管理依赖，Python 3.13 |
 | `frontend/` | Vite + React + TypeScript 前端，npm 管理依赖，Node 24 |
 
-后端模块的划分与负责人见《开发计划》第 1 节。
+后端模块的划分与负责人见《开发计划》第 1 节。模块之间的契约（实体、Agent 输入输出、接口桩、事件类型）都在 `backend/app/contracts/`，改动前先和柴确认。HTTP 接口定义导出在 `backend/openapi.json`，启动后端后也可以在 `/docs` 查看。
 
 ## 本地启动
 
@@ -42,6 +42,7 @@ cd backend
 uv run ruff check .
 uv run ruff format --check .   # 自动修复：uv run ruff format .
 uv run pytest
+uv run python -m app.openapi --check   # 改了接口后先运行 uv run python -m app.openapi
 
 # 前端
 cd frontend
