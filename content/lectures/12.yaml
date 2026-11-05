@@ -38,3 +38,35 @@ points:
 - id: calc.ch12.s6
   section: 6
   name: 一般周期的傅里叶级数
+items:
+- id: calc.ch12.s1.seed_term_zero_counterexample
+  knowledge_point: calc.ch12.s1
+  purpose: verification
+  dimension: explanation
+  stem: '有人断言：若 $a_n\to0$，则 $\sum_{n=1}^{\infty}a_n$ 收敛。判断并给出反例与论证；有限项部分和只能作参考。'
+  answer: '断言错误。取 $a_n=1/n$，则 $a_n\to0$；但对每个 $k\ge1$，$\sum_{n=2^{k-1}+1}^{2^k}1/n\ge1/2$，故 $S_{2^m}\ge1+m/2\to+\infty$，调和级数发散。'
+  rubric:
+  - 明确否定充分性，并指出通项趋零只是收敛的必要条件。
+  - 给出 a_n=1/n 或其他有效反例，同时验证通项趋零。
+  - 以分组下界、积分判别或其他严谨方法证明发散；只列有限个部分和不算证明。
+- id: calc.ch12.s2.seed_absolute_counterexample
+  knowledge_point: calc.ch12.s2
+  purpose: verification
+  dimension: explanation
+  stem: 有人断言：级数收敛就一定绝对收敛。用反例说明，并分别论证原级数与绝对值级数的敛散性。
+  answer: '断言错误。$\sum_{n=1}^{\infty}(-1)^{n-1}/n$ 的正项幅度 $1/n$ 单调趋零，按莱布尼茨判别法收敛；其绝对值级数为发散的调和级数，故原级数条件收敛而非绝对收敛。'
+  rubric:
+  - 给出有效的条件收敛级数。
+  - 验证交错级数判别所需的单调性与趋零条件。
+  - 独立论证绝对值级数发散，并区分条件收敛和绝对收敛。
+- id: calc.ch12.s2.seed_ratio_inconclusive
+  knowledge_point: calc.ch12.s2
+  purpose: verification
+  dimension: explanation
+  stem: '有人断言：正项级数若 $\lim_{n\to\infty}a_{n+1}/a_n=1$ 就发散。给出两个比值极限均为 1、但敛散性不同的例子并论证。'
+  answer: '断言错误。$a_n=1/n$ 与 $b_n=1/n^2$ 的相邻项比值分别为 $n/(n+1)$ 与 $n^2/(n+1)^2$，极限均为 1；前者是发散的调和级数，后者由 $\int_1^{\infty}x^{-2}\,dx=1$
+    及积分判别法知收敛。比值极限等于 1 时比值判别法失效。'
+  rubric:
+  - 两个例子的比值极限都确为 1。
+  - 用有效的审敛方法分别证明一个收敛、一个发散。
+  - 明确比值等于 1 表示该判别法不能下结论，不等于级数发散。

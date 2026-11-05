@@ -2,7 +2,8 @@
 #
 # 填写方法：把下面的 misconceptions、strategies、items 条目复制到对应讲次文件（如 lectures/02.yaml），
 # 按实际内容修改。知识点（points）已经在讲次文件里，需要时可以拆分、改名或补充先修关系。
-# 字段说明和数量要求见 README.md。改完后运行入库检查：
+# 字段说明和数量要求见 authoring.md。此文件是示例，不与 lectures/ 一起入库。
+# 同 ID 示例已纳入 C2；新增内容请使用新的 ID，不要再次复制这些条目。改完后运行入库检查：
 #   cd backend && uv run python -m app.knowledge check
 #
 # 公式写法：题干、答案、预测答案用 LaTeX，并用单引号括起来；spec.expr 用 SymPy 语法，如 cos(5*x)**2。
@@ -12,8 +13,8 @@ lecture: 2
 misconceptions:
 - id: calc.ch2.chain.miss_inner          # 全书唯一，建议“知识点前缀.简短英文名”
   knowledge_point: calc.ch2.chain_rule_multi
-  family: 误读复合结构                     # 错因族，同族错因可以共用策略卡
-  description: 多层复合时只用一次链式法则，漏乘最内层导数
+  family: 多层复合漏层                     # 错因族，同族错因可以共用策略卡
+  description: 能处理两层复合，但在三层及以上漏乘最内层导数
   triggers: [三层及以上复合, 外层为幂函数]   # 可选：容易出现这个错因的题目特征
   examples:                              # 1 个典型错例
   - question: 求 $\sin^2(3x)$ 的导数
@@ -26,7 +27,7 @@ misconceptions:
 - id: calc.ch2.chain.formula_sub
   knowledge_point: calc.ch2.chain_rule_multi
   family: 把求导当作公式代换
-  description: 把复合函数求导当作套公式，只对外层函数求导，不理解内层变化率
+  description: '把以 u 为自变量的熟悉导数公式直接做 u=g(x) 代换，却不乘 g''(x)；简单两层复合也如此'
   examples:
   - question: 求 $\sin^2(3x)$ 的导数
     wrong: '2\sin(3x)\cos(3x)'
@@ -38,21 +39,25 @@ strategies:
 - id: layered_decomposition
   misconceptions: [calc.ch2.chain.miss_inner]
   principles:                            # 教学原则：这类错因该怎么教，不写逐步流程
-  - 先让学生自己把函数由外到内逐层写成 y=f(u)、u=g(v)、v=h(x)，再逐层求导
-  - 每一层的导数都要写出来，最后再相乘
+  - 表达式的每一层都对应一段依赖关系，总变化率必须包含每段变化率
+  - 分层表示应保持原函数不变，并让每个导数因子有明确来源
   constraints:                           # 禁用做法
   - 不要直接给出完整的求导结果
   rubric:                                # 解释题的评分要点
-  - 能说出函数有几层复合
-  - 能说明为什么每一层的导数都要乘上
+  - 能区分两层和三层复合
+  - 能解释为什么最内层的变化率不能省略
 
 - id: numeric_slope_conflict
   families: [把求导当作公式代换]           # 按错因族复用
   principles:
-  - 先让学生用数值方法估算某点的斜率，与自己的答案对比，制造矛盾
-  - 再用变化率解释内层函数为什么影响导数
+  - 局部差商与符号导数表达同一个局部变化率，可用于暴露只套外层公式的矛盾
+  - 复合函数的横向伸缩会改变斜率，内层不是装饰性的符号
   constraints:
-  - 不要一开始就讲公式
+  - 不把数值差商近似当作一般性证明
+  - 不以背公式替代变化率解释
+  rubric:
+  - 能解释简单复合也要乘内层变化率
+  - 能把分层依赖和局部变化率联系起来
 
 items:
 # 判别追问题：持有不同错因的学生会写出不同答案。predictions 列出各错因下的预测答案，

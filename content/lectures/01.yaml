@@ -66,3 +66,178 @@ points:
 - id: calc.ch1.s10
   section: 10
   name: 闭区间上连续函数性质
+misconceptions:
+- id: calc.ch1.function.shift_outside
+  knowledge_point: calc.ch1.function
+  family: 混淆函数输入与输出
+  description: 把自变量的增量直接加在函数值上，认为 f(x+h)=f(x)+h
+  triggers: [输入为和式, 非线性函数]
+  examples:
+  - question: '设 $f(t)=t^2$，求 $f(x+1)$'
+    wrong: 'x^2+1'
+    correct: '(x+1)^2'
+  probes: [calc.ch1.function.probe_shift]
+  recurs_in: [calc.ch1.composition, calc.ch2.chain_rule, calc.ch9.multivar_chain]
+  strategies: [input_output_mapping]
+- id: calc.ch1.function.identity_value
+  knowledge_point: calc.ch1.function
+  family: 混淆函数输入与输出
+  description: 忽略对应法则，把函数值 f(a) 直接写成输入 a
+  triggers: [函数值计算, 自变量换字母]
+  examples:
+  - question: '设 $f(t)=t^2+1$，求 $f(2)$'
+    wrong: '2'
+    correct: '5'
+  probes: [calc.ch1.function.probe_shift]
+  recurs_in: [calc.ch1.composition, calc.ch9.partial_derivative]
+  strategies: [input_output_mapping]
+- id: calc.ch1.composition.reverse_order
+  knowledge_point: calc.ch1.composition
+  family: 误读复合结构
+  description: 把 f(g(x)) 错写成 g(f(x))，颠倒内外层顺序
+  triggers: [两个非交换的函数]
+  examples:
+  - question: '设 $f(t)=t^2,g(t)=t+1$，求 $f(g(x))$'
+    wrong: 'x^2+1'
+    correct: '(x+1)^2'
+  probes: [calc.ch1.composition.probe_order]
+  recurs_in: [calc.ch2.chain_rule, calc.ch2.chain_rule_multi, calc.ch9.multivar_chain]
+  strategies: [composition_structure]
+- id: calc.ch1.composition.multiply
+  knowledge_point: calc.ch1.composition
+  family: 误读复合结构
+  description: 把函数复合误当作函数值相乘，认为 f(g(x))=f(x)g(x)
+  triggers: [复合符号与乘法并存]
+  examples:
+  - question: '设 $f(t)=t^2,g(t)=t+1$，求 $f(g(x))$'
+    wrong: 'x^2(x+1)'
+    correct: '(x+1)^2'
+  probes: [calc.ch1.composition.probe_order]
+  recurs_in: [calc.ch2.chain_rule, calc.ch9.multivar_chain]
+  strategies: [composition_structure]
+strategies:
+- id: input_output_mapping
+  families: [混淆函数输入与输出]
+  principles:
+  - 函数名、自变量的哑符号和对应法则承担不同角色，换字母不改变对应法则。
+  - 输入须作为整体进入法则；函数值的变化通常不等于输入的变化。
+  constraints:
+  - 不把 f(x+h)=f(x)+h 当作恒等式。
+  - 不以记住某一道题的展开式代替理解输入输出关系。
+  rubric:
+  - 能明确指出本题的完整输入。
+  - 能用原对应法则解释结果，并在出现分母或根式时说明定义域限制。
+- id: composition_structure
+  families: [误读复合结构]
+  principles:
+  - 复合是一种有方向的输入输出连接；外层接收的是内层的整个输出。
+  - 中间变量和依赖关系应与函数表达式一致，层数由运算结构决定。
+  constraints:
+  - 不把复合符号解释为乘号。
+  - 不靠由左到右读字面顺序决定运算先后。
+  rubric:
+  - 能指出内层和外层并写出有顺序的复合；求导时外层导数取在内层值处。
+  - 能用输入输出关系解释复合顺序，并区分复合与乘法。
+items:
+- id: calc.ch1.function.probe_shift
+  knowledge_point: calc.ch1.function
+  purpose: probe
+  stem: '设 $f(t)=t^2$，求 $f(x+2)$'
+  spec:
+    operation: expression
+    expr: (x+2)**2
+    variables: [x]
+  answer: '(x+2)^2'
+  predictions:
+  - misconception_id: calc.ch1.function.shift_outside
+    answer: 'x^2+2'
+  - misconception_id: calc.ch1.function.identity_value
+    answer: x+2
+- id: calc.ch1.function.seed_scaled_input
+  knowledge_point: calc.ch1.function
+  purpose: verification
+  dimension: correctness
+  stem: '设 $f(t)=t^2+1$，求 $f(2h)$'
+  spec:
+    operation: expression
+    expr: 4*h**2+1
+    variables: [h]
+  answer: '4h^2+1'
+- id: calc.ch1.function.seed_shifted_input
+  knowledge_point: calc.ch1.function
+  purpose: verification
+  dimension: near_transfer
+  stem: '设 $f(t)=1/(t+2)$，求 $f(a-2)$，其中 $a\ne0$'
+  spec:
+    operation: expression
+    expr: 1/a
+    variables: [a]
+  answer: '\frac{1}{a}'
+- id: calc.ch1.composition.probe_order
+  knowledge_point: calc.ch1.composition
+  purpose: probe
+  stem: '设 $f(t)=t^2,g(t)=t+1$，求 $f(g(x))$'
+  spec:
+    operation: expression
+    expr: (x+1)**2
+    variables: [x]
+  answer: '(x+1)^2'
+  predictions:
+  - misconception_id: calc.ch1.composition.reverse_order
+    answer: 'x^2+1'
+  - misconception_id: calc.ch1.composition.multiply
+    answer: 'x^2(x+1)'
+- id: calc.ch1.composition.seed_exp
+  knowledge_point: calc.ch1.composition
+  purpose: verification
+  dimension: correctness
+  stem: '设 $f(t)=e^t,g(t)=2t$，求 $f(g(x))$'
+  spec:
+    operation: expression
+    expr: exp(2*x)
+    variables: [x]
+  answer: 'e^{2x}'
+- id: calc.ch1.composition.seed_rational
+  knowledge_point: calc.ch1.composition
+  purpose: verification
+  dimension: near_transfer
+  stem: '设 $f(t)=1/t,g(t)=t^2+1$，求 $f(g(x))$'
+  spec:
+    operation: expression
+    expr: 1/(x**2+1)
+    variables: [x]
+  answer: '\frac{1}{x^2+1}'
+- id: calc.ch1.s6.seed_sine_ratio
+  knowledge_point: calc.ch1.s6
+  purpose: verification
+  dimension: correctness
+  stem: '求 $\lim_{x\to0}\frac{\sin(3x)}{x}$'
+  spec:
+    operation: limit
+    expr: sin(3*x)/x
+    variables: [x]
+    limit_point: '0'
+  answer: '3'
+- id: calc.ch1.s7.seed_cosine_order
+  knowledge_point: calc.ch1.s7
+  purpose: verification
+  dimension: near_transfer
+  stem: '求 $\lim_{x\to0}\frac{1-\cos x}{x^2}$'
+  spec:
+    operation: limit
+    expr: (1-cos(x))/x**2
+    variables: [x]
+    limit_point: '0'
+  answer: '\frac{1}{2}'
+- id: calc.ch1.s3.seed_right_abs
+  knowledge_point: calc.ch1.s3
+  purpose: verification
+  dimension: correctness
+  stem: '求 $\lim_{x\to0^+}\frac{|x|}{x}$；注意这是右极限'
+  spec:
+    operation: limit
+    expr: Abs(x)/x
+    variables: [x]
+    limit_point: '0'
+    limit_direction: +
+  answer: '1'
