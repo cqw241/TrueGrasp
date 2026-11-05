@@ -24,11 +24,24 @@ class ItemCheck(BaseModel):
     detail: str = ""
 
 
+class AnswerGroup(BaseModel):
+    """预测答案相同的一组候选假设。"""
+
+    answer: LaTeX
+    misconception_ids: list[str]  # 正确答案组含 SLIP
+    is_correct: bool
+
+
 class Distinctness(BaseModel):
-    ok: bool | None
-    # 互相等价的一对：错因 ID 或 "correct"（正确答案）
-    collisions: list[tuple[str, str]] = []
+    ok: bool | None  # 至少分成两组；None 表示有预测无法判定
+    groups: list[AnswerGroup] = []
     detail: str = ""
+
+    def separates(self, misconception_id: str) -> bool:
+        """该错因的预测是否不同于正确答案。抗诱错题要求目标错因满足这一条。"""
+        return any(
+            misconception_id in g.misconception_ids and not g.is_correct for g in self.groups
+        )
 
 
 class MathTools(Protocol):
@@ -48,9 +61,11 @@ class MathTools(Protocol):
     def check_distinct(
         self, spec: ItemSpec, correct: LaTeX, predictions: list[Prediction]
     ) -> Distinctness:
-        """追问题是否有区分度：各预测两两不等价，且都不等价于正确答案。
+        """把候选假设按预测答案分组，与正确答案等价的归入正确答案组（SLIP 总在这一组）。
 
-        SLIP 的预测就是正确答案，不参与比较。
+        至少分成两组即有区分度：不论学生怎么答，至少能排除一个候选。允许几个候选预测相同，
+        如演示中“求 sin(3x) 的导数”，漏乘内层导数与偶发失误都预测 3cos(3x)，这道题只用来
+        分出“公式代换”，剩下两个由第二道追问题区分。
         """
         ...
 
