@@ -1,6 +1,6 @@
 """Agent 决策证据视图与知识路径。"""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 
 from app.api.stub import not_implemented
 from app.contracts.api import DiagnosisView, DimensionResult, TimelineEntry
@@ -37,11 +37,16 @@ def get_evidence(evidence_id: int) -> Evidence:
 
 
 @router.get("/knowledge/points")
-def list_points(lecture: int | None = None) -> list[KnowledgePoint]:
-    not_implemented("T04")
+def list_points(request: Request, lecture: int | None = None) -> list[KnowledgePoint]:
+    knowledge = request.app.state.knowledge
+    return knowledge.all_points() if lecture is None else knowledge.lecture_points(lecture)
 
 
 @router.get("/knowledge/path")
-def get_path(source: str, target: str) -> list[KnowledgePoint]:
-    """跨章节知识路径，如第 1→2→9 讲。"""
-    not_implemented("T04")
+def get_path(request: Request, source: str, target: str) -> list[KnowledgePoint]:
+    """跨章节知识路径，如第 1→2→9 讲；不连通时为空列表。"""
+    knowledge = request.app.state.knowledge
+    for kp_id in (source, target):
+        if kp_id not in knowledge:
+            raise HTTPException(status_code=404, detail=f"知识点不存在：{kp_id}")
+    return knowledge.path(source, target)

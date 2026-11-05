@@ -54,6 +54,21 @@ uv run pytest tests/test_orchestration.py -q
 
 验收覆盖完整教学链路、验证信息隔离、两个等待阶段及业务提交/checkpoint/调度之间的中断恢复、跨会话未答题指纹去重、失败重试、事件与任务去重、重规划与取消、到期任务、HTTP 异步受理以及 SSE 广播和订阅释放。
 
+## T04 知识图谱与内容管线
+
+教学内容在 `content/lectures/`，每讲一个 YAML 文件，格式与填写说明见 [content/README.md](../content/README.md)，模板见 `content/template.yaml`。`app.knowledge` 提供以下命令（在 `backend` 目录运行）：
+
+| 命令 | 作用 |
+|---|---|
+| `uv run python -m app.knowledge skeleton` | 从《高等数学目录》生成缺少的讲次文件，已有文件不覆盖 |
+| `uv run python -m app.knowledge check` | 入库检查，逐条报告文件、条目 ID 和原因；有错误时退出码为 1 |
+| `uv run python -m app.knowledge ingest` | 检查通过后写入业务库，只新增或更新，不删除 |
+| `uv run python -m app.knowledge draft-probe <错因 ID>` | 用模型起草判别追问题，通过检查后导出到 `content/drafts/` 待教师审核 |
+
+T05 合并前，入库检查跳过 `verify_item` 和 `check_distinct`，并给出提示；T06 合并前，`draft-probe` 无法调用模型。
+
+后端启动时用 `NxKnowledgeGraph.from_engine()` 从业务库加载图谱，存入 `app.state.knowledge`，并作为编排的默认 `knowledge` 依赖。图谱加载后不再读库，重新入库后要重启后端。
+
 ## 提交前检查
 
 CI 在每个 PR 和 `main` 的推送上运行下列检查，提交前先在本地跑一遍。
@@ -65,6 +80,7 @@ uv run ruff check .
 uv run ruff format --check .   # 自动修复：uv run ruff format .
 uv run pytest
 uv run python -m app.openapi --check   # 改了接口后先运行 uv run python -m app.openapi
+uv run python -m app.knowledge check    # 教学内容的入库检查
 
 # 前端
 cd frontend

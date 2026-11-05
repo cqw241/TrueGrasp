@@ -1,0 +1,22 @@
+lecture: 6
+title: 定积分的应用
+sections:
+- section: 1
+  title: 定积分的元素法
+  exam_tags: [math1, math2, math3]
+- section: 2
+  title: 定积分的几何应用
+  exam_tags: [math1, math2, math3]
+- section: 3
+  title: 定积分在物理上的应用
+  exam_tags: [math1, math2]
+points:
+- id: calc.ch6.s1
+  section: 1
+  name: 定积分的元素法
+- id: calc.ch6.s2
+  section: 2
+  name: 定积分的几何应用
+- id: calc.ch6.s3
+  section: 3
+  name: 定积分在物理上的应用

@@ -1,0 +1,68 @@
+lecture: 1
+title: 函数与极限
+sections:
+- section: 1
+  title: 映射与函数
+  exam_tags: [math1, math2, math3]
+- section: 2
+  title: 数列的极限
+  exam_tags: [math1, math2, math3]
+- section: 3
+  title: 函数的极限
+  exam_tags: [math1, math2, math3]
+- section: 4
+  title: 无穷小与无穷大
+  exam_tags: [math1, math2, math3]
+- section: 5
+  title: 极限运算法则
+  exam_tags: [math1, math2, math3]
+- section: 6
+  title: 极限存在准则、两个重要极限
+  exam_tags: [math1, math2, math3]
+- section: 7
+  title: 无穷小的比较
+  exam_tags: [math1, math2, math3]
+- section: 8
+  title: 函数的连续性与间断点
+  exam_tags: [math1, math2, math3]
+- section: 9
+  title: 连续函数的运算与初等函数的连续性
+  exam_tags: [math1, math2, math3]
+- section: 10
+  title: 闭区间上连续函数性质
+  exam_tags: [math1, math2, math3]
+points:
+- id: calc.ch1.function
+  section: 1
+  name: 函数的概念与性质
+- id: calc.ch1.composition
+  section: 1
+  name: 函数的复合
+  prerequisites: [calc.ch1.function]
+- id: calc.ch1.s2
+  section: 2
+  name: 数列的极限
+- id: calc.ch1.s3
+  section: 3
+  name: 函数的极限
+- id: calc.ch1.s4
+  section: 4
+  name: 无穷小与无穷大
+- id: calc.ch1.s5
+  section: 5
+  name: 极限运算法则
+- id: calc.ch1.s6
+  section: 6
+  name: 极限存在准则、两个重要极限
+- id: calc.ch1.s7
+  section: 7
+  name: 无穷小的比较
+- id: calc.ch1.s8
+  section: 8
+  name: 函数的连续性与间断点
+- id: calc.ch1.s9
+  section: 9
+  name: 连续函数的运算与初等函数的连续性
+- id: calc.ch1.s10
+  section: 10
+  name: 闭区间上连续函数性质

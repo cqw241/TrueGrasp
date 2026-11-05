@@ -15,6 +15,7 @@
 |---|---|
 | `backend/` | FastAPI 后端，uv 管理依赖，Python 3.13 |
 | `frontend/` | Vite + React + TypeScript 前端，npm 管理依赖，Node 24 |
+| `content/` | 数学教师编写的教学内容（YAML），填写说明见 `content/README.md` |
 
 ## 本地启动
 

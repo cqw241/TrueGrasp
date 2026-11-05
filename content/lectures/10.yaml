@@ -1,0 +1,33 @@
+lecture: 10
+title: 重积分
+sections:
+- section: 1
+  title: 二重积分的概念与性质
+  exam_tags: [math1, math2, math3]
+- section: 2
+  title: 二重积分的计算
+  exam_tags: [math1, math2, math3]
+- section: 3
+  title: 三重积分
+  exam_tags: [math1]
+- section: 4
+  title: 重积分的应用
+  exam_tags: [math1]
+points:
+- id: calc.ch10.s1
+  section: 1
+  name: 二重积分的概念与性质
+- id: calc.ch10.double_integral_cartesian
+  section: 2
+  name: 利用直角坐标计算二重积分
+  prerequisites: [calc.ch10.s1, calc.ch5.s2]
+- id: calc.ch10.polar
+  section: 2
+  name: 利用极坐标计算二重积分
+  prerequisites: [calc.ch10.double_integral_cartesian, calc.ch5.substitution]
+- id: calc.ch10.s3
+  section: 3
+  name: 三重积分
+- id: calc.ch10.s4
+  section: 4
+  name: 重积分的应用

@@ -1,0 +1,88 @@
+# 教学内容填写模板（以第二讲“多层复合函数求导”为例）
+#
+# 填写方法：把下面的 misconceptions、strategies、items 条目复制到对应讲次文件（如 lectures/02.yaml），
+# 按实际内容修改。知识点（points）已经在讲次文件里，需要时可以拆分、改名或补充先修关系。
+# 字段说明和数量要求见 README.md。改完后运行入库检查：
+#   cd backend && uv run python -m app.knowledge check
+#
+# 公式写法：题干、答案、预测答案用 LaTeX，并用单引号括起来；spec.expr 用 SymPy 语法，如 cos(5*x)**2。
+
+lecture: 2
+
+misconceptions:
+- id: calc.ch2.chain.miss_inner          # 全书唯一，建议“知识点前缀.简短英文名”
+  knowledge_point: calc.ch2.chain_rule_multi
+  family: 误读复合结构                     # 错因族，同族错因可以共用策略卡
+  description: 多层复合时只用一次链式法则，漏乘最内层导数
+  triggers: [三层及以上复合, 外层为幂函数]   # 可选：容易出现这个错因的题目特征
+  examples:                              # 1 个典型错例
+  - question: 求 $\sin^2(3x)$ 的导数
+    wrong: '2\sin(3x)\cos(3x)'
+    correct: '6\sin(3x)\cos(3x)'
+  probes: [calc.ch2.chain_multi.probe_cos2_5x]   # 判别追问题，可由模型起草后审核
+  strategies: [layered_decomposition]
+  recurs_in: [calc.ch9.multivar_chain, calc.ch2.implicit_diff]   # 可能复发的知识点，章前预检靠它
+
+- id: calc.ch2.chain.formula_sub
+  knowledge_point: calc.ch2.chain_rule_multi
+  family: 把求导当作公式代换
+  description: 把复合函数求导当作套公式，只对外层函数求导，不理解内层变化率
+  examples:
+  - question: 求 $\sin^2(3x)$ 的导数
+    wrong: '2\sin(3x)\cos(3x)'
+    correct: '6\sin(3x)\cos(3x)'
+  probes: [calc.ch2.chain_multi.probe_sin3x]
+  recurs_in: [calc.ch9.multivar_chain, calc.ch4.substitution]
+
+strategies:
+- id: layered_decomposition
+  misconceptions: [calc.ch2.chain.miss_inner]
+  principles:                            # 教学原则：这类错因该怎么教，不写逐步流程
+  - 先让学生自己把函数由外到内逐层写成 y=f(u)、u=g(v)、v=h(x)，再逐层求导
+  - 每一层的导数都要写出来，最后再相乘
+  constraints:                           # 禁用做法
+  - 不要直接给出完整的求导结果
+  rubric:                                # 解释题的评分要点
+  - 能说出函数有几层复合
+  - 能说明为什么每一层的导数都要乘上
+
+- id: numeric_slope_conflict
+  families: [把求导当作公式代换]           # 按错因族复用
+  principles:
+  - 先让学生用数值方法估算某点的斜率，与自己的答案对比，制造矛盾
+  - 再用变化率解释内层函数为什么影响导数
+  constraints:
+  - 不要一开始就讲公式
+
+items:
+# 判别追问题：持有不同错因的学生会写出不同答案。predictions 列出各错因下的预测答案，
+# 不写“偶发失误”，它的预测就是正确答案。入库检查要求这道题能把候选错因分成至少两组。
+- id: calc.ch2.chain_multi.probe_sin3x
+  knowledge_point: calc.ch2.chain_rule_multi
+  purpose: probe
+  stem: 求 $\sin(3x)$ 的导数
+  spec: {operation: derivative, expr: sin(3*x), variables: [x]}
+  answer: '3\cos(3x)'
+  predictions:
+  - {misconception_id: calc.ch2.chain.formula_sub, answer: '\cos(3x)'}
+  - {misconception_id: calc.ch2.chain.miss_inner, answer: '3\cos(3x)'}
+
+- id: calc.ch2.chain_multi.probe_cos2_5x
+  knowledge_point: calc.ch2.chain_rule_multi
+  purpose: probe
+  stem: 求 $\cos^2(5x)$ 的导数
+  spec: {operation: derivative, expr: cos(5*x)**2, variables: [x]}
+  answer: '-10\cos(5x)\sin(5x)'
+  predictions:
+  - {misconception_id: calc.ch2.chain.miss_inner, answer: '-2\cos(5x)\sin(5x)'}
+  - {misconception_id: calc.ch2.chain.formula_sub, answer: '-2\cos(5x)\sin(5x)'}
+
+# 种子题：每个知识点 1 到 2 道，只在模型生成的题连续 3 次未通过质量门槛时使用。
+# 验证题要写 dimension：correctness、distractor、near_transfer、explanation、retention、cross_chapter。
+- id: calc.ch2.chain_multi.seed1
+  knowledge_point: calc.ch2.chain_rule_multi
+  purpose: verification
+  dimension: correctness
+  stem: 求 $\sin^3(2x)$ 的导数
+  spec: {operation: derivative, expr: sin(2*x)**3, variables: [x]}
+  answer: '6\sin^2(2x)\cos(2x)'

@@ -9,6 +9,7 @@ from sqlalchemy import Engine
 from app.api import decision, health, stream, student, teacher
 from app.config import get_settings
 from app.db import get_engine, init_db
+from app.knowledge.graph import NxKnowledgeGraph
 from app.orchestration.bus import EventBus
 from app.orchestration.runtime import OrchestrationError, Orchestrator
 
@@ -23,13 +24,16 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         business_engine = engine if engine is not None else get_engine()
         init_db(business_engine)
+        knowledge = NxKnowledgeGraph.from_engine(business_engine)
+        app.state.knowledge = knowledge
+        dependencies = {"knowledge": knowledge, **(orchestration_dependencies or {})}
         bus = EventBus()
         try:
             async with Orchestrator.open(
                 business_engine,
                 checkpoint_path or get_settings().checkpoint_db_path,
                 bus,
-                **(orchestration_dependencies or {}),
+                **dependencies,
             ) as runtime:
                 app.state.orchestrator = runtime
                 app.state.event_bus = bus

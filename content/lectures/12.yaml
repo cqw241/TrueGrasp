@@ -1,0 +1,40 @@
+lecture: 12
+title: 无穷级数
+sections:
+- section: 1
+  title: 常数项级数的概念和性质
+  exam_tags: [math1, math3]
+- section: 2
+  title: 常数项级数审敛法
+  exam_tags: [math1, math3]
+- section: 3
+  title: 幂级数
+  exam_tags: [math1, math3]
+- section: 4
+  title: 函数展开为幂级数
+  exam_tags: [math1, math3]
+- section: 5
+  title: 傅里叶级数
+  exam_tags: [math1]
+- section: 6
+  title: 一般周期的傅里叶级数
+  exam_tags: [math1]
+points:
+- id: calc.ch12.s1
+  section: 1
+  name: 常数项级数的概念和性质
+- id: calc.ch12.s2
+  section: 2
+  name: 常数项级数审敛法
+- id: calc.ch12.s3
+  section: 3
+  name: 幂级数
+- id: calc.ch12.s4
+  section: 4
+  name: 函数展开为幂级数
+- id: calc.ch12.s5
+  section: 5
+  name: 傅里叶级数
+- id: calc.ch12.s6
+  section: 6
+  name: 一般周期的傅里叶级数

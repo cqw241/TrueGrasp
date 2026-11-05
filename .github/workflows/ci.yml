@@ -21,6 +21,7 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pytest
       - run: uv run python -m app.openapi --check
+      - run: uv run python -m app.knowledge check
 
   frontend:
     runs-on: ubuntu-latest
