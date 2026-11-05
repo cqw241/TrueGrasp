@@ -1,0 +1,44 @@
+lecture: 2
+title: 导数与微分
+sections:
+- section: 1
+  title: 导数概念
+  exam_tags: [math1, math2, math3]
+- section: 2
+  title: 函数的求导法则
+  exam_tags: [math1, math2, math3]
+- section: 3
+  title: 高阶导数
+  exam_tags: [math1, math2, math3]
+- section: 4
+  title: 隐函数及由参数方程确定的函数的导数
+  exam_tags: [math1, math2, math3]
+- section: 5
+  title: 函数的微分
+  exam_tags: [math1, math2, math3]
+points:
+- id: calc.ch2.s1
+  section: 1
+  name: 导数概念
+- id: calc.ch2.derivative_rules
+  section: 2
+  name: 四则运算与基本初等函数的求导
+  prerequisites: [calc.ch2.s1]
+- id: calc.ch2.chain_rule
+  section: 2
+  name: 复合函数求导：链式法则
+  prerequisites: [calc.ch1.composition, calc.ch2.derivative_rules]
+- id: calc.ch2.chain_rule_multi
+  section: 2
+  name: 多层复合函数求导
+  prerequisites: [calc.ch2.chain_rule]
+- id: calc.ch2.s3
+  section: 3
+  name: 高阶导数
+- id: calc.ch2.implicit_diff
+  section: 4
+  name: 隐函数及由参数方程确定的函数的导数
+  prerequisites: [calc.ch2.chain_rule]
+- id: calc.ch2.s5
+  section: 5
+  name: 函数的微分

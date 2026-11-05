@@ -1,0 +1,60 @@
+lecture: 9
+title: 多元函数微分学及其应用
+sections:
+- section: 1
+  title: 多元函数的基本概念
+  exam_tags: [math1, math2, math3]
+- section: 2
+  title: 偏导数
+  exam_tags: [math1, math2, math3]
+- section: 3
+  title: 全微分
+  exam_tags: [math1, math2, math3]
+- section: 4
+  title: 多元复合函数的求导法则
+  exam_tags: [math1, math2, math3]
+- section: 5
+  title: 隐函数的求导公式
+  exam_tags: [math1, math2, math3]
+- section: 6
+  title: 多元微分在几何上的应用
+  exam_tags: [math1]
+- section: 7
+  title: 方向导数与梯度
+  exam_tags: [math1]
+- section: 8
+  title: 多元函数的极值及其求法
+  exam_tags: [math1, math2, math3]
+- section: 9
+  title: 二元函数的泰勒公式
+  exam_tags: [math1]
+points:
+- id: calc.ch9.s1
+  section: 1
+  name: 多元函数的基本概念
+- id: calc.ch9.partial_derivative
+  section: 2
+  name: 偏导数
+  prerequisites: [calc.ch9.s1, calc.ch2.derivative_rules]
+- id: calc.ch9.s3
+  section: 3
+  name: 全微分
+- id: calc.ch9.multivar_chain
+  section: 4
+  name: 多元复合函数的求导法则
+  prerequisites: [calc.ch2.chain_rule, calc.ch9.partial_derivative]
+- id: calc.ch9.s5
+  section: 5
+  name: 隐函数的求导公式
+- id: calc.ch9.s6
+  section: 6
+  name: 多元微分在几何上的应用
+- id: calc.ch9.s7
+  section: 7
+  name: 方向导数与梯度
+- id: calc.ch9.s8
+  section: 8
+  name: 多元函数的极值及其求法
+- id: calc.ch9.s9
+  section: 9
+  name: 二元函数的泰勒公式

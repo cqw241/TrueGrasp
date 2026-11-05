@@ -1,0 +1,40 @@
+lecture: 8
+title: 向量代数与空间解析几何
+sections:
+- section: 1
+  title: 向量及其线性运算
+  exam_tags: [math1]
+- section: 2
+  title: 数量积、向量积、混合积
+  exam_tags: [math1]
+- section: 3
+  title: 平面及其方程
+  exam_tags: [math1]
+- section: 4
+  title: 直线及其方程
+  exam_tags: [math1]
+- section: 5
+  title: 曲面及其方程
+  exam_tags: [math1]
+- section: 6
+  title: 空间曲线及其方程
+  exam_tags: [math1]
+points:
+- id: calc.ch8.s1
+  section: 1
+  name: 向量及其线性运算
+- id: calc.ch8.s2
+  section: 2
+  name: 数量积、向量积、混合积
+- id: calc.ch8.s3
+  section: 3
+  name: 平面及其方程
+- id: calc.ch8.s4
+  section: 4
+  name: 直线及其方程
+- id: calc.ch8.s5
+  section: 5
+  name: 曲面及其方程
+- id: calc.ch8.s6
+  section: 6
+  name: 空间曲线及其方程

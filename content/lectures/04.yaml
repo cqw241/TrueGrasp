@@ -1,0 +1,29 @@
+lecture: 4
+title: 不定积分
+sections:
+- section: 1
+  title: 不定积分的概念与性质
+  exam_tags: [math1, math2, math3]
+- section: 2
+  title: 换元积分法
+  exam_tags: [math1, math2, math3]
+- section: 3
+  title: 分部积分法
+  exam_tags: [math1, math2, math3]
+- section: 4
+  title: 有理函数的积分
+  exam_tags: [math1, math2]
+points:
+- id: calc.ch4.s1
+  section: 1
+  name: 不定积分的概念与性质
+- id: calc.ch4.substitution
+  section: 2
+  name: 不定积分的换元法
+  prerequisites: [calc.ch4.s1, calc.ch2.chain_rule]
+- id: calc.ch4.s3
+  section: 3
+  name: 分部积分法
+- id: calc.ch4.s4
+  section: 4
+  name: 有理函数的积分

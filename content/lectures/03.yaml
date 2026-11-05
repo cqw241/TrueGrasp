@@ -1,0 +1,46 @@
+lecture: 3
+title: 微分中值定理与导数应用
+sections:
+- section: 1
+  title: 微分中值定理
+  exam_tags: [math1, math2, math3]
+- section: 2
+  title: 洛必达法则
+  exam_tags: [math1, math2, math3]
+- section: 3
+  title: 泰勒公式
+  exam_tags: [math1, math2, math3]
+- section: 4
+  title: 函数的单调性与曲线的凹凸性
+  exam_tags: [math1, math2, math3]
+- section: 5
+  title: 函数的极值与最值
+  exam_tags: [math1, math2, math3]
+- section: 6
+  title: 函数图形的描绘
+  exam_tags: [math1, math2, math3]
+- section: 7
+  title: 曲率
+  exam_tags: [math1, math2]
+points:
+- id: calc.ch3.s1
+  section: 1
+  name: 微分中值定理
+- id: calc.ch3.s2
+  section: 2
+  name: 洛必达法则
+- id: calc.ch3.s3
+  section: 3
+  name: 泰勒公式
+- id: calc.ch3.s4
+  section: 4
+  name: 函数的单调性与曲线的凹凸性
+- id: calc.ch3.s5
+  section: 5
+  name: 函数的极值与最值
+- id: calc.ch3.s6
+  section: 6
+  name: 函数图形的描绘
+- id: calc.ch3.s7
+  section: 7
+  name: 曲率

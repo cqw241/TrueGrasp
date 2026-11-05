@@ -972,7 +972,7 @@
           "decision"
         ],
         "summary": "Get Path",
-        "description": "跨章节知识路径，如第 1→2→9 讲。",
+        "description": "跨章节知识路径，如第 1→2→9 讲；不连通时为空列表。",
         "operationId": "get_path_api_knowledge_path_get",
         "parameters": [
           {

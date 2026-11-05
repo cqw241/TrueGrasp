@@ -1,0 +1,39 @@
+lecture: 5
+title: 定积分
+sections:
+- section: 1
+  title: 定积分的概念与性质
+  exam_tags: [math1, math2, math3]
+- section: 2
+  title: 微积分基本公式
+  exam_tags: [math1, math2, math3]
+- section: 3
+  title: 定积分的换元法和分部积分法
+  exam_tags: [math1, math2, math3]
+- section: 4
+  title: 反常积分
+  exam_tags: [math1, math2, math3]
+- section: 5
+  title: 反常积分的审敛法
+  exam_tags: [math1, math2, math3]
+points:
+- id: calc.ch5.s1
+  section: 1
+  name: 定积分的概念与性质
+- id: calc.ch5.s2
+  section: 2
+  name: 微积分基本公式
+- id: calc.ch5.substitution
+  section: 3
+  name: 定积分的换元法
+  prerequisites: [calc.ch4.substitution, calc.ch5.s2]
+- id: calc.ch5.integration_by_parts
+  section: 3
+  name: 定积分的分部积分法
+  prerequisites: [calc.ch4.s3, calc.ch5.s2]
+- id: calc.ch5.s4
+  section: 4
+  name: 反常积分
+- id: calc.ch5.s5
+  section: 5
+  name: 反常积分的审敛法

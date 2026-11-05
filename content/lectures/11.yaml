@@ -1,0 +1,46 @@
+lecture: 11
+title: 曲线积分与曲面积分
+sections:
+- section: 1
+  title: 对弧长的曲线积分
+  exam_tags: [math1]
+- section: 2
+  title: 对坐标的曲线积分
+  exam_tags: [math1]
+- section: 3
+  title: 格林公式及其应用
+  exam_tags: [math1]
+- section: 4
+  title: 对面积的曲面积分
+  exam_tags: [math1]
+- section: 5
+  title: 对坐标的曲面积分
+  exam_tags: [math1]
+- section: 6
+  title: 高斯公式
+  exam_tags: [math1]
+- section: 7
+  title: 斯托克斯公式
+  exam_tags: [math1]
+points:
+- id: calc.ch11.s1
+  section: 1
+  name: 对弧长的曲线积分
+- id: calc.ch11.s2
+  section: 2
+  name: 对坐标的曲线积分
+- id: calc.ch11.s3
+  section: 3
+  name: 格林公式及其应用
+- id: calc.ch11.s4
+  section: 4
+  name: 对面积的曲面积分
+- id: calc.ch11.s5
+  section: 5
+  name: 对坐标的曲面积分
+- id: calc.ch11.s6
+  section: 6
+  name: 高斯公式
+- id: calc.ch11.s7
+  section: 7
+  name: 斯托克斯公式

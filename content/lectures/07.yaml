@@ -1,0 +1,58 @@
+lecture: 7
+title: 微分方程
+sections:
+- section: 1
+  title: 微分方程的基本概念
+  exam_tags: [math1, math2, math3]
+- section: 2
+  title: 可分离变量的微分方程
+  exam_tags: [math1, math2, math3]
+- section: 3
+  title: 齐次方程
+  exam_tags: [math1, math2, math3]
+- section: 4
+  title: 一阶线性微分方程
+  exam_tags: [math1, math2, math3]
+- section: 5
+  title: 可降阶的高阶微分方程
+  exam_tags: [math1, math2]
+- section: 6
+  title: 高阶线性微分方程
+  exam_tags: [math1, math2, math3]
+- section: 7
+  title: 常系数齐次线性微分方程
+  exam_tags: [math1, math2, math3]
+- section: 8
+  title: 常系数非齐次线性微分方程
+  exam_tags: [math1, math2, math3]
+- section: 9
+  title: 欧拉方程
+  exam_tags: [math1]
+points:
+- id: calc.ch7.s1
+  section: 1
+  name: 微分方程的基本概念
+- id: calc.ch7.s2
+  section: 2
+  name: 可分离变量的微分方程
+- id: calc.ch7.s3
+  section: 3
+  name: 齐次方程
+- id: calc.ch7.s4
+  section: 4
+  name: 一阶线性微分方程
+- id: calc.ch7.s5
+  section: 5
+  name: 可降阶的高阶微分方程
+- id: calc.ch7.s6
+  section: 6
+  name: 高阶线性微分方程
+- id: calc.ch7.s7
+  section: 7
+  name: 常系数齐次线性微分方程
+- id: calc.ch7.s8
+  section: 8
+  name: 常系数非齐次线性微分方程
+- id: calc.ch7.s9
+  section: 9
+  name: 欧拉方程
