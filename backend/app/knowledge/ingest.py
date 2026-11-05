@@ -7,16 +7,9 @@ from app.contracts.enums import ContentSource, ItemSource
 from app.knowledge.content import Content, Issue
 from app.orchestration.storage import ItemExposure, init_storage
 
-# 改动这些字段会改变题目本身；证据只记题目 ID，已被引用的题目不能改
-_ITEM_FIELDS = {
-    "knowledge_point_id",
-    "purpose",
-    "dimension",
-    "stem",
-    "spec",
-    "answer",
-    "predictions",
-}
+# 除这些字段外，改动任何字段都会改变题目或它的评判方式；证据只记题目 ID，已被引用的题目不能改。
+# fingerprint 由 spec 算出，是否运行过核验工具会让它不同，不参与比较。
+_UNPROTECTED_ITEM_FIELDS = {"id", "fingerprint", "source"}
 
 
 class IngestError(ValueError):
@@ -32,7 +25,9 @@ def _changed_referenced_items(session: Session, content: Content) -> list[Issue]
     for item_id in sorted(referenced & set(content.items)):
         stored = session.get(Item, item_id)
         new = content.items[item_id]
-        if stored.model_dump(include=_ITEM_FIELDS) != new.model_dump(include=_ITEM_FIELDS):
+        if stored.model_dump(exclude=_UNPROTECTED_ITEM_FIELDS) != new.model_dump(
+            exclude=_UNPROTECTED_ITEM_FIELDS
+        ):
             issues.append(
                 Issue(
                     content.origin.get(item_id, ""),

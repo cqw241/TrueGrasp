@@ -212,7 +212,11 @@ async def test_draft_probe_retries_until_distinct():
     assert result.failures[0] in llm.prompts[1]
 
 
-def test_ingest_rejects_changing_answered_item(tmp_path):
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("stem", "求 $\\sin^3(4x)$ 的导数"), ("rubric", ["写出外层导数即可得分"])],
+)
+def test_ingest_rejects_changing_answered_item(tmp_path, field, value):
     from datetime import date
 
     from app.contracts.entities import Evidence, Student
@@ -242,7 +246,7 @@ def test_ingest_rejects_changing_answered_item(tmp_path):
 
     ingest(Session(engine), content)  # 内容不变时可以重复入库
     changed = load([*LECTURES, CONTENT / "template.yaml"])
-    changed.items["calc.ch2.chain_multi.seed1"].stem = "求 $\\sin^3(4x)$ 的导数"
+    setattr(changed.items["calc.ch2.chain_multi.seed1"], field, value)
     with Session(engine) as session, pytest.raises(IngestError) as exc:
         ingest(session, changed)
     assert [i.ref for i in exc.value.issues] == ["calc.ch2.chain_multi.seed1"]
