@@ -5,7 +5,7 @@
 - 给程序重算用的 ItemSpec 用 SymPy 语法字符串（如 ``sin(3*x)**2``），避免 LaTeX 解析的歧义。
 """
 
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -40,9 +40,15 @@ class ItemSpec(BaseModel):
     expr: SymPyExpr
     variables: list[str] = Field(default_factory=list)
     bounds: list[Bound] = Field(default_factory=list)
+    limit_point: SymPyExpr | None = None
+    limit_direction: Literal["+", "-", "+-"] = "+-"
 
     @model_validator(mode="after")
     def _check_shape(self) -> Self:
+        if self.operation == Operation.LIMIT and (
+            len(self.variables) != 1 or self.limit_point is None
+        ):
+            raise ValueError("limit requires one variable and limit_point")
         need_bounds = {Operation.DEFINITE_INTEGRAL: 1, Operation.DOUBLE_INTEGRAL: 2}
         expected = need_bounds.get(self.operation, 0)
         if len(self.bounds) != expected:

@@ -1971,6 +1971,28 @@
             },
             "type": "array",
             "title": "Bounds"
+          },
+          "limit_point": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "SymPy 语法表达式，如 sin(3*x)**2"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Point"
+          },
+          "limit_direction": {
+            "type": "string",
+            "enum": [
+              "+",
+              "-",
+              "+-"
+            ],
+            "title": "Limit Direction",
+            "default": "+-"
           }
         },
         "type": "object",
@@ -2160,7 +2182,8 @@
           "derivative",
           "indefinite_integral",
           "definite_integral",
-          "double_integral"
+          "double_integral",
+          "limit"
         ],
         "title": "Operation",
         "description": "题目结构化描述 ItemSpec 的运算类型，决定 verify_item 如何重算。"

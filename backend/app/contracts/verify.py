@@ -72,3 +72,7 @@ class MathTools(Protocol):
     def fingerprint(self, spec: ItemSpec) -> str:
         """题目指纹：spec 规范化后的哈希，用于题目去重。"""
         ...
+
+    def partial_sum(self, expr: str, variable: str, terms: int, start: int = 1) -> float:
+        """有限项数值和，仅供模型评阅参考，不判定级数收敛性。"""
+        ...

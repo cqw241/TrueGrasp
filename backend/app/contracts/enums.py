@@ -127,6 +127,7 @@ class Operation(StrEnum):
     INDEFINITE_INTEGRAL = "indefinite_integral"
     DEFINITE_INTEGRAL = "definite_integral"
     DOUBLE_INTEGRAL = "double_integral"
+    LIMIT = "limit"
 
 
 class EquivalenceMode(StrEnum):
