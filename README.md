@@ -1,6 +1,13 @@
 # 真懂 AI（TrueGrasp）
 
-面向高校高等数学的自主教学 Agent。设计见《作品简介》《技术文档》，任务与分工见《开发计划》。
+面向高校高等数学的自主教学 Agent：主动发现学习问题、开展针对性辅导，通过独立验证和证据持续跟进学生的掌握情况。
+
+## 文档
+
+- [作品简介](作品简介.md)：项目背景、核心功能与应用场景。
+- [技术文档](技术文档.md)：整体架构、技术选型与教学机制。
+- [开发计划](开发计划.md)：任务安排、分工与完成标准。
+- [开发指南](docs/development.md)：模块接入、接口约定与开发检查。
 
 ## 目录
 
@@ -8,8 +15,6 @@
 |---|---|
 | `backend/` | FastAPI 后端，uv 管理依赖，Python 3.13 |
 | `frontend/` | Vite + React + TypeScript 前端，npm 管理依赖，Node 24 |
-
-后端模块的划分与负责人见《开发计划》第 1 节。模块之间的契约（实体、Agent 输入输出、接口桩、事件类型）都在 `backend/app/contracts/`，改动前先和柴确认。HTTP 接口定义导出在 `backend/openapi.json`，启动后端后也可以在 `/docs` 查看。
 
 ## 本地启动
 
@@ -31,22 +36,3 @@ npm run dev
 ```
 
 页面显示“后端状态：ok”即前后端已连通。
-
-## 提交前检查
-
-CI 在每个 PR 和 `main` 的推送上运行下列检查，提交前先在本地跑一遍。
-
-```bash
-# 后端
-cd backend
-uv run ruff check .
-uv run ruff format --check .   # 自动修复：uv run ruff format .
-uv run pytest
-uv run python -m app.openapi --check   # 改了接口后先运行 uv run python -m app.openapi
-
-# 前端
-cd frontend
-npm run lint
-npm run format:check           # 自动修复：npm run format
-npm run build
-```

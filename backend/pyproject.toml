@@ -5,6 +5,8 @@ description = "真懂 AI 后端：高校高等数学自主教学 Agent"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",
+    "langgraph>=1.2.20",
+    "langgraph-checkpoint-sqlite>=3.1.3",
     "pydantic-settings>=2.6",
     "python-multipart>=0.0.33",
     "sqlmodel>=0.0.48",
