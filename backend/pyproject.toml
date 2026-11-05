@@ -1,0 +1,31 @@
+[project]
+name = "truegrasp-backend"
+version = "0.1.0"
+description = "真懂 AI 后端：高校高等数学自主教学 Agent"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "pydantic-settings>=2.6",
+    "uvicorn[standard]>=0.32",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
