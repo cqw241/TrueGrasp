@@ -112,13 +112,13 @@ items:
     assert ("p1", "追问题没有区分度") in messages
 
 
-def test_math_checks_are_skipped_until_t05():
+def test_real_math_checks_validate_teacher_template():
     from app.verify.tools import SympyMathTools
 
     content = load([*LECTURES, CONTENT / "template.yaml"])
     check_math(content, SympyMathTools())
     assert content.errors == []
-    assert [i.level for i in content.issues] == ["notice"]
+    assert content.issues == []
 
 
 def test_graph_paths_and_lookups(tmp_path):
