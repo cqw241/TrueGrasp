@@ -6,7 +6,7 @@
 
 ## T03 编排内核
 
-`backend/app/orchestration/` 实现 LangGraph 主图、辅导与验证子图、SQLite checkpoint、验证输入白名单和 SSE 广播总线。业务实体仍存入 `DATABASE_URL`，任务对话与等待点存入 `CHECKPOINT_DB_PATH`。部署按单进程运行，SSE 不跨进程广播、不回放历史；重新连接后通过 REST 读取当前状态。
+`backend/app/orchestration/` 实现 LangGraph 主图、辅导与验证子图、SQLite checkpoint、验证输入白名单和 SSE 广播总线。业务实体仍存入 `DATABASE_URL`，任务对话与等待点存入 `CHECKPOINT_DB_PATH`。部署按单进程运行，SSE 不跨进程广播、不回放历史；重新连接后通过 REST 读取当前状态。收到 Ctrl+C 或 SIGTERM 时立即结束 SSE 流，否则 uvicorn 会一直等连接关闭，旧进程不退出，`--reload` 也会卡住。
 
 编排私有的节点执行结果、待调度工作和题目展示记录存入业务库，在启动时自动创建对应表，T02 实体及 OpenAPI 不变。节点结果和调度工作与业务变更在同一事务中提交；启动后自动恢复尚未确认的工作。因此，无论中断发生在业务提交后、checkpoint 保存前，还是 checkpoint 保存后、后台调度前，都可继续执行。`finish/replan` 的业务终态已经提交时，只恢复有执行记录的未完成收尾；已结束任务仍不接受学生回复。
 
@@ -78,14 +78,14 @@ T05 合并前，入库检查跳过 `verify_item` 和 `check_distinct`，并给�
 | `api/schema.d.ts` | 由 `backend/openapi.json` 生成，不要手改。后端接口变化后在 `frontend` 目录运行 `npm run gen:api`，CI 会检查两者一致 |
 | `api/client.ts` | `api.useQuery('get', '/api/clock')`、`api.useMutation(...)`：路径、参数和返回值都有类型。非 2xx 响应统一抛出 `ApiError`（`status`、`message` 取自后端的 `detail`），网络错误的 `status` 为 0 |
 | `api/stream.ts`、`hooks/use-event-stream.ts` | `useStreamEvent('task_changed', handler)` 订阅一种 SSE 事件；`useStreamStatus()` 读取连接状态。全站共用一条连接，出错后重新连上时自动让所有查询重新拉取 |
-| `components/math/` | `<Tex latex display?>` 渲染一段 LaTeX；`<MathText text>` 渲染夹杂 `$…$`、`$$…$$`、`\(…\)`、`\[…\]` 的文字（题干、辅导消息）；`<MathInput value onChange onSubmit?>` 是 MathLive 输入框，回车触发 `onSubmit` |
+| `components/math/` | `<Tex latex display?>` 渲染一段 LaTeX；`<MathText text>` 渲染夹杂 `$…$`、`$$…$$`、`\(…\)`、`\[…\]` 的文字（题干、辅导消息）；`<MathInput value onChange onSubmit?>` 是受控的 MathLive 输入框，始终显示 `value`，父组件不接受或改写输入时随之还原；回车触发 `onSubmit` |
 | `components/states.tsx` | `EmptyState`、`ErrorState`、`LoadingState`；`<QueryView query>` 统一处理一个查询的加载、出错和无数据。后端返回 501 时显示“功能开发中” |
 | `components/layout/app-layout.tsx` | 布局与 `PageHeader`。桌面（≥1024px）固定侧边栏，平板和手机用顶部栏加抽屉导航 |
 | `lib/labels.ts` | 后端枚举值到中文名称的映射，以及 `lectureLabel(9)` → “第九讲” |
 
 shadcn/ui 组件用 `npx shadcn@latest add <组件>` 添加到 `components/ui/`。项目使用 TypeScript 7，它不提供旧版编译器 API，所以 `gen:api` 通过 `npx` 在独立环境中运行 openapi-typescript 和 TypeScript 5。
 
-开发服务器的 `/api` 代理会立即转发 SSE 的响应头（见 `vite.config.ts`），否则在第一条事件到达之前，`EventSource` 一直处于连接中。生产环境的反向代理（T27）要关闭对 `/api/events` 的缓冲；后端已经发送了 `X-Accel-Buffering: no`。
+开发服务器的 `/api` 代理会立即转发 SSE 的响应头，否则在第一条事件到达之前，`EventSource` 一直处于连接中；后端异常断开时，代理也会断开浏览器一侧的连接，让 `EventSource` 重连（见 `vite.config.ts`）。生产环境的反向代理（T27）要关闭对 `/api/events` 的缓冲；后端已经发送了 `X-Accel-Buffering: no`。
 
 ## 提交前检查
 

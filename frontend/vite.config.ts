@@ -19,15 +19,20 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',
-        // 代理默认等第一段响应体才发出响应头，SSE 在第一条事件之前 EventSource 一直连不上。
-        // 响应头在 proxyRes 之后同步复制，下一个 tick 立即发出。
         configure: (proxy) => {
           proxy.on('proxyRes', (proxyRes, _req, res) => {
+            // 代理默认等第一段响应体才发出响应头，SSE 在第一条事件之前 EventSource 一直连不上。
+            // 响应头在 proxyRes 之后同步复制，下一个 tick 立即发出。
             if (
               proxyRes.headers['content-type']?.startsWith('text/event-stream')
             ) {
               process.nextTick(() => res.flushHeaders())
             }
+            // 后端异常断开（进程退出、连接重置）时，pipe 不会结束下游响应，Vite 的错误处理
+            // 也因响应头已发出而跳过，浏览器会一直挂在假连接上。正常结束时 end 先于 close。
+            proxyRes.on('close', () => {
+              if (!proxyRes.complete && !res.writableEnded) res.destroy()
+            })
           })
         },
       },
