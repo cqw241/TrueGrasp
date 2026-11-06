@@ -29,7 +29,11 @@ def get_engine() -> Engine:
 
 
 def init_db(engine: Engine | None = None) -> None:
-    SQLModel.metadata.create_all(engine or get_engine())
+    from app.ledger.service import protect_evidence
+
+    business_engine = engine or get_engine()
+    SQLModel.metadata.create_all(business_engine)
+    protect_evidence(business_engine)
 
 
 def get_session() -> Iterator[Session]:

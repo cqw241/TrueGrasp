@@ -27,7 +27,7 @@ from app.contracts.agents import (
     Verifier,
 )
 from app.contracts.api import ChatTurn, MessageCreate
-from app.contracts.entities import Event, Evidence, Item, Task
+from app.contracts.entities import Event, Evidence, Item, Mastery, Task
 from app.contracts.enums import (
     Dimension,
     EventType,
@@ -40,6 +40,7 @@ from app.contracts.enums import (
 from app.contracts.events import (
     AnswerSubmitted,
     EvidenceAdded,
+    MasteryChanged,
     MessageDone,
     TaskChanged,
     TaskDue,
@@ -49,6 +50,7 @@ from app.contracts.events import (
 from app.contracts.knowledge import KnowledgeGraph
 from app.contracts.llm import ChatMessage
 from app.contracts.values import SLIP
+from app.ledger.service import append_evidence, escalate, start_tutoring
 from app.orchestration.bus import EventBus
 from app.orchestration.graphs import RunState, build_graph
 from app.orchestration.inputs import build_verifier_input
@@ -68,13 +70,6 @@ class OrchestrationError(Exception):
     def __init__(self, status_code: int, detail: str) -> None:
         super().__init__(detail)
         self.status_code = status_code
-
-
-def append_evidence(session: Session, evidence: Evidence) -> Evidence:
-    """T19 的替换点：使用调用方事务追加证据，不能自行 commit。"""
-    session.add(evidence)
-    session.flush()
-    return evidence
 
 
 class Orchestrator:
@@ -454,6 +449,9 @@ class Orchestrator:
                 created.append(task)
             event.processed = True
             session.flush()
+            for task in created:
+                if task.type == TaskType.ESCALATION:
+                    escalate(session, task, event.teaching_date)
             task_ids = [task.id for task in created]
             payload = read_payload(event)
             if isinstance(payload, TaskDue) and payload.task_id not in task_ids:
@@ -481,7 +479,21 @@ class Orchestrator:
             session.commit()
             for task in changed:
                 await self._publish_task(task)
+                if task.type == TaskType.ESCALATION:
+                    await self._publish_mastery(task)
         return result
+
+    async def _publish_mastery(self, task: Task) -> None:
+        with Session(self.engine) as session:
+            mastery = session.get(Mastery, (task.student_id, task.knowledge_point_id))
+            if mastery is not None:
+                await self.bus.publish(
+                    MasteryChanged(
+                        student_id=mastery.student_id,
+                        knowledge_point_id=mastery.knowledge_point_id,
+                        state=mastery.state,
+                    )
+                )
 
     async def _publish_task(self, task: Task) -> None:
         await self.bus.publish(
@@ -497,9 +509,12 @@ class Orchestrator:
         with Session(self.engine) as session:
             task = self._task(session, state["task_id"])
             task.status = TaskStatus.ACTIVE
+            start_tutoring(session, task, date.fromisoformat(state["teaching_date"]))
             self._queue_task(session, state)
             session.commit()
             await self._publish_task(task)
+            if task.type == TaskType.TUTORING:
+                await self._publish_mastery(task)
             return {"phase": "tutoring" if task.type == TaskType.TUTORING else "verifying"}
 
     def tutor_input(self, state: RunState) -> dict:
@@ -688,6 +703,7 @@ class Orchestrator:
                 )
             )
             event_id = event.id
+            await self._publish_mastery(task)
         return {
             "item_index": state["item_index"] + 1,
             "followup_event_ids": list(dict.fromkeys([*state["followup_event_ids"], event_id])),

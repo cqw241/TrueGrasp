@@ -1,10 +1,12 @@
 """Agent 决策证据视图与知识路径。"""
 
 from fastapi import APIRouter, HTTPException, Request
+from sqlmodel import Session, select
 
 from app.api.stub import not_implemented
 from app.contracts.api import DiagnosisView, DimensionResult, TimelineEntry
 from app.contracts.entities import Evidence, KnowledgePoint, Mastery
+from app.ledger import queries
 
 router = APIRouter(tags=["decision"])
 
@@ -16,24 +18,33 @@ def get_diagnosis(task_id: int) -> DiagnosisView:
 
 
 @router.get("/students/{student_id}/timeline")
-def get_timeline(student_id: str) -> list[TimelineEntry]:
-    not_implemented("T19")
+def get_timeline(student_id: str, request: Request) -> list[TimelineEntry]:
+    with Session(request.app.state.orchestrator.engine) as session:
+        return queries.timeline(session, student_id)
 
 
 @router.get("/students/{student_id}/mastery")
-def get_mastery(student_id: str) -> list[Mastery]:
-    not_implemented("T19")
+def get_mastery(student_id: str, request: Request) -> list[Mastery]:
+    with Session(request.app.state.orchestrator.engine) as session:
+        return list(session.exec(select(Mastery).where(Mastery.student_id == student_id)).all())
 
 
 @router.get("/students/{student_id}/verification")
-def get_verification(student_id: str, knowledge_point_id: str) -> list[DimensionResult]:
+def get_verification(
+    student_id: str, knowledge_point_id: str, request: Request
+) -> list[DimensionResult]:
     """六维验证结果及判定方式。"""
-    not_implemented("T19")
+    with Session(request.app.state.orchestrator.engine) as session:
+        return queries.verification(session, student_id, knowledge_point_id)
 
 
 @router.get("/evidence/{evidence_id}")
-def get_evidence(evidence_id: int) -> Evidence:
-    not_implemented("T19")
+def get_evidence(evidence_id: int, request: Request) -> Evidence:
+    with Session(request.app.state.orchestrator.engine) as session:
+        evidence = session.get(Evidence, evidence_id)
+        if evidence is None:
+            raise HTTPException(status_code=404, detail="证据不存在")
+        return evidence
 
 
 @router.get("/knowledge/points")
