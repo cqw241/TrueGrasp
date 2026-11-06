@@ -185,12 +185,14 @@ def test_missing_c2_reference_is_actionable(tmp_path):
         dataset.load_dataset(content_dir=tmp_path)
 
 
-def test_observed_export_consistency_and_forged_verdict_rejection(plan):
+@pytest.fixture
+def actual_run(plan):
     """In-memory unit fixture only, deliberately never exported as a real run."""
     from app.contracts.entities import Evidence, Mastery, Student, Task
     from app.contracts.enums import EvidenceKind, TaskType
 
     evidence, tasks, precheck_ids = [], [], []
+    task_groups = {}
     for a in plan.answers:
         if a.operator == "live":
             continue
@@ -205,20 +207,32 @@ def test_observed_export_consistency_and_forged_verdict_rejection(plan):
             if a.stage in ("diagnosis_ch2", "backtrack_ch1")
             else EvidenceKind.VERIFICATION
         )
-        task_id = len(tasks) + 1
-        task_type = TaskType.PRECHECK if a.stage == "precheck_ch9" else TaskType.VERIFICATION
-        tasks.append(
-            Task(
-                id=task_id,
-                type=task_type,
-                student_id=a.student_id,
-                knowledge_point_id=item.knowledge_point_id,
-                round=a.round,
-                created_on=a.teaching_date,
+        group = (a.stage, a.student_id, a.round)
+        if group not in task_groups:
+            task_id = len(tasks) + 1
+            task_groups[group] = task_id
+            task_type = (
+                TaskType.PRECHECK
+                if a.stage == "precheck_ch9"
+                else TaskType.RETEST
+                if a.stage == "retest_friday"
+                else TaskType.TUTORING
+                if kind == EvidenceKind.DIAGNOSIS
+                else TaskType.VERIFICATION
             )
-        )
-        if task_type == TaskType.PRECHECK:
-            precheck_ids.append(task_id)
+            tasks.append(
+                Task(
+                    id=task_id,
+                    type=task_type,
+                    student_id=a.student_id,
+                    knowledge_point_id=item.knowledge_point_id,
+                    round=a.round,
+                    created_on=a.teaching_date,
+                )
+            )
+            if task_type == TaskType.PRECHECK:
+                precheck_ids.append(task_id)
+        task_id = task_groups[group]
         matched = a.intended_cause if result is False and a.intended_cause != "slip" else None
         evidence.append(
             Evidence(
@@ -261,6 +275,7 @@ def test_observed_export_consistency_and_forged_verdict_rejection(plan):
                     student_id=s.id,
                     knowledge_point_id=dataset.CHAIN,
                     evidence_ids=ids,
+                    round=2,
                     reason="Unit-test fixture: two failed followups",
                     created_on="2026-10-28",
                 )
@@ -275,13 +290,207 @@ def test_observed_export_consistency_and_forged_verdict_rejection(plan):
         items=list(plan.items.values()),
         precheck_task_ids=precheck_ids,
     )
-    assert observed.validate_run(plan, actual) == {
+    return actual
+
+
+def test_observed_export_consistency_and_forged_verdict_rejection(plan, actual_run):
+    assert observed.validate_run(plan, actual_run) == {
         "status": "supplied_run_consistent",
         "run_id": "unit-test-only-not-prerun",
         "goal_met": 37,
         "escalated": 3,
         "ch9_relapses": 2,
     }
-    evidence[0].is_correct = not evidence[0].is_correct
+    actual_run.evidence[0].is_correct = not actual_run.evidence[0].is_correct
     with pytest.raises(ValueError, match="tool verdict differs"):
+        observed.validate_run(plan, actual_run)
+
+
+@pytest.mark.parametrize(
+    "mutation,match",
+    [
+        ("remove_failures", "two-round failures"),
+        ("handoff_old_homework", "two-round failures"),
+        ("handoff_round_one", "two-round failures"),
+        ("failure_same_round", "two-round failures"),
+        ("handoff_before_failure", "two-round failures"),
+        ("failure_before_recurrence", "two-round failures"),
+        ("repeated_correctness", "dimension mismatch"),
+        ("alias_fingerprint", "verification fingerprint"),
+        ("practice_as_verification", "wrong purpose"),
+        ("no_item", "missing item reference"),
+        ("missing_retention", "Friday retention"),
+        ("missing_precheck_answers", "no actual answer"),
+        ("omit_precheck_ids", "task list incomplete"),
+        ("missing_b_diagnosis", "diagnostic evidence"),
+        ("missing_c_diagnosis", "diagnostic evidence"),
+        ("ambiguous_a_diagnosis", "diagnostic evidence"),
+        ("mastery_homework_only", "linked same-task current dimensions"),
+        ("split_assessment_tasks", "linked same-task current dimensions"),
+        ("reuse_after_recurrence", "linked same-task current dimensions"),
+    ],
+)
+def test_observed_rejects_review_regressions(plan, actual_run, mutation, match):
+    from app.contracts.enums import Dimension, EvidenceKind
+
+    actual = actual_run
+    target = next(m for m in actual.mastery if m.student_id == "D")
+    checks = [
+        e
+        for e in actual.evidence
+        if e.student_id == "D"
+        and e.kind == EvidenceKind.VERIFICATION
+        and e.dimension in (Dimension.CORRECTNESS, Dimension.DISTRACTOR, Dimension.NEAR_TRANSFER)
+    ]
+    if mutation == "remove_failures":
+        removed = {
+            e.id
+            for e in actual.evidence
+            if e.is_correct is False and e.dimension == Dimension.DISTRACTOR
+        }
+        actual.evidence = [e for e in actual.evidence if e.id not in removed]
+        # Keep references structurally valid; old homework still cannot support handoff.
+        for t in actual.tasks:
+            t.evidence_ids = [i for i in t.evidence_ids if i not in removed]
+        for m in actual.mastery:
+            m.evidence_ids = [i for i in m.evidence_ids if i not in removed]
+    elif mutation == "handoff_old_homework":
+        for t in actual.tasks:
+            if t.type == "escalation":
+                t.evidence_ids = [
+                    e.id
+                    for e in actual.evidence
+                    if e.student_id == t.student_id and e.kind == EvidenceKind.HOMEWORK
+                ]
+    elif mutation == "handoff_round_one":
+        for t in actual.tasks:
+            if t.type == "escalation":
+                t.round = 1
+    elif mutation == "failure_same_round":
+        for t in actual.tasks:
+            if t.student_id == "B" and t.round == 2 and t.type == "verification":
+                t.round = 1
+    elif mutation == "handoff_before_failure":
+        for t in actual.tasks:
+            if t.type == "escalation":
+                t.created_on = dataset.date(2026, 9, 10)
+    elif mutation == "failure_before_recurrence":
+        for e in actual.evidence:
+            if (
+                e.student_id == "S05"
+                and e.is_correct is False
+                and e.dimension == Dimension.DISTRACTOR
+            ):
+                e.teaching_date = dataset.date(2026, 10, 25)
+                next(t for t in actual.tasks if t.id == e.task_id).created_on = e.teaching_date
+    elif mutation in ("repeated_correctness", "alias_fingerprint"):
+        base = next(e for e in checks if e.dimension == Dimension.CORRECTNESS)
+        for e in checks:
+            if e is base:
+                continue
+            e.student_answer = base.student_answer
+            if mutation == "repeated_correctness":
+                e.item_id = base.item_id
+            else:
+                item = next(i for i in actual.items if i.id == base.item_id).model_copy(deep=True)
+                item.id = f"alias.{e.id}"
+                item.dimension = e.dimension
+                actual.items.append(item)
+                e.item_id = item.id
+    elif mutation == "practice_as_verification":
+        next(i for i in actual.items if i.id == checks[0].item_id).purpose = "practice"
+    elif mutation == "no_item":
+        for e in actual.evidence:
+            if e.kind == EvidenceKind.VERIFICATION:
+                e.item_id, e.student_answer = None, "0"
+    elif mutation == "missing_retention":
+        actual.evidence = [
+            e for e in actual.evidence if e.dimension != Dimension.RETENTION or e.student_id == "B"
+        ]
+        ids = {e.id for e in actual.evidence}
+        for m in actual.mastery:
+            m.evidence_ids = [i for i in m.evidence_ids if i in ids]
+        for t in actual.tasks:
+            t.evidence_ids = [i for i in t.evidence_ids if i in ids]
+    elif mutation == "missing_precheck_answers":
+        actual.evidence = [
+            e
+            for e in actual.evidence
+            if e.dimension != Dimension.CROSS_CHAPTER or e.student_id in ("B", "S05", "S06")
+        ]
+    elif mutation == "omit_precheck_ids":
+        keep = {t.id for t in actual.tasks if t.student_id in ("B", "S05", "S06")}
+        actual.precheck_task_ids = [i for i in actual.precheck_task_ids if i in keep]
+    elif mutation in ("missing_b_diagnosis", "missing_c_diagnosis", "ambiguous_a_diagnosis"):
+        sid = {
+            "missing_b_diagnosis": "B",
+            "missing_c_diagnosis": "C",
+            "ambiguous_a_diagnosis": "A",
+        }[mutation]
+        actual.evidence = [
+            e
+            for e in actual.evidence
+            if not (
+                e.student_id == sid
+                and e.kind == EvidenceKind.DIAGNOSIS
+                and (sid != "A" or e.item_id == dataset.PROBE1)
+            )
+        ]
+    elif mutation == "mastery_homework_only":
+        for m in actual.mastery:
+            m.evidence_ids = [
+                e.id
+                for e in actual.evidence
+                if e.student_id == m.student_id and e.kind == EvidenceKind.HOMEWORK
+            ]
+    elif mutation == "split_assessment_tasks":
+        for e in checks[1:]:
+            task = next(t for t in actual.tasks if t.id == e.task_id).model_copy(deep=True)
+            task.id = max(t.id for t in actual.tasks) + 1
+            actual.tasks.append(task)
+            e.task_id = task.id
+    elif mutation == "reuse_after_recurrence":
+        from app.contracts.entities import Evidence
+
+        original = next(
+            e for e in actual.evidence if e.student_id == "D" and e.kind == EvidenceKind.HOMEWORK
+        )
+        # A later homework failure invalidates old dimensions without reusing a
+        # verification fingerprint or corrupting original homework counts.
+        actual.evidence.append(
+            Evidence(
+                id=max(e.id for e in actual.evidence) + 1,
+                student_id="D",
+                knowledge_point_id=dataset.CHAIN,
+                kind="homework",
+                item_id=dataset.PROBE2,
+                student_answer=dataset._prediction(plan.items[dataset.PROBE2], dataset.MISS),
+                correct_answer=plan.items[dataset.PROBE2].answer,
+                is_correct=False,
+                judged_by="tool",
+                matched_misconception_id=dataset.MISS,
+                predictions=plan.items[dataset.PROBE2].predictions,
+                teaching_date=dataset.date(2026, 10, 28),
+            )
+        )
+        assert original.id in target.evidence_ids
+    with pytest.raises(ValueError, match=match):
         observed.validate_run(plan, actual)
+
+
+def test_actual_json_roundtrip_and_cli_file(plan, actual_run, tmp_path, capsys, monkeypatch):
+    from datetime import date
+
+    cli = importlib.import_module("demo.__main__")
+    path = tmp_path / "unit-test-export-not-prerun.json"
+    path.write_text(actual_run.model_dump_json(warnings=False), encoding="utf-8")
+    loaded = observed.RunExport.model_validate_json(path.read_text(encoding="utf-8"))
+    assert isinstance(loaded.evidence[0].teaching_date, date)
+    assert isinstance(loaded.mastery[0].updated_on, date)
+    assert isinstance(loaded.tasks[0].created_on, date)
+    assert loaded.items[0].spec is None or isinstance(loaded.items[0].spec, dataset.ItemSpec)
+    assert observed.validate_run(plan, loaded)["goal_met"] == 37
+    monkeypatch.setattr(cli, "load_dataset", lambda *args: plan)
+    # Exercise real check-run file parsing and validation, not a mocked verdict.
+    assert cli.main(["check-run", str(path)]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "supplied_run_consistent"
