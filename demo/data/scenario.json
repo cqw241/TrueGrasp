@@ -1,0 +1,255 @@
+{
+  "schema_version": 1,
+  "status": "input_plan_not_prerun",
+  "students": [
+    {
+      "id": "A",
+      "name": "合成学生A",
+      "homework_cause": "calc.ch2.chain.miss_inner",
+      "operator": "human"
+    },
+    {
+      "id": "B",
+      "name": "合成学生B",
+      "homework_cause": "calc.ch2.chain.formula_sub",
+      "operator": "human"
+    },
+    {
+      "id": "C",
+      "name": "合成学生C",
+      "homework_cause": "slip",
+      "operator": "human"
+    },
+    {
+      "id": "D",
+      "name": "合成学生D",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S05",
+      "name": "合成学生S05",
+      "homework_cause": "calc.ch2.chain.miss_inner",
+      "operator": "script"
+    },
+    {
+      "id": "S06",
+      "name": "合成学生S06",
+      "homework_cause": "calc.ch2.chain.miss_inner",
+      "operator": "script"
+    },
+    {
+      "id": "S07",
+      "name": "合成学生S07",
+      "homework_cause": "calc.ch2.chain.miss_inner",
+      "operator": "script"
+    },
+    {
+      "id": "S08",
+      "name": "合成学生S08",
+      "homework_cause": "calc.ch2.chain.miss_inner",
+      "operator": "script"
+    },
+    {
+      "id": "S09",
+      "name": "合成学生S09",
+      "homework_cause": "calc.ch2.chain.miss_inner",
+      "operator": "script"
+    },
+    {
+      "id": "S10",
+      "name": "合成学生S10",
+      "homework_cause": "calc.ch2.chain.miss_inner",
+      "operator": "script"
+    },
+    {
+      "id": "S11",
+      "name": "合成学生S11",
+      "homework_cause": "calc.ch2.chain.miss_inner",
+      "operator": "script"
+    },
+    {
+      "id": "S12",
+      "name": "合成学生S12",
+      "homework_cause": "calc.ch2.chain.formula_sub",
+      "operator": "script"
+    },
+    {
+      "id": "S13",
+      "name": "合成学生S13",
+      "homework_cause": "calc.ch2.chain.formula_sub",
+      "operator": "script"
+    },
+    {
+      "id": "S14",
+      "name": "合成学生S14",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S15",
+      "name": "合成学生S15",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S16",
+      "name": "合成学生S16",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S17",
+      "name": "合成学生S17",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S18",
+      "name": "合成学生S18",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S19",
+      "name": "合成学生S19",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S20",
+      "name": "合成学生S20",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S21",
+      "name": "合成学生S21",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S22",
+      "name": "合成学生S22",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S23",
+      "name": "合成学生S23",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S24",
+      "name": "合成学生S24",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S25",
+      "name": "合成学生S25",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S26",
+      "name": "合成学生S26",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S27",
+      "name": "合成学生S27",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S28",
+      "name": "合成学生S28",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S29",
+      "name": "合成学生S29",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S30",
+      "name": "合成学生S30",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S31",
+      "name": "合成学生S31",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S32",
+      "name": "合成学生S32",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S33",
+      "name": "合成学生S33",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S34",
+      "name": "合成学生S34",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S35",
+      "name": "合成学生S35",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S36",
+      "name": "合成学生S36",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S37",
+      "name": "合成学生S37",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S38",
+      "name": "合成学生S38",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S39",
+      "name": "合成学生S39",
+      "homework_cause": null,
+      "operator": "script"
+    },
+    {
+      "id": "S40",
+      "name": "合成学生S40",
+      "homework_cause": null,
+      "operator": "script"
+    }
+  ],
+  "relapse_students": [
+    "S05",
+    "S06"
+  ],
+  "escalation_students": [
+    "B",
+    "S05",
+    "S06"
+  ]
+}
