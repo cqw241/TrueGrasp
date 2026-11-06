@@ -10,7 +10,7 @@
 
 编排私有的节点执行结果、待调度工作和题目展示记录存入业务库，在启动时自动创建对应表，T02 实体及 OpenAPI 不变。节点结果和调度工作与业务变更在同一事务中提交；启动后自动恢复尚未确认的工作。因此，无论中断发生在业务提交后、checkpoint 保存前，还是 checkpoint 保存后、后台调度前，都可继续执行。`finish/replan` 的业务终态已经提交时，只恢复有执行记录的未完成收尾；已结束任务仍不接受学生回复。
 
-真实 Agent 分别在 T08、T09、T18 接入，T03 的桩 Agent 只在测试中使用。默认启动可访问健康检查和 SSE；未注入 Agent 时，执行任务接口返回 501，不产生模拟教学数据。
+真实 Agent 分别在 T08、T09、T18 接入，T03 的桩 Agent 只在测试中使用。配置模型密钥后，应用自动组装 T18 验证 Agent；显式传入 `verifier`（包括 `None`）可覆盖该行为。默认启动可访问健康检查和 SSE；缺少执行任务所需的 Agent 时返回 501，不产生模拟教学数据。
 
 ### 接入 Agent 与教学时钟
 
@@ -21,7 +21,7 @@
 | `planner`、`tutor`、`verifier` | 实现 `contracts.agents` 中的三个 Protocol |
 | `knowledge` | 实现 `contracts.knowledge.KnowledgeGraph`，辅导输入使用 `ancestors()` 构造允许回溯的知识点 |
 | `teaching_date` | 无参函数，返回 T07 的当前教学日期；未注入时沿用任务 checkpoint 的日期，首次启动默认用任务创建日期 |
-| `evidence_writer` | 同步函数 `(session, evidence) -> Evidence`，默认只追加并 flush；T19 可在同一事务中追加证据并迁移掌握状态，不能自行 commit |
+| `evidence_writer` | 同步函数 `(session, evidence) -> Evidence`，默认使用 T19 账本，在同一事务中追加证据并迁移掌握状态，不能自行 commit；规则见 [账本说明](ledger.md) |
 
 生命周期内通过 `app.state.orchestrator` 获取运行时，`app.state.event_bus` 获取发布端。脚本和集成测试也可通过 `async with Orchestrator.open(engine, checkpoint_path, bus, **dependencies)` 管理运行时。业务库需先初始化，调用方负责释放传入的 engine 和 bus。
 
