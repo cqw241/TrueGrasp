@@ -7,7 +7,6 @@ from pydantic import Field, ValidationInfo, field_validator
 
 from app.contracts.entities import Evidence, Item, Mastery, Student, Task
 from app.contracts.enums import Dimension, EvidenceKind, ItemPurpose, MasteryState, TaskType
-from app.verify.tools import SympyMathTools
 
 from .dataset import (
     CHAIN,
@@ -19,6 +18,7 @@ from .dataset import (
     Dataset,
     Strict,
     _equivalent,
+    _fingerprint,
     _verify_item,
 )
 
@@ -98,7 +98,7 @@ def validate_run(data: Dataset, actual: RunExport) -> dict:
             )
             require(e.dimension == item.dimension, "evidence/item dimension mismatch")
             fingerprint = (
-                SympyMathTools().fingerprint(item.spec)
+                _fingerprint(item.spec.model_dump_json())
                 if item.spec is not None
                 else item.fingerprint
             )
@@ -107,7 +107,7 @@ def validate_run(data: Dataset, actual: RunExport) -> dict:
                 "reused or missing student verification fingerprint",
             )
         if item.spec is not None:
-            seen[e.student_id].add(SympyMathTools().fingerprint(item.spec))
+            seen[e.student_id].add(_fingerprint(item.spec.model_dump_json()))
         elif item.fingerprint:
             seen[e.student_id].add(item.fingerprint)
         if e.judged_by == "tool":

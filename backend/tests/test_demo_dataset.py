@@ -146,16 +146,13 @@ def test_cli_batches_and_csv_raw_inputs(plan, capsys, monkeypatch):
         "correct_answer",
         "knowledge_point_id",
     }
-    try:
-        from app.ingest.service import parse_csv
-    except ImportError:
-        parse_csv = None  # T17 not yet merged into this isolated checkout
-    if parse_csv is not None:
-        encoded = io.StringIO()
-        writer = csv.DictWriter(encoded, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
-        assert len(parse_csv(encoded.getvalue().encode("utf-8"))) == 40
+    from app.ingest.service import parse_csv
+
+    encoded = io.StringIO()
+    writer = csv.DictWriter(encoded, fieldnames=list(rows[0]))
+    writer.writeheader()
+    writer.writerows(rows)
+    assert len(parse_csv(encoded.getvalue().encode("utf-8"))) == 40
     assert not {"is_correct", "matched_misconception_id", "state"} & rows[0].keys()
     assert cli.main(["batch", "typo"]) == 1
     assert "unknown stage" in capsys.readouterr().err

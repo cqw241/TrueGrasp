@@ -41,6 +41,11 @@ def _verify_item(spec_json, answer):
     return SympyMathTools().verify_item(ItemSpec.model_validate_json(spec_json), answer)
 
 
+@lru_cache(maxsize=128)
+def _fingerprint(spec_json):
+    return SympyMathTools().fingerprint(ItemSpec.model_validate_json(spec_json))
+
+
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
