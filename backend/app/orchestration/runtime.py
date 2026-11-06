@@ -85,7 +85,10 @@ class Orchestrator:
         knowledge: KnowledgeGraph | None = None,
         evidence_writer: Callable[[Session, Evidence], Evidence] = append_evidence,
         teaching_date: Callable[[], date] | None = None,
+        pending_poll_interval: float | None = 0.25,
     ) -> None:
+        if pending_poll_interval is not None and pending_poll_interval <= 0:
+            raise ValueError("pending_poll_interval must be positive or None")
         self.engine = engine
         self.bus = bus
         self.planner = planner
@@ -99,6 +102,10 @@ class Orchestrator:
         self._jobs: dict[str, asyncio.Task] = {}
         self._errors: list[Exception] = []
         self._closed = False
+        self._pending_poll_interval = pending_poll_interval
+        self._pending_listener: asyncio.Task | None = None
+        self._seen_work: set[str] = set()
+        self._failed_work: set[str] = set()
 
     @classmethod
     @asynccontextmanager
@@ -113,6 +120,10 @@ class Orchestrator:
             runtime = cls(engine, saver, bus, **dependencies)
             try:
                 runtime.recover_pending()
+                if runtime._pending_poll_interval is not None:
+                    runtime._pending_listener = asyncio.create_task(
+                        runtime._listen_pending(), name="orchestration-pending-listener"
+                    )
                 yield runtime
             finally:
                 await runtime.close()
@@ -184,13 +195,26 @@ class Orchestrator:
                 and (not snapshot.next or snapshot.next == (node,))
             )
 
-    def recover_pending(self) -> None:
+    async def _listen_pending(self) -> None:
+        """单进程中发现 CLI 等其他连接新建的待办；不占用业务 _jobs。"""
+        try:
+            while not self._closed:
+                await asyncio.sleep(self._pending_poll_interval)
+                self.recover_pending(new_only=True)
+        except Exception as exc:
+            # 数据库等监听错误只报告一次，避免错误循环；由 wait_idle 暴露。
+            self._errors.append(exc)
+            logger.exception("持久化待办监听失败")
+
+    def recover_pending(self, *, new_only: bool = False) -> None:
         """只恢复事务中已登记的工作；缺少真实 Agent 时保留待办，不生成模拟结果。"""
-        if self.planner is None:
+        if self._closed or self.planner is None:
             return
         with Session(self.engine) as session:
             work_items = session.exec(select(PendingWork).where(PendingWork.pending)).all()
             for work in work_items:
+                if work.key in self._failed_work or (new_only and work.key in self._seen_work):
+                    continue
                 kind, _, target = work.key.partition(":")
                 if kind == "task":
                     task = self._task(session, int(target))
@@ -224,10 +248,14 @@ class Orchestrator:
         if self._closed or key in self._jobs:
             return
 
+        self._seen_work.add(key)
+        self._failed_work.discard(key)  # 显式 enqueue/start 允许用户重试。
+
         async def run() -> None:
             try:
                 await action()
             except Exception as exc:
+                self._failed_work.add(key)
                 self._errors.append(exc)
                 logger.exception("编排后台执行失败：%s", key)
             finally:
@@ -245,6 +273,9 @@ class Orchestrator:
 
     async def close(self) -> None:
         self._closed = True
+        if self._pending_listener is not None:
+            self._pending_listener.cancel()
+            await asyncio.gather(self._pending_listener, return_exceptions=True)
         jobs = list(self._jobs.values())
         for job in jobs:
             job.cancel()
@@ -253,6 +284,7 @@ class Orchestrator:
     async def handle_event(self, event_id: int, *, dispatch: bool = True) -> None:
         self._require("planner")
         key = f"event:{event_id}"
+        self._seen_work.add(key)
         async with self._lock(key):
             with Session(self.engine) as session:
                 event = session.get(Event, event_id)
@@ -281,6 +313,7 @@ class Orchestrator:
         context_knowledge_point_id: str | None = None,
     ) -> None:
         key = f"task:{task_id}"
+        self._seen_work.add(key)
         async with self._lock(key):
             snapshot = await self.graph.aget_state(self._config(key))
             recovering = self._recovering_terminal(task_id, snapshot)

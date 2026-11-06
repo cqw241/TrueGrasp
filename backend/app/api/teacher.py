@@ -1,9 +1,14 @@
 """教师驾驶舱与教学时钟。"""
 
-from fastapi import APIRouter, Request, UploadFile
+from datetime import date
+
+from fastapi import APIRouter, HTTPException, Request, UploadFile
+from openai import OpenAIError
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from app.api.stub import not_implemented
+from app.config import get_settings
 from app.contracts.api import (
     AdvanceClock,
     ClassOverview,
@@ -18,7 +23,10 @@ from app.contracts.api import (
 )
 from app.contracts.entities import Task, TeachingGoal
 from app.contracts.enums import TaskStatus, TaskType
+from app.ingest import HomeworkImporter, IngestError, parse_csv
+from app.ingest.service import MAX_CSV_BYTES
 from app.ledger import queries
+from app.llm.client import LLMOutputError, OpenAICompatClient
 
 router = APIRouter(tags=["teacher"])
 
@@ -51,9 +59,32 @@ def create_goal(body: GoalCreate) -> TeachingGoal:
 
 
 @router.post("/homework")
-def import_homework(file: UploadFile) -> HomeworkImportResult:
+async def import_homework(file: UploadFile, request: Request) -> HomeworkImportResult:
     """导入结构化作业 CSV，学生答案为 LaTeX。"""
-    not_implemented("T17")
+    runtime = request.app.state.orchestrator
+    data = await file.read(MAX_CSV_BYTES + 1)
+    teaching_date = runtime.teaching_date() if runtime.teaching_date else date.today()
+
+    async def ingest(llm) -> HomeworkImportResult:
+        return await HomeworkImporter(runtime.engine, llm).import_rows(rows, teaching_date)
+
+    try:
+        rows = parse_csv(data)
+        # 可注入与其他 Agent 相同的 LLMClient，默认使用 T06 的配置与实现。
+        llm = getattr(request.app.state, "homework_llm", None)
+        if llm is not None:
+            result = await ingest(llm)
+        else:
+            async with OpenAICompatClient(get_settings()) as client:
+                result = await ingest(client)
+    except IngestError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="导入数据与现有记录冲突，整批已回滚") from exc
+    except (OpenAIError, LLMOutputError) as exc:
+        raise HTTPException(status_code=502, detail="作业模型分析失败，整批未导入") from exc
+    runtime.recover_pending()
+    return result
 
 
 @router.get("/class/overview")
