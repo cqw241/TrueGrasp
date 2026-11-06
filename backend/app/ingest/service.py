@@ -16,7 +16,13 @@ from app.contracts.enums import EquivalenceMode, EvidenceKind, ItemPurpose, Item
 from app.contracts.events import HomeworkImported, make_event
 from app.contracts.llm import ChatMessage, LLMClient
 from app.contracts.values import SLIP
-from app.ingest.models import HomeworkAnalysis, HomeworkRow, ImageDraft, ImageHomework
+from app.ingest.models import (
+    HomeworkAnalysis,
+    HomeworkRow,
+    ImageDraft,
+    ImageDraftRow,
+    ImageHomework,
+)
 from app.llm.vision import transcribe_answer
 from app.orchestration.storage import init_storage, queue_work
 from app.verify.parsing import parse_answer
@@ -87,8 +93,9 @@ async def transcribe_images(llm: LLMClient, batch: Sequence[ImageHomework]) -> l
                 needs_confirmation = True
                 doubts = [*doubts, "转写无法解析为数学表达式"]
         if not answer.strip():
-            raise IngestError(f"{entry.student_id}/{entry.item_id} 转写为空")
-        row = HomeworkRow(
+            needs_confirmation = True
+            doubts = [*doubts, "转写为空，请确认或补录作答"]
+        row = ImageDraftRow(
             **entry.model_dump(exclude={"images", "confirmed_answer"}), student_answer=answer
         )
         drafts.append(ImageDraft(row=row, doubts=doubts, requires_confirmation=needs_confirmation))
@@ -122,7 +129,9 @@ class HomeworkImporter:
         drafts = await transcribe_images(self.llm, batch)
         if any(draft.requires_confirmation for draft in drafts):
             raise ConfirmationRequired(drafts)
-        return await self.import_rows([draft.row for draft in drafts], teaching_date)
+        return await self.import_rows(
+            [HomeworkRow.model_validate(draft.row.model_dump()) for draft in drafts], teaching_date
+        )
 
     async def import_rows(
         self, rows: Sequence[HomeworkRow], teaching_date: date
@@ -227,6 +236,9 @@ class HomeworkImporter:
                         stem=row.stem,
                         answer=row.correct_answer,
                         spec=comparison_spec,
+                        fingerprint=self.math.fingerprint(comparison_spec)
+                        if comparison_spec is not None
+                        else None,
                     )
                 items[item.id] = item
                 correct, judged_by, reason = analysis.is_correct, JudgedBy.MODEL, analysis.reason

@@ -408,10 +408,11 @@ def test_images_mixed_batch_is_atomic_and_returns_all_drafts(engine):
     assert_empty(engine)
 
 
-def test_cli_images_writes_review_without_importing(engine, tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize("latex", ["x", ""])
+def test_cli_images_writes_review_without_importing(engine, tmp_path, monkeypatch, capsys, latex):
     class Client(Model):
         def __init__(self, settings):
-            super().__init__([dict(latex="x", doubts=["不确定"])])
+            super().__init__([dict(latex=latex, doubts=["不确定"])])
 
         async def __aenter__(self):
             return self
@@ -438,6 +439,7 @@ def test_cli_images_writes_review_without_importing(engine, tmp_path, monkeypatc
         == 2
     )
     assert json.loads(review.read_text(encoding="utf-8"))[0]["requires_confirmation"]
+    assert json.loads(review.read_text(encoding="utf-8"))[0]["row"]["student_answer"] == latex
     assert "confirmed_answer" in capsys.readouterr().err
     assert_empty(engine)
 
@@ -471,6 +473,20 @@ def test_new_image_item_extracts_and_checks_spec_with_real_tool(engine):
         evidence = session.exec(select(Evidence)).one()
         assert evidence.is_correct is True and evidence.judged_by == JudgedBy.TOOL
         assert session.get(Item, "hw1").spec == ItemSpec(**spec)
+        from app.orchestration.inputs import build_verifier_input
+        from app.verify.tools import SympyMathTools
+
+        fingerprint = SympyMathTools().fingerprint(ItemSpec(**spec))
+        assert session.get(Item, "hw1").fingerprint == fingerprint
+        inp = build_verifier_input(
+            session,
+            student_id=entry.student_id,
+            knowledge_point_id="kp",
+            dimensions=[],
+            confirmed_misconception_ids=[],
+            shown_item_ids=[],
+        )
+        assert fingerprint in inp.used_fingerprints
 
 
 @pytest.mark.parametrize("answer,expected", [("x^2+C", True), ("x^2+7", True), ("x+C", False)])

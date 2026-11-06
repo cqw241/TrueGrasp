@@ -31,8 +31,14 @@ class ImageHomework(BaseModel):
     confirmed_answer: str | None = Field(default=None, min_length=1)
 
 
+class ImageDraftRow(HomeworkRow):
+    """An OCR review draft may be empty; confirmed import rows still cannot be."""
+
+    student_answer: str = ""
+
+
 class ImageDraft(BaseModel):
-    row: HomeworkRow
+    row: ImageDraftRow
     doubts: list[str]
     requires_confirmation: bool
 
