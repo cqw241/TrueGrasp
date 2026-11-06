@@ -4,7 +4,6 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from app.ledger.service import append_evidence
 from sqlmodel import Session
 
 from app.agents.verifier import create_verifier
@@ -17,6 +16,7 @@ from app.db import init_db, make_engine
 from app.knowledge.content import load
 from app.knowledge.graph import NxKnowledgeGraph
 from app.knowledge.ingest import ingest
+from app.ledger.service import append_evidence
 
 
 @pytest.fixture
