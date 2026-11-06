@@ -10,10 +10,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
+from app.agents.verifier import create_verifier
 from app.api import decision, health, stream, student, teacher
 from app.config import get_settings
 from app.db import get_engine, init_db
 from app.knowledge.graph import NxKnowledgeGraph
+from app.llm.client import OpenAICompatClient
 from app.orchestration.bus import EventBus
 from app.orchestration.runtime import OrchestrationError, Orchestrator
 
@@ -63,7 +65,14 @@ def create_app(
         app.state.knowledge = knowledge
         dependencies = {"knowledge": knowledge, **(orchestration_dependencies or {})}
         bus = EventBus()
+        llm = None
         try:
+            settings = get_settings()
+            if settings.llm_api_key and "verifier" not in dependencies:
+                llm = OpenAICompatClient(settings)
+                dependencies["verifier"] = create_verifier(
+                    llm=llm, knowledge=dependencies["knowledge"]
+                )
             async with Orchestrator.open(
                 business_engine,
                 checkpoint_path or get_settings().checkpoint_db_path,
@@ -76,6 +85,8 @@ def create_app(
                     yield
         finally:
             await bus.close()
+            if llm is not None:
+                await llm.aclose()
             if engine is None:
                 business_engine.dispose()
 
