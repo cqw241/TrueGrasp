@@ -18,6 +18,7 @@ from app.contracts.entities import (
     Misconception,
     Student,
     Task,
+    TeachingGoal,
 )
 from app.contracts.enums import (
     Dimension,
@@ -25,6 +26,7 @@ from app.contracts.enums import (
     ItemPurpose,
     ItemSource,
     JudgedBy,
+    MasteryState,
     TaskStatus,
     TaskType,
     TutorOutcome,
@@ -58,6 +60,9 @@ def business(tmp_path):
             ]
         )
         session.flush()
+        session.add(
+            TeachingGoal(knowledge_point_ids=["kp"], deadline=TODAY, created_on=TODAY, max_rounds=2)
+        )
         session.add(
             Misconception(
                 id="miss_inner", knowledge_point_id="kp", family="chain", description="漏乘内层导数"
@@ -142,6 +147,7 @@ class StubPlanner:
                     student_id="B",
                     knowledge_point_id="kp",
                     reason="教师处理",
+                    round=2,
                 ),
             ],
             cancel_task_ids=self.cancel_task_ids,
@@ -269,6 +275,10 @@ async def test_pipeline_and_verifier_isolation(business, tmp_path, dependencies)
         assert all(answer == "independent-answer" for _, answer in verifier.judgements)
         assert sum(event.type == "evidence_added" for event in notifications) == 3
         assert sum(event.type == "message_done" for event in notifications) == 5
+        assert any(
+            event.type == "mastery_changed" and event.state == MasteryState.INITIAL
+            for event in notifications
+        )
         with Session(business) as session:
             assert session.get(Event, 1).processed
             assert session.get(Task, 1).status == TaskStatus.DONE
@@ -286,7 +296,8 @@ async def test_pipeline_and_verifier_isolation(business, tmp_path, dependencies)
                 for e in evidence
             )
             assert all(e.predictions[0].answer == "wrong" for e in evidence)
-            assert session.exec(select(Mastery)).all() == []
+            assert session.get(Mastery, ("A", "kp")).state == MasteryState.INITIAL
+            assert session.get(Mastery, ("B", "kp")).state == MasteryState.ESCALATED
             assert all(event.processed for event in session.exec(select(Event)).all())
 
 

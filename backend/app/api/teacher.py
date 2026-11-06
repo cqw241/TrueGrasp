@@ -1,6 +1,7 @@
 """教师驾驶舱与教学时钟。"""
 
-from fastapi import APIRouter, UploadFile
+from fastapi import APIRouter, Request, UploadFile
+from sqlmodel import Session
 
 from app.api.stub import not_implemented
 from app.contracts.api import (
@@ -17,6 +18,7 @@ from app.contracts.api import (
 )
 from app.contracts.entities import Task, TeachingGoal
 from app.contracts.enums import TaskStatus, TaskType
+from app.ledger import queries
 
 router = APIRouter(tags=["teacher"])
 
@@ -55,13 +57,15 @@ def import_homework(file: UploadFile) -> HomeworkImportResult:
 
 
 @router.get("/class/overview")
-def class_overview() -> ClassOverview:
-    not_implemented("T19")
+def class_overview(request: Request) -> ClassOverview:
+    with Session(request.app.state.orchestrator.engine) as session:
+        return queries.class_overview(session)
 
 
 @router.get("/class/heatmap")
-def class_heatmap() -> list[HeatCell]:
-    not_implemented("T19")
+def class_heatmap(request: Request) -> list[HeatCell]:
+    with Session(request.app.state.orchestrator.engine) as session:
+        return queries.heatmap(session)
 
 
 @router.get("/class/issues")

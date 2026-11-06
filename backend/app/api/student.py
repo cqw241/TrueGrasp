@@ -1,6 +1,7 @@
 """学生辅导台。辅导回复通过 ``GET /api/events`` 流式推送。"""
 
 from fastapi import APIRouter, Request, status
+from sqlmodel import Session, select
 
 from app.api.stub import not_implemented
 from app.contracts.api import Accepted, ChatTurn, MessageCreate
@@ -10,8 +11,9 @@ router = APIRouter(tags=["student"])
 
 
 @router.get("/students")
-def list_students() -> list[Student]:
-    not_implemented("T19")
+def list_students(request: Request) -> list[Student]:
+    with Session(request.app.state.orchestrator.engine) as session:
+        return list(session.exec(select(Student).order_by(Student.id)).all())
 
 
 @router.get("/tasks/{task_id}")
