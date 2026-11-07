@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     vision_llm_api_key: str = ""
     vision_llm_model: str = ""
 
+    planner_class_review_min_students: int = Field(default=3, ge=2)
+    planner_retest_delay_days: int = Field(default=3, ge=1)
+
     database_url: str = "sqlite:///./data/truegrasp.db"
     checkpoint_db_path: str = "./data/checkpoints.db"
 

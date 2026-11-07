@@ -491,6 +491,7 @@ async def test_cross_chapter_seed_comes_from_context_and_attributes_target(graph
 
 @pytest.mark.parametrize("explicit", [False, True])
 async def test_application_assembles_verifier_and_owns_client(monkeypatch, tmp_path, explicit):
+    from app.agents.planner import TeachingPlanner
     from app.agents.verifier import IndependentVerifier
 
     clients = []
@@ -514,8 +515,11 @@ async def test_application_assembles_verifier_and_owns_client(monkeypatch, tmp_p
     try:
         async with app.router.lifespan_context(app):
             verifier = app.state.orchestrator.verifier
+            planner = app.state.orchestrator.planner
+            assert isinstance(planner, TeachingPlanner)
+            assert len(clients) == 1 and planner.llm is clients[0] and not clients[0].closed
             if explicit:
-                assert verifier is None and not clients
+                assert verifier is None
             else:
                 assert isinstance(verifier, IndependentVerifier)
                 assert verifier.llm is clients[0] and not clients[0].closed

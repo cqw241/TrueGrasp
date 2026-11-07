@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
+from app.agents.planner import PlanningPolicy, create_planner
 from app.agents.verifier import create_verifier
 from app.api import decision, health, stream, student, teacher
 from app.config import get_settings
@@ -68,8 +69,21 @@ def create_app(
         llm = None
         try:
             settings = get_settings()
-            if settings.llm_api_key and "verifier" not in dependencies:
+            if settings.llm_api_key and any(
+                name not in dependencies for name in ("planner", "verifier")
+            ):
                 llm = OpenAICompatClient(settings)
+            if llm is not None and "planner" not in dependencies:
+                dependencies["planner"] = create_planner(
+                    engine=business_engine,
+                    llm=llm,
+                    knowledge=dependencies["knowledge"],
+                    policy=PlanningPolicy(
+                        class_review_min_students=settings.planner_class_review_min_students,
+                        retest_delay_days=settings.planner_retest_delay_days,
+                    ),
+                )
+            if llm is not None and "verifier" not in dependencies:
                 dependencies["verifier"] = create_verifier(
                     llm=llm, knowledge=dependencies["knowledge"]
                 )
