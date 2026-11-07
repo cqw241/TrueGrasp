@@ -174,6 +174,42 @@ items:
     answer: 1-e
   - misconception_id: calc.ch5.integration_by_parts.plus_remainder
     answer: 2e-1
+- id: calc.ch5.substitution.seed_polynomial_bounds
+  knowledge_point: calc.ch5.substitution
+  purpose: verification
+  dimension: distractor
+  stem: '用 $u=3x+2$ 换元，计算 $\int_0^2(3x+2)^2\,dx$'
+  spec:
+    operation: definite_integral
+    expr: (3*x+2)**2
+    bounds:
+    - var: x
+      lower: '0'
+      upper: '2'
+  answer: '56'
+  predictions:
+  - misconception_id: calc.ch5.substitution.old_bounds
+    answer: '\frac{8}{9}'
+  - misconception_id: calc.ch5.substitution.omit_differential
+    answer: '168'
+- id: calc.ch5.integration_by_parts.seed_sine_boundary
+  knowledge_point: calc.ch5.integration_by_parts
+  purpose: verification
+  dimension: distractor
+  stem: '取 $u=x,dv=\sin x\,dx$，计算 $\int_0^1 x\sin x\,dx$'
+  spec:
+    operation: definite_integral
+    expr: x*sin(x)
+    bounds:
+    - var: x
+      lower: '0'
+      upper: '1'
+  answer: '\sin(1)-\cos(1)'
+  predictions:
+  - misconception_id: calc.ch5.integration_by_parts.omit_boundary
+    answer: '\sin(1)'
+  - misconception_id: calc.ch5.integration_by_parts.plus_remainder
+    answer: '-\cos(1)-\sin(1)'
 - id: calc.ch5.integration_by_parts.seed_x_cos
   knowledge_point: calc.ch5.integration_by_parts
   purpose: verification

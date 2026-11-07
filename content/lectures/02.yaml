@@ -392,3 +392,68 @@ items:
     expr: 2/x
     variables: [x]
   answer: '-\frac{2}{x^2}'
+- id: calc.ch2.derivative_rules.seed_combined_rules
+  knowledge_point: calc.ch2.derivative_rules
+  purpose: verification
+  dimension: distractor
+  stem: '求 $x^2e^x+(x+1)/(x+2)$ 的导数，其中 $x\ne-2$'
+  spec:
+    operation: derivative
+    expr: x**2*exp(x)+(x+1)/(x+2)
+    variables: [x]
+  answer: '(x^2+2x)e^x+\frac{1}{(x+2)^2}'
+  predictions:
+  - misconception_id: calc.ch2.derivative_rules.product_of_derivatives
+    answer: '2xe^x+\frac{1}{(x+2)^2}'
+  - misconception_id: calc.ch2.derivative_rules.quotient_unsquared
+    answer: '(x^2+2x)e^x+\frac{1}{x+2}'
+- id: calc.ch2.derivative_rules.seed_nested_rules
+  knowledge_point: calc.ch2.derivative_rules
+  purpose: verification
+  dimension: near_transfer
+  stem: '求 $\frac{x\sin x}{1+x^2}$ 的导数'
+  spec:
+    operation: derivative
+    expr: x*sin(x)/(1+x**2)
+    variables: [x]
+  answer: '\frac{(1-x^2)\sin x+x\cdot(1+x^2)\cos x}{(1+x^2)^2}'
+- id: calc.ch2.chain_rule.seed_exp_quadratic_distractor
+  knowledge_point: calc.ch2.chain_rule
+  purpose: verification
+  dimension: distractor
+  stem: '求 $e^{3x^2+1}$ 的导数'
+  spec:
+    operation: derivative
+    expr: exp(3*x**2+1)
+    variables: [x]
+  answer: '6xe^{3x^2+1}'
+  predictions:
+  - misconception_id: calc.ch2.chain_rule.omit_inner
+    answer: 'e^{3x^2+1}'
+  - misconception_id: calc.ch2.chain_rule.outer_at_x
+    answer: '6xe^x'
+- id: calc.ch2.chain_rule_multi.seed_exp_radical
+  knowledge_point: calc.ch2.chain_rule_multi
+  purpose: verification
+  dimension: near_transfer
+  stem: '若 $s=\sqrt{1+t^2}$、$y=e^s$，求 $dy/dt$'
+  spec:
+    operation: derivative
+    expr: exp(sqrt(1+t**2))
+    variables: [t]
+  answer: '\frac{te^{\sqrt{1+t^2}}}{\sqrt{1+t^2}}'
+- id: calc.ch2.implicit_diff.seed_ellipse_distractor
+  knowledge_point: calc.ch2.implicit_diff
+  purpose: verification
+  dimension: distractor
+  stem: '由 $x^2+3y^2=12$ 确定 $y>0$ 的分支，求 $dy/dx$，其中 $|x|<2\sqrt{3}$'
+  spec:
+    operation: derivative
+    expr: sqrt(4-x**2/3)
+    variables: [x]
+  answer: '-\frac{x}{3\sqrt{4-x^2/3}}'
+  predictions:
+  - misconception_id: calc.ch2.implicit_diff.y_constant
+    answer: '0'
+  - misconception_id: calc.ch2.implicit_diff.sign_transfer
+    answer: '\frac{x}{3\sqrt{4-x^2/3}}'

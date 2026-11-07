@@ -95,3 +95,19 @@ def test_partial_sum_and_fingerprint():
 def test_reject_python_syntax():
     spec = ItemSpec(operation="expression", expr="__import__('os').getcwd()")
     assert tools.verify_item(spec, "1").ok is None
+
+
+def test_fingerprint_ignores_renaming_but_preserves_integration_roles():
+    original = ItemSpec(
+        operation="double_integral",
+        expr="x+2*y",
+        bounds=[dict(var="y", lower="0", upper="x"), dict(var="x", lower="0", upper="1")],
+    )
+    renamed = ItemSpec(
+        operation="double_integral",
+        expr="v+2*u",
+        bounds=[dict(var="u", lower="0", upper="v"), dict(var="v", lower="0", upper="1")],
+    )
+    swapped = renamed.model_copy(update={"expr": "u+2*v"})
+    assert tools.fingerprint(original) == tools.fingerprint(renamed)
+    assert tools.fingerprint(original) != tools.fingerprint(swapped)

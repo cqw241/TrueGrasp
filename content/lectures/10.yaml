@@ -238,3 +238,61 @@ items:
   predictions:
   - misconception_id: calc.ch10.polar.miss_r
     answer: '\frac{16\pi}{3}'
+- id: calc.ch10.double_integral_cartesian.seed_region_distractor
+  knowledge_point: calc.ch10.double_integral_cartesian
+  purpose: verification
+  dimension: distractor
+  stem: '计算 $\iint_D (2x+y)\,dA$，其中 $D=\{0\le y\le x\le1\}$'
+  spec:
+    operation: double_integral
+    expr: 2*x+y
+    bounds:
+    - var: y
+      lower: '0'
+      upper: 'x'
+    - var: x
+      lower: '0'
+      upper: '1'
+  answer: '\frac{5}{6}'
+  predictions:
+  - misconception_id: calc.ch10.double_integral_cartesian.freeze_inner_bound
+    answer: '\frac{3}{2}'
+  - misconception_id: calc.ch10.double_integral_cartesian.transpose_region
+    answer: '\frac{2}{3}'
+- id: calc.ch10.polar.seed_disk_y_square_distractor
+  knowledge_point: calc.ch10.polar
+  purpose: verification
+  dimension: distractor
+  stem: '求 $\iint_D y^2\,dA$ 的值，其中 $D=\{x^2+y^2\le9\}$；可用极坐标。'
+  spec:
+    operation: double_integral
+    expr: y**2
+    bounds:
+    - var: y
+      lower: '-sqrt(9-x**2)'
+      upper: 'sqrt(9-x**2)'
+    - var: x
+      lower: '-3'
+      upper: '3'
+  answer: '\frac{81\pi}{4}'
+  predictions:
+  - misconception_id: calc.ch10.polar.miss_r
+    answer: '9\pi'
+  - misconception_id: calc.ch10.polar.half_angle
+    answer: '\frac{81\pi}{8}'
+- id: calc.ch10.polar.seed_shifted_disk
+  knowledge_point: calc.ch10.polar
+  purpose: verification
+  dimension: near_transfer
+  stem: '计算 $\iint_D x^2\,dA$，其中 $D=\{(x-1)^2+y^2\le1\}$；可取原点为极点。'
+  spec:
+    operation: double_integral
+    expr: x**2
+    bounds:
+    - var: y
+      lower: '-sqrt(1-(x-1)**2)'
+      upper: 'sqrt(1-(x-1)**2)'
+    - var: x
+      lower: '0'
+      upper: '2'
+  answer: '\frac{5\pi}{4}'

@@ -8,20 +8,151 @@ from sqlmodel import Session
 
 from app.agents.verifier import create_verifier
 from app.agents.verifier.agent import ItemDraft, ItemReview
-from app.contracts.agents import ConfirmedMisconception, VerifierInput
-from app.contracts.entities import Evidence, Mastery, Student, Task
-from app.contracts.enums import Dimension, EvidenceKind, MasteryState, TaskType
+from app.contracts.agents import ConfirmedMisconception, PlannerOutput, VerifierInput
+from app.contracts.entities import Evidence, Item, Mastery, Student, Task
+from app.contracts.enums import (
+    Dimension,
+    EvidenceKind,
+    ItemPurpose,
+    ItemSource,
+    JudgedBy,
+    MasteryState,
+    TaskType,
+)
 from app.contracts.values import ItemSpec, Prediction
 from app.db import init_db, make_engine
 from app.knowledge.content import load
 from app.knowledge.graph import NxKnowledgeGraph
 from app.knowledge.ingest import ingest
 from app.ledger.service import append_evidence
+from app.orchestration import EventBus, Orchestrator
+from app.verify.tools import SympyMathTools
 
 
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.mark.anyio
+async def test_ordinary_task_can_select_authored_series_explanation(tmp_path):
+    lectures = Path(__file__).parents[2] / "content/lectures"
+    content = load([lectures / "12.yaml"])
+    engine = make_engine(f"sqlite:///{tmp_path / 'series.db'}")
+    init_db(engine)
+
+    class Planner:
+        async def plan(self, inp):
+            return PlannerOutput()
+
+    class Model:
+        async def generate(self, messages, output, tools=None):
+            assert output is ItemReview
+            return ItemReview(valid=True, reason="反例与原评分要点一致")
+
+    try:
+        with Session(engine) as session:
+            ingest(session, content)
+            session.add(Student(id="series", name="级数学生"))
+            session.add(
+                Task(
+                    id=1,
+                    student_id="series",
+                    type=TaskType.VERIFICATION,
+                    knowledge_point_id="calc.ch12.s1",
+                    created_on=date(2026, 11, 7),
+                )
+            )
+            session.commit()
+        verifier = create_verifier(llm=Model(), knowledge=NxKnowledgeGraph.from_engine(engine))
+        async with Orchestrator.open(
+            engine, ":memory:", EventBus(), planner=Planner(), verifier=verifier
+        ) as runtime:
+            await runtime.start_task(1)
+            [message] = await runtime.get_messages(1)
+            seed = content.items["calc.ch12.s1.seed_term_zero_counterexample"]
+            assert message.item.dimension == Dimension.EXPLANATION
+            assert message.item.rubric == seed.rubric
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_staged_legacy_duplicate_is_replaced_before_it_is_shown(tmp_path):
+    content = load(sorted((Path(__file__).parents[2] / "content/lectures").glob("*.yaml")))
+    engine = make_engine(f"sqlite:///{tmp_path / 'legacy.db'}")
+    init_db(engine)
+    point = "calc.ch1.function"
+    today = date(2026, 11, 7)
+    tools = SympyMathTools()
+
+    def item(id, expr, variable, fingerprint):
+        return Item(
+            id=id,
+            knowledge_point_id=point,
+            purpose=ItemPurpose.VERIFICATION,
+            dimension=Dimension.CORRECTNESS,
+            stem=f"求 {expr} 的导数",
+            spec=ItemSpec(operation="derivative", expr=expr, variables=[variable]),
+            answer="test",
+            fingerprint=fingerprint,
+            source=ItemSource.GENERATED,
+        )
+
+    seen = item("seen", "x**2", "x", "legacy-seen-fingerprint")
+    normalized_seen = tools.fingerprint(seen.spec)
+    staged = item("staged", "t**2", "t", "legacy-staged-fingerprint")
+    fresh = item("fresh", "x**3", "x", "fresh-fingerprint")
+
+    class Planner:
+        async def plan(self, inp):
+            return PlannerOutput()
+
+    class Verifier:
+        calls = 0
+
+        async def compose(self, inp):
+            self.calls += 1
+            assert normalized_seen in inp.used_fingerprints
+            return [staged] if self.calls == 1 else [fresh]
+
+    try:
+        with Session(engine) as session:
+            ingest(session, content)
+            session.add(Student(id="legacy", name="学生"))
+            session.add(seen)
+            session.flush()
+            session.add(
+                Evidence(
+                    student_id="legacy",
+                    knowledge_point_id=point,
+                    item_id=seen.id,
+                    kind=EvidenceKind.HOMEWORK,
+                    judged_by=JudgedBy.TOOL,
+                    teaching_date=today,
+                )
+            )
+            session.add(
+                Task(
+                    id=1,
+                    student_id="legacy",
+                    type=TaskType.VERIFICATION,
+                    knowledge_point_id=point,
+                    misconception_ids=["slip"],
+                    created_on=today,
+                )
+            )
+            session.commit()
+        verifier = Verifier()
+        async with Orchestrator.open(
+            engine, ":memory:", EventBus(), planner=Planner(), verifier=verifier
+        ) as runtime:
+            await runtime.start_task(1)
+            [message] = await runtime.get_messages(1)
+            assert message.item.id == fresh.id
+            assert verifier.calls == 2
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.anyio
