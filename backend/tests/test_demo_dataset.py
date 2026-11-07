@@ -306,6 +306,7 @@ def test_observed_export_consistency_and_forged_verdict_rejection(plan, actual_r
 @pytest.mark.parametrize(
     "mutation,match",
     [
+        ("different_c_homework", "same wrong homework answer"),
         ("remove_failures", "two-round failures"),
         ("handoff_old_homework", "two-round failures"),
         ("handoff_round_one", "two-round failures"),
@@ -339,7 +340,12 @@ def test_observed_rejects_review_regressions(plan, actual_run, mutation, match):
         and e.kind == EvidenceKind.VERIFICATION
         and e.dimension in (Dimension.CORRECTNESS, Dimension.DISTRACTOR, Dimension.NEAR_TRANSFER)
     ]
-    if mutation == "remove_failures":
+    if mutation == "different_c_homework":
+        next(
+            e for e in actual.evidence if e.student_id == "C" and e.kind == EvidenceKind.HOMEWORK
+        ).student_answer = "0"
+        actual = observed.RunExport.model_validate_json(actual.model_dump_json())
+    elif mutation == "remove_failures":
         removed = {
             e.id
             for e in actual.evidence
@@ -473,6 +479,16 @@ def test_observed_rejects_review_regressions(plan, actual_run, mutation, match):
         assert original.id in target.evidence_ids
     with pytest.raises(ValueError, match=match):
         observed.validate_run(plan, actual)
+
+
+def test_observed_accepts_equivalent_shared_wrong_answer(plan, actual_run):
+    from app.contracts.enums import EvidenceKind
+
+    next(
+        e for e in actual_run.evidence if e.student_id == "C" and e.kind == EvidenceKind.HOMEWORK
+    ).student_answer = r"\sin(6x)"
+    actual = observed.RunExport.model_validate_json(actual_run.model_dump_json())
+    assert observed.validate_run(plan, actual)["goal_met"] == 37
 
 
 def test_actual_json_roundtrip_and_cli_file(plan, actual_run, tmp_path, capsys, monkeypatch):

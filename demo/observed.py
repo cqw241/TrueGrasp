@@ -148,6 +148,23 @@ def validate_run(data: Dataset, actual: RunExport) -> dict:
         "observed homework must cover 40 exactly once",
     )
     require(sum(e.is_correct is False for e in homework) == 12, "observed homework errors != 12")
+    abc = {e.student_id: e for e in homework if e.student_id in {"A", "B", "C"}}
+    require(len(abc) == 3, "missing A/B/C homework")
+    spec = data.items[HOMEWORK].spec
+    require(
+        all(e.is_correct is False for e in abc.values())
+        and all(
+            _equivalent(
+                abc["A"].student_answer,
+                e.student_answer,
+                spec.answer_mode,
+                tuple(spec.variables),
+            )
+            is True
+            for e in abc.values()
+        ),
+        "A/B/C must share the same wrong homework answer",
+    )
     # Reconstruct diagnoses from the intersection of actual C2 probe responses.
     # A single shared wrong prediction cannot confirm MISS rather than FORMULA.
     confirmed = {}
