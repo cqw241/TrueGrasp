@@ -87,6 +87,22 @@ shadcn/ui 组件用 `npx shadcn@latest add <组件>` 添加到 `components/ui/`�
 
 开发服务器的 `/api` 代理会立即转发 SSE 的响应头，否则在第一条事件到达之前，`EventSource` 一直处于连接中；后端异常断开时，代理也会断开浏览器一侧的连接，让 `EventSource` 重连（见 `vite.config.ts`）。生产环境的反向代理（T27）要关闭对 `/api/events` 的缓冲；后端已经发送了 `X-Accel-Buffering: no`。
 
+## T11 学生辅导台
+
+页面在 `frontend/src/pages/student-desk.tsx`：选择学生后分“任务”和“我的进度”两个标签页。任务列表只列学生能作答的类型（辅导、验证、复测、章前预检、主动提问），进行中的排在前面并默认打开。`Task.reason` 是给教师看的规划理由，不在学生端显示。
+
+| 位置 | 内容 |
+|---|---|
+| `components/student/task-session.tsx` | 一个任务的对话：`GET /api/tasks/{id}/messages` 的记录，加上正在生成的回复。`token` 事件逐段拼到临时气泡，`message_done` 后重新拉取对话、清掉气泡。`ChatTurn.hint_level`（1–3）和 `solution` 显示为“提示 n/3 · 层级”“完整解答” |
+| `components/math/task-answer.tsx` | 作答区：公式输入、拍照作答。识别结果 `doubts` 为空且学生还没写答案时直接提交进入诊断；有疑问时列出疑问，学生核对后再提交。T06 的 `requires_confirmation` 恒为真，所以这里只看 `doubts` |
+| `components/student/ask-question.tsx` | 主动提问：输入或拍下题目，可附上自己的尝试，提交后打开新建的 `question` 任务，提示在该任务的对话里展示 |
+| `components/student/progress.tsx` | 个人进度：各知识点掌握状态按讲分组，以及最近的学习时间线；收到本人的 `mastery_changed` 时刷新 |
+
+主动提问的接口已在 T11 定好，后端实现留给 T15：
+
+- `POST /api/students/{id}/questions`，请求体 `QuestionCreate {content, attempt}`，返回新建的 `Task`（`type = question`），目前返回 501。T15 实现时还要把 `question` 加进编排层可交互的任务类型（`runtime.py` 的 `INTERACTIVE_TYPES`），并在对话消息里写入 `hint_level` / `solution`，`get_messages` 已经透传这两个字段。
+- `POST /api/students/{id}/question-photo` 识别题目照片，返回 `Transcription`，不创建提问。它和作答照片共用 `_transcribe_upload`（格式、大小、解码检查与视觉模型配置），只是不检查作答轮次。
+
 ## 提交前检查
 
 CI 在每个 PR 和 `main` 的推送上运行下列检查，提交前先在本地跑一遍。

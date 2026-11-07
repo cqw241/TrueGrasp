@@ -336,6 +336,49 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/students/{student_id}/question-photo': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Transcribe Question Photo
+     * @description 识别学生要提问的题目照片，返回草稿供学生校对，不创建提问。
+     */
+    post: operations['transcribe_question_photo_api_students__student_id__question_photo_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/students/{student_id}/questions': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Ask Question
+     * @description 学生主动提问（技术文档第 5 节 ⑥）。
+     *
+     *     创建一条 ``question`` 任务，辅导 Agent 先请学生尝试。之后的分层提示与完整解答作为
+     *     该任务的对话推送，由 ``ChatTurn.hint_level`` 与 ``ChatTurn.solution`` 标注。
+     */
+    post: operations['ask_question_api_students__student_id__questions_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/tasks/{task_id}/diagnosis': {
     parameters: {
       query?: never
@@ -556,6 +599,13 @@ export interface components {
       /** Content */
       content: string
       item?: components['schemas']['Item'] | null
+      /** Hint Level */
+      hint_level?: number | null
+      /**
+       * Solution
+       * @default false
+       */
+      solution: boolean
     }
     /** ClassOverview */
     ClassOverview: {
@@ -1028,6 +1078,19 @@ export interface components {
       matched_misconception_id: string | null
       judged_by: components['schemas']['JudgedBy'] | null
     }
+    /**
+     * QuestionCreate
+     * @description 学生主动提问：题目（文字或 LaTeX），可附上自己的尝试或卡住的位置。
+     */
+    QuestionCreate: {
+      /** Content */
+      content: string
+      /**
+       * Attempt
+       * @default
+       */
+      attempt: string
+    }
     /** ResolveEscalation */
     ResolveEscalation: {
       /** Note */
@@ -1106,6 +1169,7 @@ export interface components {
       | 'precheck'
       | 'escalation'
       | 'class_review'
+      | 'question'
     /**
      * TeachingGoal
      * @description 教师设定的目标，如“周五前 90% 初步掌握、两轮不通过转人工”。
@@ -1268,6 +1332,7 @@ export type Operation = components['schemas']['Operation']
 export type PhotoUploadError = components['schemas']['PhotoUploadError']
 export type Prediction = components['schemas']['Prediction']
 export type ProbeRecord = components['schemas']['ProbeRecord']
+export type QuestionCreate = components['schemas']['QuestionCreate']
 export type ResolveEscalation = components['schemas']['ResolveEscalation']
 export type Student = components['schemas']['Student']
 export type Task = components['schemas']['Task']
@@ -1870,7 +1935,7 @@ export interface operations {
           'application/json': components['schemas']['PhotoUploadError']
         }
       }
-      /** @description 参数无效、图片无法解码或未识别到作答 */
+      /** @description 参数无效、图片无法解码或未识别到内容 */
       422: {
         headers: {
           [name: string]: unknown
@@ -1897,6 +1962,125 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+    }
+  }
+  transcribe_question_photo_api_students__student_id__question_photo_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        student_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'image/jpeg': string
+        'image/png': string
+        'image/webp': string
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Transcription']
+        }
+      }
+      /** @description 学生不存在 */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 照片超过大小限制 */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 不支持该图片类型 */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 参数无效、图片无法解码或未识别到内容 */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json':
+            | components['schemas']['HTTPValidationError']
+            | components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 模型识别失败 */
+      502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 图片识别服务未配置 */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+    }
+  }
+  ask_question_api_students__student_id__questions_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        student_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['QuestionCreate']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Task']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }

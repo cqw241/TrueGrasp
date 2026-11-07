@@ -37,6 +37,14 @@ export const taskTypeLabel: Record<TaskType, string> = {
   precheck: '章前预检',
   escalation: '转交教师',
   class_review: '课上讲解建议',
+  question: '主动提问',
+}
+
+/** 分层提示（技术文档第 5 节 ⑥）：由弱到强，ChatTurn.hint_level 取 1–3。 */
+export const hintLevelLabel: Record<1 | 2 | 3, string> = {
+  1: '思路方向',
+  2: '关键步骤',
+  3: '具体计算',
 }
 
 export const taskStatusLabel: Record<TaskStatus, string> = {

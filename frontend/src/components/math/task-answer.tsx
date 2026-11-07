@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ApiError, api, fetchClient } from '@/api/client'
 import type { AnswerTarget } from '@/api/schema'
 import { MathInput } from '@/components/math/math-input'
-import { MathText, Tex } from '@/components/math/tex'
+import { Tex } from '@/components/math/tex'
 import { ErrorState, LoadingState } from '@/components/states'
 import { Button } from '@/components/ui/button'
 import { useStreamEvent } from '@/hooks/use-event-stream'
@@ -37,12 +37,13 @@ export function TaskAnswer({ taskId }: { taskId: number }) {
     )
   }
   if (!target.data) return <LoadingState rows={2} />
-  const { phase, item_id: itemId, prompt, stem, turn } = target.data
-  if (phase === 'closed') return <p className="text-sm">任务已结束。</p>
+  // 题目和辅导消息由对话记录（task-session.tsx）展示，这里只负责作答。
+  const { phase, item_id: itemId, turn } = target.data
+  if (phase === 'closed') {
+    return <p className="text-muted-foreground text-sm">任务已结束。</p>
+  }
   return (
     <div className="space-y-3">
-      {prompt && <MathText text={prompt} />}
-      {stem && stem !== prompt && <MathText text={stem} />}
       {photoExpired && (
         <p role="status" className="text-sm">
           题目已更新，本次照片未用于作答。请为当前题目重新拍摄。
@@ -157,6 +158,9 @@ function AnswerEditor({
     objectUrl.current = URL.createObjectURL(file)
     setPreview(objectUrl.current)
     setReplacement(null)
+    // 识别无疑问、学生也还没写答案时直接提交，进入诊断；有疑问时请学生核对后再提交
+    // （技术文档第 8 节第 5 条）。T06 的 requires_confirmation 恒为真，这里只看 doubts。
+    let direct: string | null = null
     try {
       const { data } = await fetchClient.POST(
         '/api/tasks/{task_id}/answer-photo',
@@ -174,6 +178,9 @@ function AnswerEditor({
       if (!controller.signal.aborted && data) {
         if (answer.trim()) {
           setReplacement({ latex: data.latex, doubts: data.doubts })
+        } else if (data.doubts.length === 0) {
+          setAnswer(data.latex)
+          direct = data.latex
         } else {
           setAnswer(data.latex)
           setDoubts(data.doubts)
@@ -194,6 +201,7 @@ function AnswerEditor({
       upload.current = null
       if (!controller.signal.aborted) setUploading(false)
     }
+    if (direct !== null) await submit(direct)
   }
 
   function removePhoto() {
@@ -204,9 +212,9 @@ function AnswerEditor({
     setReplacement(null)
   }
 
-  async function submit() {
-    const content = answer.trim()
-    if (!content || busy || upload.current || submission.current) return
+  async function submit(latex = answer) {
+    const content = latex.trim()
+    if (!content || disabled || upload.current || submission.current) return
     submission.current = true
     setSending(true)
     setSendError(null)

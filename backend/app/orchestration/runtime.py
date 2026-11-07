@@ -432,6 +432,8 @@ class Orchestrator:
                 role=message["role"],
                 content=message["content"],
                 item=Item.model_validate(message["item"]) if message.get("item") else None,
+                hint_level=message.get("hint_level"),
+                solution=message.get("solution", False),
             )
             for message in snapshot.values.get("messages", [])
         ]
