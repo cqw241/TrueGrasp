@@ -76,7 +76,7 @@ export function PlanPanel() {
 
   function visible(task: Task) {
     if (type === ALL && !PLAN_TYPES.includes(task.type)) return false
-    if (status === 'open') return OPEN.includes(task.status ?? 'pending')
+    if (status === 'open') return OPEN.includes(task.status)
     return true
   }
 
@@ -191,14 +191,14 @@ function TaskTable({
                 <TableCell>
                   <div>
                     {taskTypeLabel[task.type]}
-                    {(task.round ?? 1) > 1 && ` · 第 ${task.round} 轮`}
+                    {task.round > 1 && ` · 第 ${task.round} 轮`}
                   </div>
                   <div className="text-muted-foreground text-xs">
                     {pointName(task.knowledge_point_id)}
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground max-w-80 text-xs whitespace-normal">
-                  <MathText text={task.reason ?? ''} />
+                  <MathText text={task.reason} />
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   {task.due_date ?? '—'}
@@ -206,7 +206,7 @@ function TaskTable({
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
                     <Badge variant="outline">
-                      {taskStatusLabel[task.status ?? 'pending']}
+                      {taskStatusLabel[task.status]}
                     </Badge>
                     {control?.taken_over && <Badge>教师接管</Badge>}
                     {control?.overridden && (
@@ -238,7 +238,7 @@ function TaskActions({
   const invalidate = useInvalidate()
   const takeover = api.useMutation('post', '/api/tasks/{task_id}/takeover')
   const handback = api.useMutation('post', '/api/tasks/{task_id}/handback')
-  const open = OPEN.includes(task.status ?? 'pending')
+  const open = OPEN.includes(task.status)
   if (task.id == null || !open) return null
   const params = { path: { task_id: task.id } }
   const onSuccess = () => invalidate('/api/tasks', '/api/tasks/controls')

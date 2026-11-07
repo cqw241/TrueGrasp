@@ -94,12 +94,12 @@ function GoalSummary({
       <p>
         <span className="font-semibold">{goal.deadline}</span> 前{' '}
         <span className="font-semibold">
-          {Math.round((goal.target_ratio ?? 0.9) * 100)}%
+          {Math.round(goal.target_ratio * 100)}%
         </span>{' '}
-        的学生达到“{masteryStateLabel[goal.target_state ?? 'initial']}”
+        的学生达到“{masteryStateLabel[goal.target_state]}”
       </p>
       <p className="text-muted-foreground">
-        辅导 {goal.max_rounds ?? 2} 轮仍未通过即转交教师
+        辅导 {goal.max_rounds} 轮仍未通过即转交教师
       </p>
       <div className="flex flex-wrap gap-1.5">
         {(goal.knowledge_point_ids ?? []).map((id) => (
@@ -167,7 +167,7 @@ function GoalForm({ onDone }: { onDone: () => void }) {
       </SheetHeader>
       <div className="flex-1 space-y-4 px-4">
         <div className="space-y-2">
-          <Label>讲次</Label>
+          <Label id="goal-lecture-label">讲次</Label>
           <Select
             value={String(lecture)}
             onValueChange={(v) => {
@@ -175,7 +175,10 @@ function GoalForm({ onDone }: { onDone: () => void }) {
               setSelected(new Set())
             }}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger
+              className="w-full"
+              aria-labelledby="goal-lecture-label"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -203,12 +206,15 @@ function GoalForm({ onDone }: { onDone: () => void }) {
           ))}
         </fieldset>
         <div className="space-y-2">
-          <Label>目标状态</Label>
+          <Label id="goal-state-label">目标状态</Label>
           <Select
             value={targetState}
             onValueChange={(v) => setTargetState(v as MasteryState)}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger
+              className="w-full"
+              aria-labelledby="goal-state-label"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
