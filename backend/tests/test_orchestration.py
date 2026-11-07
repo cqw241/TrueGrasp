@@ -541,6 +541,8 @@ async def test_photo_transcription_requires_current_question_and_explicit_submis
 
     class Vision:
         calls = 0
+        latex = "x"
+        doubts = ["检查指数"]
         entered = asyncio.Event()
         release = asyncio.Event()
 
@@ -550,7 +552,7 @@ async def test_photo_transcription_requires_current_question_and_explicit_submis
             assert messages[0].content[-1].image_url.url.startswith("data:image/png;base64,")
             self.entered.set()
             await self.release.wait()
-            return Transcription(latex="x", doubts=["检查指数"], requires_confirmation=False)
+            return Transcription(latex=self.latex, doubts=self.doubts, requires_confirmation=False)
 
     app = create_app(
         engine=business,
@@ -600,7 +602,12 @@ async def test_photo_transcription_requires_current_question_and_explicit_submis
             "doubts": ["检查指数"],
             "requires_confirmation": True,
         }
-        assert vision.calls == 1
+        vision.latex = r"\frac{1}{"
+        vision.doubts = []
+        unparsable = await client.post(path, params=params, headers=headers, content=photo)
+        assert unparsable.json()["doubts"] == [student.UNPARSABLE_DOUBT]
+        vision.latex, vision.doubts = "x", ["检查指数"]
+        assert vision.calls == 2
         assert (await client.get("/api/tasks/1/answer-target")).json() == target
         assert [m["role"] for m in (await client.get("/api/tasks/1/messages")).json()] == [
             "assistant"

@@ -6,7 +6,7 @@ import { TaskAnswer } from '@/components/math/task-answer'
 import { MathText, Tex } from '@/components/math/tex'
 import { ErrorState, LoadingState } from '@/components/states'
 import { Badge } from '@/components/ui/badge'
-import { useStreamEvent } from '@/hooks/use-event-stream'
+import { useStreamEvent, useStreamStatus } from '@/hooks/use-event-stream'
 import { hintLevelLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 
@@ -19,6 +19,11 @@ export function TaskSession({ taskId }: { taskId: number }) {
   // 辅导 Agent 正在生成的回复，由 token 事件逐段拼接；message_done 后改由对话记录展示。
   const [streaming, setStreaming] = useState('')
   const end = useRef<HTMLDivElement>(null)
+
+  // 连接断开期间的 token 和 message_done 会丢失，后端不回放；重连后对话由 REST 重新拉取，
+  // 半截回复必须丢掉，否则下一轮 token 会接在旧内容后面。
+  const status = useStreamStatus()
+  if (status !== 'open' && streaming) setStreaming('')
 
   useStreamEvent('token', (event) => {
     if (event.task_id === taskId) setStreaming((text) => text + event.text)

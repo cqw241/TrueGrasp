@@ -18,6 +18,7 @@ from app.contracts.api import Accepted, AnswerTarget, ChatTurn, MessageCreate, Q
 from app.contracts.entities import Student, Task
 from app.llm.client import LLMOutputError, OpenAICompatClient
 from app.llm.vision import Transcription, transcribe_answer
+from app.verify.parsing import parse_answer
 
 router = APIRouter(tags=["student"])
 MAX_PHOTO_BYTES = 8 * 1024 * 1024
@@ -37,6 +38,17 @@ def _is_photo(data: bytearray, mime: str) -> bool:
         with Image.open(BytesIO(data), formats=[PHOTO_FORMATS[mime]]) as image:
             image.load()
     except (OSError, SyntaxError, ValueError, Image.DecompressionBombError):
+        return False
+    return True
+
+
+UNPARSABLE_DOUBT = "识别结果无法解析为公式，请核对后再提交"
+
+
+def _parses(latex: str) -> bool:
+    try:
+        parse_answer(latex)
+    except Exception:  # noqa: BLE001 - SymPy 解析器可能抛出多种异常，一律视为无法解析
         return False
     return True
 
@@ -188,9 +200,13 @@ async def transcribe_photo(
         if target.phase != "waiting" or target.item_id != item_id or target.turn != turn:
             raise HTTPException(409, "题目已变化，请重新打开当前待答题")
 
-    return await _transcribe_upload(
+    result = await _transcribe_upload(
         request, ensure_current, empty_detail="没有识别到作答，请拍清楚答案或手动输入"
     )
+    # 技术文档第 8 节第 5 条：可解析且无疑问才直接进入诊断；解析失败记为疑问，交学生确认。
+    if not await run_in_threadpool(_parses, result.latex):
+        result.doubts = [*result.doubts, UNPARSABLE_DOUBT]
+    return result
 
 
 @router.post(
