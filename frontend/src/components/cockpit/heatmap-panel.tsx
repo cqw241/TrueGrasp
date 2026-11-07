@@ -154,36 +154,39 @@ function Heatmap({ cells }: { cells: HeatCell[] }) {
           style={{ minWidth: columns * CELL + 80, height: 12 * CELL + 64 }}
         />
       </div>
-      {/* 画布对屏幕阅读器不可见，用表格提供同样的数据。 */}
-      <table className="sr-only">
-        <caption>全书知识热力图数据</caption>
-        <thead>
-          <tr>
-            <th scope="col">讲次与节</th>
-            <th scope="col">知识点</th>
-            <th scope="col">已评估人数</th>
-            <th scope="col">达标比例</th>
-            <th scope="col">有已确认错因的人数</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map(({ cell }) => (
-            <tr key={cell.knowledge_point_id}>
-              <td>
-                {lectureLabel(cell.lecture)} 第 {cell.section} 节
-              </td>
-              <th scope="row">{cell.name}</th>
-              <td>{cell.assessed}</td>
-              <td>
-                {cell.assessed > 0
-                  ? `${Math.round(cell.mastered_ratio * 100)}%`
-                  : '未评估'}
-              </td>
-              <td>{cell.misconception_students}</td>
+      {/* 画布对屏幕阅读器不可见，用表格提供同样的数据。sr-only 放在外层 div：
+          表格会忽略 width 和 overflow，直接用在 table 上会撑宽页面。 */}
+      <div className="sr-only">
+        <table>
+          <caption>全书知识热力图数据</caption>
+          <thead>
+            <tr>
+              <th scope="col">讲次与节</th>
+              <th scope="col">知识点</th>
+              <th scope="col">已评估人数</th>
+              <th scope="col">达标比例</th>
+              <th scope="col">有已确认错因的人数</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map(({ cell }) => (
+              <tr key={cell.knowledge_point_id}>
+                <td>
+                  {lectureLabel(cell.lecture)} 第 {cell.section} 节
+                </td>
+                <th scope="row">{cell.name}</th>
+                <td>{cell.assessed}</td>
+                <td>
+                  {cell.assessed > 0
+                    ? `${Math.round(cell.mastered_ratio * 100)}%`
+                    : '未评估'}
+                </td>
+                <td>{cell.misconception_students}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   )
 }

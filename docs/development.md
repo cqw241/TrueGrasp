@@ -102,6 +102,7 @@ shadcn/ui 组件用 `npx shadcn@latest add <组件>` 添加到 `components/ui/`�
 
 - `POST /api/students/{id}/questions`，请求体 `QuestionCreate {content, attempt}`，返回新建的 `Task`（`type = question`），目前返回 501。T15 实现时还要把 `question` 加进编排层可交互的任务类型（`runtime.py` 的 `INTERACTIVE_TYPES`），并在对话消息里写入 `hint_level` / `solution`，`get_messages` 已经透传这两个字段。
 - `POST /api/students/{id}/question-photo` 识别题目照片，返回 `Transcription`，不创建提问。它和作答照片共用 `_transcribe_upload`（格式、大小、解码检查与视觉模型配置），只是不检查作答轮次。
+
 ## T12 教师驾驶舱
 
 页面在 `frontend/src/pages/teacher-cockpit.tsx`，各面板在 `frontend/src/components/cockpit/`。每个面板单独请求数据，后端接口返回 501 时只有该面板显示“功能开发中”，其余面板照常工作。
