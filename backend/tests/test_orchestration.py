@@ -529,6 +529,150 @@ async def test_http_returns_before_agent_finishes_and_rejects_overlapping_reply(
                 assert messages[-1]["content"] == "SECRET_LESSON"
 
 
+async def test_photo_transcription_requires_current_question_and_explicit_submission(
+    business, tmp_path, dependencies, monkeypatch
+):
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.api import student
+    from app.llm.vision import Transcription
+
+    class Vision:
+        calls = 0
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        async def generate(self, messages, output, tools=None):
+            self.calls += 1
+            assert output is Transcription
+            assert messages[0].content[-1].image_url.url.startswith("data:image/png;base64,")
+            self.entered.set()
+            await self.release.wait()
+            return Transcription(latex="x", doubts=["检查指数"], requires_confirmation=False)
+
+    app = create_app(
+        engine=business,
+        checkpoint_path=str(tmp_path / "checkpoint.db"),
+        orchestration_dependencies=dependencies,
+    )
+    vision = Vision()
+    vision.release.set()
+    app.state.photo_llm = vision
+    with Session(business) as session:
+        session.add(
+            Task(type=TaskType.TUTORING, student_id="A", knowledge_point_id="kp", created_on=TODAY)
+        )
+        session.commit()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        assert (await client.get("/api/tasks?student_id=B")).json() == []
+        assert (await client.post("/api/tasks/1/start")).status_code == 202
+        await app.state.orchestrator.wait_idle()
+        target = (await client.get("/api/tasks/1/answer-target")).json()
+        assert target["phase"] == "waiting" and target["item_id"] == "probe"
+        assert target["stem"] == "题目 probe" and target["prompt"] == "SECRET_LESSON"
+        assert "answer" not in target
+        path = "/api/tasks/1/answer-photo"
+        params = {"item_id": "probe", "turn": target["turn"]}
+        headers = {"Content-Type": "image/png"}
+        buffer = BytesIO()
+        Image.new("RGB", (2, 2)).save(buffer, "PNG")
+        photo = buffer.getvalue()
+        assert (
+            await client.post(path, params={**params, "turn": 0}, headers=headers, content=photo)
+        ).status_code == 409
+        assert (await client.post(path, params=params, content=photo)).status_code == 415
+        assert (
+            await client.post(path, params=params, headers=headers, content=photo[:8])
+        ).status_code == 422
+        with monkeypatch.context() as patch:
+            patch.setattr(student, "MAX_PHOTO_BYTES", 8)
+            assert (
+                await client.post(path, params=params, headers=headers, content=photo)
+            ).status_code == 413
+        result = await client.post(path, params=params, headers=headers, content=photo)
+        assert result.json() == {
+            "latex": "x",
+            "doubts": ["检查指数"],
+            "requires_confirmation": True,
+        }
+        assert vision.calls == 1
+        assert (await client.get("/api/tasks/1/answer-target")).json() == target
+        assert [m["role"] for m in (await client.get("/api/tasks/1/messages")).json()] == [
+            "assistant"
+        ]
+        messages = "/api/tasks/1/messages"
+        reply = {"content": "SECRET_TUTOR_ANSWER", "answering_item_id": "probe"}
+        assert (
+            await client.post(messages, params={"expected_turn": 0}, json=reply)
+        ).status_code == 409
+        vision.entered.clear()
+        vision.release.clear()
+        delayed = asyncio.create_task(
+            client.post(path, params=params, headers=headers, content=photo)
+        )
+        try:
+            async with asyncio.timeout(5):
+                await vision.entered.wait()
+                response = await client.post(
+                    messages, params={"expected_turn": target["turn"]}, json=reply
+                )
+                assert response.status_code == 202
+                await app.state.orchestrator.wait_idle()
+        finally:
+            vision.release.set()
+        assert (await delayed).status_code == 409
+        assert (await client.get("/api/tasks/1/answer-target")).json()["item_id"] != "probe"
+
+
+async def test_existing_verification_works_and_resumes_without_planner(business, tmp_path):
+    verifier = SpyVerifier()
+    app = create_app(
+        engine=business,
+        checkpoint_path=str(tmp_path / "checkpoint.db"),
+        orchestration_dependencies={"verifier": verifier},
+    )
+    with Session(business) as session:
+        session.add(
+            Task(
+                type=TaskType.VERIFICATION,
+                student_id="A",
+                knowledge_point_id="kp",
+                misconception_ids=["slip"],
+                created_on=TODAY,
+            )
+        )
+        session.commit()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        runtime = app.state.orchestrator
+        path = "/api/tasks/1"
+        assert (await client.post(path + "/start")).status_code == 202
+        await runtime.wait_idle()
+        target = (await client.get(path + "/answer-target")).json()
+        assert target["phase"] == "waiting"
+        verifier.fail_judgement = True
+        response = await client.post(
+            path + "/messages",
+            params={"expected_turn": target["turn"]},
+            json={"content": "independent-answer", "answering_item_id": target["item_id"]},
+        )
+        assert response.status_code == 202
+        with pytest.raises(ExceptionGroup, match="编排后台执行失败"):
+            await runtime.wait_idle()
+        assert (await client.get(path + "/answer-target")).json()["phase"] == "failed"
+        verifier.fail_judgement = False
+        assert (await client.post(path + "/start")).status_code == 202
+        await runtime.wait_idle()
+        assert (await client.get(path + "/answer-target")).json()["phase"] == "closed"
+
+
 async def test_unconfigured_agents_and_sse_http(business, tmp_path):
     app = create_app(engine=business, checkpoint_path=str(tmp_path / "checkpoint.db"))
     with Session(business) as session:

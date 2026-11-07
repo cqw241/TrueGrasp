@@ -105,6 +105,14 @@ class MessageCreate(BaseModel):
     answering_item_id: str | None = None
 
 
+class AnswerTarget(BaseModel):
+    phase: Literal["idle", "processing", "waiting", "failed", "closed"]
+    item_id: str | None = None
+    prompt: str = ""
+    stem: str = ""
+    turn: int = 0
+
+
 class Accepted(BaseModel):
     """异步处理已受理，结果通过 SSE 推送。"""
 

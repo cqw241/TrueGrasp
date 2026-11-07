@@ -644,6 +644,23 @@
               "type": "integer",
               "title": "Task Id"
             }
+          },
+          {
+            "name": "expected_turn",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Turn"
+            }
           }
         ],
         "requestBody": {
@@ -674,6 +691,202 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/answer-target": {
+      "get": {
+        "tags": [
+          "student"
+        ],
+        "summary": "Get Answer Target",
+        "operationId": "get_answer_target_api_tasks__task_id__answer_target_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerTarget"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/answer-photo": {
+      "post": {
+        "tags": [
+          "student"
+        ],
+        "summary": "Transcribe Photo",
+        "description": "识别当前题目的作答照片，返回待确认草稿，不提交作答。",
+        "operationId": "transcribe_photo_api_tasks__task_id__answer_photo_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "turn",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "title": "Turn"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transcription"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "任务不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "题目或作答轮次已变化",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "照片超过大小限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "不支持该图片类型",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参数无效、图片无法解码或未识别到作答",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PhotoUploadError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "模型识别失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "图片识别服务未配置",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
               }
             }
           }
@@ -1128,6 +1341,52 @@
         },
         "type": "object",
         "title": "AdvanceClock"
+      },
+      "AnswerTarget": {
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "processing",
+              "waiting",
+              "failed",
+              "closed"
+            ],
+            "title": "Phase"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "prompt": {
+            "type": "string",
+            "title": "Prompt",
+            "default": ""
+          },
+          "stem": {
+            "type": "string",
+            "title": "Stem",
+            "default": ""
+          },
+          "turn": {
+            "type": "integer",
+            "title": "Turn",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "phase"
+        ],
+        "title": "AnswerTarget"
       },
       "Body_import_homework_api_homework_post": {
         "properties": {
@@ -2188,6 +2447,19 @@
         "title": "Operation",
         "description": "题目结构化描述 ItemSpec 的运算类型，决定 verify_item 如何重算。"
       },
+      "PhotoUploadError": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "PhotoUploadError"
+      },
       "Prediction": {
         "properties": {
           "misconception_id": {
@@ -2597,6 +2869,33 @@
         ],
         "title": "TokenDelta",
         "description": "辅导 Agent 的流式文本片段。"
+      },
+      "Transcription": {
+        "properties": {
+          "latex": {
+            "type": "string",
+            "title": "Latex"
+          },
+          "doubts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Doubts",
+            "description": "Uncertain symbols or regions needing confirmation"
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "title": "Requires Confirmation",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "latex",
+          "doubts"
+        ],
+        "title": "Transcription"
       },
       "ValidationError": {
         "properties": {

@@ -5,7 +5,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 from openai import OpenAIError
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.api.stub import not_implemented
 from app.config import get_settings
@@ -107,12 +107,21 @@ def class_issues() -> list[CommonIssue]:
 
 @router.get("/tasks")
 def list_tasks(
+    request: Request,
     student_id: str | None = None,
     type: TaskType | None = None,
     status: TaskStatus | None = None,
 ) -> list[Task]:
     """干预计划；学生辅导台也用它取任务卡。"""
-    not_implemented("T08")
+    query = select(Task).order_by(Task.id.desc())
+    if student_id is not None:
+        query = query.where(Task.student_id == student_id)
+    if type is not None:
+        query = query.where(Task.type == type)
+    if status is not None:
+        query = query.where(Task.status == status)
+    with Session(request.app.state.orchestrator.engine) as session:
+        return list(session.exec(query))
 
 
 @router.get("/escalations")
