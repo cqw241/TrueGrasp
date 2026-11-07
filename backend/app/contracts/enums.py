@@ -81,6 +81,7 @@ class TaskType(StrEnum):
     PRECHECK = "precheck"  # 章前预检
     ESCALATION = "escalation"  # 转教师
     CLASS_REVIEW = "class_review"  # 建议课上集中讲解；student_id 为空
+    QUESTION = "question"  # 学生主动提问（技术文档第 5 节 ⑥）
 
 
 class TaskStatus(StrEnum):

@@ -98,11 +98,22 @@ class ChatTurn(BaseModel):
     role: Literal["assistant", "user"]
     content: str
     item: Item | None = None  # 这条消息附带的题目
+    hint_level: int | None = Field(
+        default=None, ge=1, le=3
+    )  # 分层提示：1 思路方向、2 关键步骤、3 具体计算
+    solution: bool = False  # 三层提示用完后的完整解答
 
 
 class MessageCreate(BaseModel):
     content: str  # 学生的回复；作答时为 LaTeX
     answering_item_id: str | None = None
+
+
+class QuestionCreate(BaseModel):
+    """学生主动提问：题目（文字或 LaTeX），可附上自己的尝试或卡住的位置。"""
+
+    content: str = Field(min_length=1)
+    attempt: str = ""
 
 
 class AnswerTarget(BaseModel):

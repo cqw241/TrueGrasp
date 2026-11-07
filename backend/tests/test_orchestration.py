@@ -629,6 +629,46 @@ async def test_photo_transcription_requires_current_question_and_explicit_submis
         assert (await client.get("/api/tasks/1/answer-target")).json()["item_id"] != "probe"
 
 
+async def test_question_photo_transcribes_and_question_is_stubbed(business, tmp_path, dependencies):
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.llm.vision import Transcription
+
+    class Vision:
+        async def generate(self, messages, output, tools=None):
+            return Transcription(latex=r"\int x\,dx", doubts=[], requires_confirmation=False)
+
+    app = create_app(
+        engine=business,
+        checkpoint_path=str(tmp_path / "checkpoint.db"),
+        orchestration_dependencies=dependencies,
+    )
+    app.state.photo_llm = Vision()
+    buffer = BytesIO()
+    Image.new("RGB", (2, 2)).save(buffer, "PNG")
+    photo = buffer.getvalue()
+    headers = {"Content-Type": "image/png"}
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        path = "/api/students/A/question-photo"
+        assert (
+            await client.post("/api/students/nobody/question-photo", headers=headers, content=photo)
+        ).status_code == 404
+        assert (await client.post(path, content=photo)).status_code == 415
+        assert (await client.post(path, headers=headers, content=photo[:8])).status_code == 422
+        result = await client.post(path, headers=headers, content=photo)
+        assert result.json()["latex"] == r"\int x\,dx"
+        response = await client.post("/api/students/A/questions", json={"content": "x"})
+        assert response.status_code == 501
+        assert (
+            await client.post("/api/students/A/questions", json={"content": ""})
+        ).status_code == 422
+
+
 async def test_existing_verification_works_and_resumes_without_planner(business, tmp_path):
     verifier = SpyVerifier()
     app = create_app(
