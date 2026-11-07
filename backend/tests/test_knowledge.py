@@ -148,6 +148,24 @@ def test_real_math_checks_validate_teacher_template(template_content):
         assert content.issues == []
 
 
+def test_math_check_reports_invalid_specs_and_missing_quality_requirements():
+    from app.verify.tools import SympyMathTools
+
+    content = load(LECTURES)
+    malformed = content.items["calc.ch2.chain_multi.seed1"]
+    malformed.spec.expr = "sin("
+    distractor = content.items["calc.ch2.chain_rule_multi.seed_square_inner"]
+    distractor.predictions[0].answer = distractor.answer
+    explanation = content.items["calc.ch12.s1.seed_term_zero_counterexample"]
+    explanation.rubric = [" "]
+    check_math(content, SympyMathTools())
+    assert {(i.file, i.ref) for i in content.errors} == {
+        ("02.yaml", malformed.id),
+        ("02.yaml", distractor.id),
+        ("12.yaml", explanation.id),
+    }
+
+
 def test_c2_diagnostic_coverage_and_fresh_seeds():
     """每个精修错因可被追问证伪，验证回退题不重复教学中使用的题。"""
     from app.verify.tools import SympyMathTools
@@ -179,7 +197,12 @@ def test_c2_diagnostic_coverage_and_fresh_seeds():
                 for probe in (content.items[pid] for pid in mis.probe_item_ids)
             ), mis.id
         seeds = [i for i in graph.seed_items(kp) if i.purpose == ItemPurpose.VERIFICATION]
-        assert 1 <= len(seeds) <= 2, kp
+        assert {i.dimension.value for i in seeds} >= {"correctness", "distractor", "near_transfer"}
+        assert any(
+            {p.misconception_id for p in seed.predictions} == {m.id for m in misconceptions}
+            for seed in seeds
+            if seed.dimension.value == "distractor"
+        ), kp
         for seed in seeds:
             assert seed.spec is not None, seed.id
             fingerprint = tools.fingerprint(seed.spec)

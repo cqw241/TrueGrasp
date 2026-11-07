@@ -256,18 +256,38 @@ def check_math(content: Content, tools: MathTools) -> None:
     """用核验工具验算种子题、检查追问题的区分度，并为有 spec 的题目生成指纹。"""
     try:
         for item in content.items.values():
+            if item.dimension == Dimension.EXPLANATION and not any(
+                criterion.strip() for criterion in item.rubric
+            ):
+                content._issue(item.id, "解释题需要非空评分要点 rubric")
+            distractor = item.dimension == Dimension.DISTRACTOR
+            if distractor and (item.spec is None or not item.predictions):
+                content._issue(item.id, "抗诱错题需要 spec 和 predictions")
+                continue
             if item.spec is None:
                 continue
-            item.fingerprint = tools.fingerprint(item.spec)
             checked = tools.verify_item(item.spec, item.answer)
             if checked.ok is None:
                 content._issue(item.id, f"核验工具无法重算标准答案：{checked.detail}")
             elif not checked.ok:
                 content._issue(item.id, f"标准答案与工具重算结果 {checked.computed} 不一致")
-            if item.purpose == ItemPurpose.PROBE and item.predictions:
+            else:
+                try:
+                    item.fingerprint = tools.fingerprint(item.spec)
+                except (ValueError, SyntaxError, TypeError, ArithmeticError) as exc:
+                    content._issue(item.id, f"无法计算题目指纹：{exc}")
+            if item.predictions and (item.purpose == ItemPurpose.PROBE or distractor):
                 distinct = tools.check_distinct(item.spec, item.answer, item.predictions)
                 if not distinct.ok:
-                    content._issue(item.id, f"追问题没有区分度：{distinct.detail}")
+                    label = "抗诱错题" if distractor else "追问题"
+                    content._issue(item.id, f"{label}没有区分度：{distinct.detail}")
+                elif distractor:
+                    for prediction in item.predictions:
+                        if not distinct.separates(prediction.misconception_id):
+                            content._issue(
+                                item.id,
+                                f"抗诱错题预测与正确答案等价：{prediction.misconception_id}",
+                            )
     except NotImplementedError:
         content.issues.append(
             Issue("", "", "核验工具尚未实现（T05），跳过 verify_item 与 check_distinct", "notice")

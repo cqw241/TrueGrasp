@@ -108,3 +108,18 @@ items:
     expr: 2*x*cos(x**2)
     variables: [x]
   answer: '\sin(x^2)+C'
+- id: calc.ch4.substitution.seed_cos_affine_distractor
+  knowledge_point: calc.ch4.substitution
+  purpose: verification
+  dimension: distractor
+  stem: '求 $\int \cos(5x+1)\,dx$'
+  spec:
+    operation: indefinite_integral
+    expr: cos(5*x+1)
+    variables: [x]
+  answer: '\frac{\sin(5x+1)}{5}+C'
+  predictions:
+  - misconception_id: calc.ch4.substitution.omit_scale
+    answer: '\sin(5x+1)+C'
+  - misconception_id: calc.ch4.substitution.multiply_scale
+    answer: '5\sin(5x+1)+C'

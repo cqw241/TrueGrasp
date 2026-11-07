@@ -237,12 +237,23 @@ class IndependentVerifier:
             if context.lecture <= point.lecture or not self.knowledge.path(point.id, context.id):
                 raise ValueError("跨章节情境必须是目标知识点的后续章节")
         rubric = self._rubric(inp) if Dimension.EXPLANATION in inp.dimensions else []
-        if Dimension.EXPLANATION in inp.dimensions and not rubric:
-            raise ValueError("解释题必须有已确认错因的策略卡评分要点")
         used = set(inp.used_fingerprints)
         items = []
         for dimension in inp.dimensions:
             failures = []
+            if dimension == Dimension.EXPLANATION and not rubric:
+                if not any(
+                    seed.purpose == ItemPurpose.VERIFICATION
+                    and seed.dimension == dimension
+                    and seed.source == ItemSource.SEED
+                    and any(criterion.strip() for criterion in seed.rubric)
+                    for seed in self.knowledge.seed_items(point.id)
+                ):
+                    raise ValueError("解释题需要策略卡评分要点或带评分要点的种子题")
+                item = await self._seed(inp, used, dimension, rubric, failures)
+                items.append(item)
+                used.add(item.fingerprint)
+                continue
             for _ in range(MAX_ATTEMPTS):
                 payload = {
                     "input": inp.model_dump(mode="json"),
@@ -296,7 +307,11 @@ class IndependentVerifier:
             else inp.knowledge_point_id
         )
         for seed in self.knowledge.seed_items(pool_id):
-            if seed.dimension != dimension or seed.source != ItemSource.SEED:
+            if (
+                seed.purpose != ItemPurpose.VERIFICATION
+                or seed.dimension != dimension
+                or seed.source != ItemSource.SEED
+            ):
                 continue
             item = seed.model_copy(deep=True)
             item.id = f"verification.{uuid4().hex}"
@@ -306,7 +321,7 @@ class IndependentVerifier:
             allowed = {m.id for m in inp.confirmed_misconceptions} - {SLIP}
             item.predictions = [p for p in item.predictions if p.misconception_id in allowed]
             if dimension == Dimension.EXPLANATION:
-                item.rubric = rubric.copy()
+                item.rubric = list(dict.fromkeys(r for r in [*seed.rubric, *rubric] if r.strip()))
             try:
                 failure = await self._gate(item, inp, used, dimension)
             except (LLMOutputError, APIError, ValueError):
@@ -334,6 +349,7 @@ class IndependentVerifier:
         correct = None
         details = []
         matched = None
+        tool_matches = set()
         unresolved = []
         known_nonmatches = set()
         if item.spec is not None and not explanation:
@@ -352,16 +368,19 @@ class IndependentVerifier:
                         item.spec.answer_mode,
                         item.spec.variables,
                     )
-                    if result.equivalent is True and matched is None:
-                        matched = prediction.misconception_id
-                        details.append(f"工具命中错因预测：{matched}")
+                    if result.equivalent is True:
+                        tool_matches.add(prediction.misconception_id)
                     elif result.equivalent is None:
                         unresolved.append(prediction)
                     elif result.equivalent is False:
                         known_nonmatches.add(prediction.misconception_id)
         else:
             unresolved = [p for p in item.predictions if p.misconception_id != SLIP]
-        if correct is not None and (matched is not None or not unresolved):
+        if tool_matches:
+            details.append("工具命中错因预测：" + "、".join(sorted(tool_matches)))
+        if len(tool_matches) == 1 and not unresolved:
+            matched = next(iter(tool_matches))
+        if correct is not None and (tool_matches or not unresolved):
             return Judgement(
                 is_correct=correct,
                 matched_misconception_id=matched,
@@ -378,14 +397,20 @@ class IndependentVerifier:
             "tool_is_correct": correct,
             "unresolved_predictions": [p.model_dump() for p in unresolved],
         }
-        review = await self.llm.generate(
-            [
-                ChatMessage(role="system", content=JUDGE_PROMPT),
-                ChatMessage(role="user", content=json.dumps(payload, ensure_ascii=False)),
-            ],
-            ModelReview,
-            tools=self._review_tools(),
-        )
+        try:
+            review = await self.llm.generate(
+                [
+                    ChatMessage(role="system", content=JUDGE_PROMPT),
+                    ChatMessage(role="user", content=json.dumps(payload, ensure_ascii=False)),
+                ],
+                ModelReview,
+                tools=self._review_tools(),
+            )
+        except (APIError, LLMOutputError):
+            if correct is None:
+                raise
+            details.append("模型复核不可用；保留工具判定，错因未确认")
+            return Judgement(is_correct=correct, judged_by=JudgedBy.TOOL, reason="；".join(details))
         if correct is None:
             correct = review.is_correct
             if explanation:
@@ -400,9 +425,30 @@ class IndependentVerifier:
                 elif review.is_correct is not None:
                     correct = review.is_correct and all(scores)
         allowed = {p.misconception_id for p in unresolved} - known_nonmatches
-        if matched is None and review.matched_misconception_id in allowed:
-            matched = review.matched_misconception_id
-        if correct is True:
+        if not tool_matches and review.matched_misconception_id in allowed:
+            candidate = next(
+                p for p in unresolved if p.misconception_id == review.matched_misconception_id
+            )
+            alternatives = [
+                p
+                for p in unresolved
+                if p.misconception_id in allowed
+                and p.misconception_id != candidate.misconception_id
+            ]
+            if not alternatives or (
+                item.spec is not None
+                and all(
+                    self.tools.check_equivalent(
+                        candidate.answer, p.answer, item.spec.answer_mode, item.spec.variables
+                    ).equivalent
+                    is False
+                    for p in alternatives
+                )
+            ):
+                matched = candidate.misconception_id
+            else:
+                details.append("模型命中的预测与其他候选无法区分")
+        if correct is not False:
             matched = None
         details.append(review.reason)
         if explanation:

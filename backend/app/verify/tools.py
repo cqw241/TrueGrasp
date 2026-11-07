@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import random
+from itertools import permutations
 
 import sympy as sp
 from sympy.calculus.util import continuous_domain
@@ -184,12 +185,43 @@ class SympyMathTools:
 
     def fingerprint(self, spec: ItemSpec) -> str:
         canonical = spec.model_dump(mode="json")
-        canonical["expr"] = sp.srepr(sp.simplify(parse_expr(spec.expr)))
+        # Preserve variable roles (including repeated derivative variables), not spelling.
+        variables = [] if spec.bounds or spec.operation == Operation.EXPRESSION else spec.variables
+        names = list(dict.fromkeys([*(bound.var for bound in spec.bounds), *variables]))
+        aliases = {name: f"@{index}" for index, name in enumerate(names)}
+        fixed = {symbol(name): sp.Symbol(alias, real=True) for name, alias in aliases.items()}
+        canonical["variables"] = [aliases[name] for name in variables]
+
+        formulas = [sp.simplify(parse_expr(spec.expr))]
+        for bound in canonical["bounds"]:
+            bound["var"] = aliases[bound["var"]]
+            for key in ("lower", "upper"):
+                formulas.append(sp.simplify(parse_expr(bound[key])))
+        finite_limit = spec.limit_point not in (None, "oo", "-oo")
+        if finite_limit:
+            formulas.append(sp.simplify(parse_expr(spec.limit_point)))
+
+        # Unbound symbols (e.g. y in a partial derivative by x) have no declared order.
+        # Try all labelings for ordinary exercises; cap the work for oversized model output.
+        free = set().union(*(expr.free_symbols for expr in formulas)) - fixed.keys()
+        labels = [sp.Symbol(f"@{len(fixed) + i}", real=True) for i in range(len(free))]
+        labelings = permutations(labels) if len(free) <= 4 else [tuple(sorted(free, key=str))]
+        unbound = sorted(free, key=str)
+        normalized = iter(
+            min(
+                tuple(
+                    sp.srepr(expr.xreplace(fixed | dict(zip(unbound, labeling, strict=True))))
+                    for expr in formulas
+                )
+                for labeling in labelings
+            )
+        )
+        canonical["expr"] = next(normalized)
         for bound in canonical["bounds"]:
             for key in ("lower", "upper"):
-                bound[key] = sp.srepr(sp.simplify(parse_expr(bound[key])))
-        if spec.operation == Operation.EXPRESSION:
-            canonical["variables"] = sorted(set(spec.variables))
+                bound[key] = next(normalized)
+        if finite_limit:
+            canonical["limit_point"] = next(normalized)
         encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode()).hexdigest()
 

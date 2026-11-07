@@ -188,3 +188,33 @@ items:
     expr: (x+y)**2+x*y
     variables: [x]
   answer: 2x+3y
+- id: calc.ch9.partial_derivative.seed_fixed_other_distractor
+  knowledge_point: calc.ch9.partial_derivative
+  purpose: verification
+  dimension: distractor
+  stem: '设 $x,y$ 独立，求 $z=xy^2+y^4$ 对 $x$ 的偏导'
+  spec:
+    operation: derivative
+    expr: x*y**2+y**4
+    variables: [x]
+  answer: 'y^2'
+  predictions:
+  - misconception_id: calc.ch9.partial_derivative.vary_other
+    answer: 'y^2+2xy+4y^3'
+  - misconception_id: calc.ch9.partial_derivative.keep_constant_term
+    answer: 'y^2+y^4'
+- id: calc.ch9.multivar_chain.seed_two_rates_distractor
+  knowledge_point: calc.ch9.multivar_chain
+  purpose: verification
+  dimension: distractor
+  stem: '设 $z=u+v^2,u=t^3,v=2t$，求 $dz/dt$'
+  spec:
+    operation: derivative
+    expr: t**3+4*t**2
+    variables: [t]
+  answer: '3t^2+8t'
+  predictions:
+  - misconception_id: calc.ch9.multivar_chain.omit_path
+    answer: '3t^2'
+  - misconception_id: calc.ch9.multivar_chain.omit_edge_rate
+    answer: '1+4t'

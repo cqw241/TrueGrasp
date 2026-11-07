@@ -296,6 +296,51 @@ async def test_parse_failure_model_fallback_and_prediction_allowlist(graph):
     assert result.judged_by == JudgedBy.MODEL
 
 
+async def test_same_wrong_answer_cannot_uniquely_identify_two_causes(graph):
+    verifier = create_verifier(llm=ScriptedLLM(), knowledge=graph)
+    item = question(
+        predictions=[
+            Prediction(misconception_id="miss", answer="x"),
+            Prediction(misconception_id="other", answer="x"),
+        ]
+    )
+    for _ in range(2):
+        result = await verifier.judge(item, "x")
+        assert result.is_correct is False
+        assert result.matched_misconception_id is None
+        item.predictions.reverse()
+    llm = ScriptedLLM(
+        ModelReview(is_correct=False, matched_misconception_id="miss", reason="识别出错答")
+    )
+    model_verifier = create_verifier(llm=llm, knowledge=graph)
+    result = await model_verifier.judge(item, r"\begin{aligned}x\end{aligned}")
+    assert result.is_correct is False
+    assert result.matched_misconception_id is None
+
+
+async def test_known_wrong_verdict_survives_unavailable_model(graph):
+    item = question(predictions=[Prediction(misconception_id="miss", answer=r"\frac{")])
+    verifier = create_verifier(llm=ScriptedLLM(LLMOutputError("offline")), knowledge=graph)
+    result = await verifier.judge(item, "0")
+    assert result.is_correct is False
+    assert result.matched_misconception_id is None
+    assert result.judged_by == JudgedBy.TOOL
+
+
+async def test_authored_explanation_can_be_used_without_confirmed_misconception(graph):
+    seed = question(dimension=Dimension.EXPLANATION, spec=False)
+    seed.stem = "给出通项趋零但级数发散的反例并论证"
+    seed.answer = "调和级数可用分组下界证明发散"
+    seed.rubric = ["证明通项趋零", "证明级数发散"]
+    graph._items = [seed]
+    llm = ScriptedLLM(ItemReview(valid=True, reason="题目与评分点一致"))
+    [item] = await create_verifier(llm=llm, knowledge=graph).compose(
+        request(Dimension.EXPLANATION, misconception=None)
+    )
+    assert item.rubric == seed.rubric
+    assert [call[1] for call in llm.calls] == [ItemReview]
+
+
 async def test_model_cannot_overturn_known_tool_result(graph):
     class PartialTools(SympyMathTools):
         def check_equivalent(self, a, b, mode, variables):

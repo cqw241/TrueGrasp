@@ -6,9 +6,14 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
+from sqlmodel import Session, select
 
 from app.contracts.agents import TutorTurnInput, VerifierInput
-from app.contracts.entities import Item
+from app.contracts.entities import Item, Task
+from app.contracts.enums import Dimension, ItemPurpose, ItemSource, TaskType
+from app.orchestration.inputs import used_fingerprints
+from app.orchestration.storage import ItemExposure
+from app.verify.tools import SympyMathTools
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -34,6 +39,7 @@ class RunState(TypedDict, total=False):
     context_knowledge_point_id: str | None
     verifier_input: dict[str, Any]
     verification_items: list[dict[str, Any]]
+    stale_verification_item: bool
     item_index: int
     judgement: dict[str, Any]
     followup_event_ids: list[int]
@@ -83,17 +89,92 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
     verifier.add_conditional_edges(START, lambda state: state["operation"])
     verifier.add_edge("compose", END)
     verifier.add_edge("judge", END)
-    verifier_graph = verifier.compile()
+    # The parent checkpoints both calls. The subgraph must not resume with a
+    # previously captured input after the parent has refreshed its whitelist.
+    verifier_graph = verifier.compile(checkpointer=False)
 
     async def call_tutor(state: RunState) -> dict:
         result = await tutor_graph.ainvoke({"input": runtime.tutor_input(state)})
         return {"tutor_turn": result["output"]}
 
+    def prepare_verification(state: RunState) -> dict:
+        if state.get("dimensions") is None:
+            with Session(runtime.engine) as session:
+                task = session.get(Task, state["task_id"])
+                if task and task.type == TaskType.VERIFICATION and not task.misconception_ids:
+                    seed_dimensions = set(
+                        session.exec(
+                            select(Item.dimension).where(
+                                Item.knowledge_point_id == task.knowledge_point_id,
+                                Item.purpose == ItemPurpose.VERIFICATION,
+                                Item.source == ItemSource.SEED,
+                            )
+                        )
+                    )
+                    if seed_dimensions == {Dimension.EXPLANATION}:
+                        state = {**state, "dimensions": [Dimension.EXPLANATION.value]}
+        return runtime.prepare_verification(state)
+
     async def compose_verification(state: RunState) -> dict:
+        # A checkpoint may have been saved with legacy fingerprints or before another
+        # task showed a question. Refresh the whitelist before resuming composition.
+        prepared = prepare_verification(state)
         result = await verifier_graph.ainvoke(
-            {"operation": "compose", "input": state["verifier_input"]}
+            {"operation": "compose", "input": prepared["verifier_input"]}, durability="exit"
         )
-        return {"verification_items": result["items"], "item_index": 0}
+        return {**prepared, "verification_items": result["items"], "item_index": 0}
+
+    def present_verification(state: RunState) -> dict:
+        item = Item.model_validate(state["verification_items"][state["item_index"]])
+        if item.spec is not None:
+            current = SympyMathTools().fingerprint(item.spec)
+            with Session(runtime.engine) as session:
+                task = session.get(Task, state["task_id"])
+                # Node retries can follow a successful business write but failed checkpoint.
+                recorded = session.exec(
+                    select(ItemExposure).where(
+                        ItemExposure.student_id == task.student_id,
+                        ItemExposure.task_id == task.id,
+                        ItemExposure.item_id == item.id,
+                    )
+                ).first()
+                if recorded is None and current in used_fingerprints(
+                    session, task.student_id, state["shown_item_ids"]
+                ):
+                    return {"stale_verification_item": True}
+        return {**runtime.present_item(state), "stale_verification_item": False}
+
+    async def replace_verification_item(state: RunState) -> dict:
+        items = state["verification_items"].copy()
+        index = state["item_index"]
+        prepared = prepare_verification(state)["verifier_input"]
+        used = set(prepared["used_fingerprints"])
+        tools = SympyMathTools()
+        for i, value in enumerate(items):
+            if i == index:
+                continue
+            staged = Item.model_validate(value)
+            if staged.fingerprint:
+                used.add(staged.fingerprint)
+            if staged.spec:
+                used.add(tools.fingerprint(staged.spec))
+        inp = {
+            **prepared,
+            "dimensions": [items[index]["dimension"]],
+            "used_fingerprints": sorted(used),
+        }
+        result = await verifier_graph.ainvoke(
+            {"operation": "compose", "input": inp}, durability="exit"
+        )
+        replacements = result["items"]
+        if len(replacements) != 1:
+            raise ValueError("重选验证题时只允许返回一道题")
+        replacement = Item.model_validate(replacements[0])
+        if replacement.spec is not None and tools.fingerprint(replacement.spec) in used:
+            raise ValueError("重选的验证题与已用题或待展示题重复")
+        runtime.save_items({**state, "verifier_input": inp, "verification_items": replacements})
+        items[index] = replacements[0]
+        return {"verification_items": items, "stale_verification_item": False}
 
     async def judge_verification(state: RunState) -> dict:
         # 这里也不透传父图：评阅只能看到这一道独立测题和该题作答。
@@ -102,7 +183,8 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
                 "operation": "judge",
                 "item": state["verification_items"][state["item_index"]],
                 "answer": state["incoming_message"]["content"],
-            }
+            },
+            durability="exit",
         )
         return {"judgement": result["judgement"]}
 
@@ -118,10 +200,11 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
         "activate": runtime.activate,
         "tutor": call_tutor,
         "save_tutor": runtime.save_tutor,
-        "prepare_verification": runtime.prepare_verification,
+        "prepare_verification": prepare_verification,
         "compose_verification": compose_verification,
         "save_items": runtime.save_items,
-        "present_item": runtime.present_item,
+        "present_item": present_verification,
+        "replace_verification_item": replace_verification_item,
         "wait_input": wait_for_student,
         "accept_input": runtime.accept_input,
         "judge_verification": judge_verification,
@@ -151,7 +234,13 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
     graph.add_edge("prepare_verification", "compose_verification")
     graph.add_edge("compose_verification", "save_items")
     graph.add_edge("save_items", "present_item")
-    graph.add_edge("present_item", "wait_input")
+    graph.add_conditional_edges(
+        "present_item",
+        lambda state: (
+            "replace_verification_item" if state["stale_verification_item"] else "wait_input"
+        ),
+    )
+    graph.add_edge("replace_verification_item", "present_item")
     graph.add_edge("wait_input", "accept_input")
     graph.add_conditional_edges(
         "accept_input",
