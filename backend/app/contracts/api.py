@@ -91,6 +91,33 @@ class ResolveEscalation(BaseModel):
     note: str
 
 
+class TaskOverride(BaseModel):
+    """教师修改或覆盖一条计划任务；被覆盖的计划不再被 Agent 改回（T16、T24）。"""
+
+    due_date: date | None = None  # 为空时不改到期日
+    cancel: bool = False
+    note: str = ""  # 修改理由，记入教师处理
+
+
+class TaskControl(BaseModel):
+    """教师对一条任务的控制状态，驾驶舱据此标记接管和覆盖。"""
+
+    task_id: int
+    taken_over: bool  # 教师接管期间 Agent 不再向该学生发出教学动作
+    overridden: bool
+    note: str = ""
+
+
+class TakeoverRequest(BaseModel):
+    note: str = ""
+
+
+class AdoptMisconception(BaseModel):
+    """采纳一条未建模错因，进入错因库；可同时修改描述。"""
+
+    description: str | None = None
+
+
 # ---------- 学生辅导台 ----------
 
 

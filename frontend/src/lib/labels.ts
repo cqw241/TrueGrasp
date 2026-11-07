@@ -1,5 +1,6 @@
 import type {
   Dimension,
+  EvidenceKind,
   HypothesisStatus,
   JudgedBy,
   MasteryState,
@@ -58,6 +59,14 @@ export const hypothesisStatusLabel: Record<HypothesisStatus, string> = {
   pending: '待检验',
   supported: '支持',
   refuted: '排除',
+}
+
+export const evidenceKindLabel: Record<EvidenceKind, string> = {
+  homework: '作业',
+  diagnosis: '诊断追问',
+  practice: '干预练习',
+  verification: '验证作答',
+  teacher: '教师处理',
 }
 
 export const judgedByLabel: Record<JudgedBy, string> = {
