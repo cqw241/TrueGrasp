@@ -26,7 +26,7 @@ from app.contracts.agents import (
     TutorTurnInput,
     Verifier,
 )
-from app.contracts.api import ChatTurn, MessageCreate
+from app.contracts.api import AnswerTarget, ChatTurn, MessageCreate
 from app.contracts.entities import Event, Evidence, Item, Mastery, Task
 from app.contracts.enums import (
     Dimension,
@@ -149,9 +149,8 @@ class Orchestrator:
                 raise OrchestrationError(409, f"任务已结束：{task.status}")
             if task.type not in INTERACTIVE_TYPES or task.student_id is None:
                 raise OrchestrationError(409, "该任务不接受学生交互")
-            self._require("planner")
             if task.type == TaskType.TUTORING:
-                self._require("tutor", "verifier", "knowledge")
+                self._require("planner", "tutor", "verifier", "knowledge")
             else:
                 self._require("verifier")
             return task
@@ -208,7 +207,7 @@ class Orchestrator:
 
     def recover_pending(self, *, new_only: bool = False) -> None:
         """只恢复事务中已登记的工作；缺少真实 Agent 时保留待办，不生成模拟结果。"""
-        if self._closed or self.planner is None:
+        if self._closed:
             return
         with Session(self.engine) as session:
             work_items = session.exec(select(PendingWork).where(PendingWork.pending)).all()
@@ -216,11 +215,13 @@ class Orchestrator:
                 if work.key in self._failed_work or (new_only and work.key in self._seen_work):
                     continue
                 kind, _, target = work.key.partition(":")
+                if kind == "event" and self.planner is None:
+                    continue
                 if kind == "task":
                     task = self._task(session, int(target))
                     if self.verifier is None or (
                         task.type == TaskType.TUTORING
-                        and (self.tutor is None or self.knowledge is None)
+                        and (self.planner is None or self.tutor is None or self.knowledge is None)
                     ):
                         continue
                 self._spawn(
@@ -349,21 +350,30 @@ class Orchestrator:
             )
             await self._run_task(key, None if snapshot.next else initial)
 
-    async def _validate_message(self, task_id: int, body: MessageCreate):
+    async def _validate_message(
+        self, task_id: int, body: MessageCreate, *, expected_turn: int | None = None
+    ):
         self._check_task(task_id)
         snapshot = await self.graph.aget_state(self._config(f"task:{task_id}"))
         if not snapshot.interrupts:
             raise OrchestrationError(409, "任务当前没有等待学生回复")
         if body.answering_item_id != snapshot.values.get("awaiting_item_id"):
             raise OrchestrationError(409, "回复的题目与当前待答题目不一致")
+        if expected_turn is not None and expected_turn != len(snapshot.values.get("messages", [])):
+            raise OrchestrationError(409, "作答轮次已变化，请刷新后重试")
         return snapshot
 
     async def submit_message(
-        self, task_id: int, body: MessageCreate, *, teaching_date: date | None = None
+        self,
+        task_id: int,
+        body: MessageCreate,
+        *,
+        teaching_date: date | None = None,
+        expected_turn: int | None = None,
     ) -> None:
         key = f"task:{task_id}"
         async with self._lock(key):
-            await self._validate_message(task_id, body)
+            await self._validate_message(task_id, body, expected_turn=expected_turn)
             current_date = teaching_date or (self.teaching_date() if self.teaching_date else None)
             await self._run_task(
                 key,
@@ -397,7 +407,9 @@ class Orchestrator:
                 raise OrchestrationError(409, "任务尚未到期")
             self._spawn(key, lambda: self.start_task(task_id))
 
-    async def enqueue_message(self, task_id: int, body: MessageCreate) -> None:
+    async def enqueue_message(
+        self, task_id: int, body: MessageCreate, *, expected_turn: int | None = None
+    ) -> None:
         key = f"task:{task_id}"
         # 受理前校验并占用作业键，避免两次请求都消费同一个等待点。
         if key in self._jobs:
@@ -405,8 +417,10 @@ class Orchestrator:
         async with self._lock(key):
             if key in self._jobs:
                 raise OrchestrationError(409, "该任务正在处理上一条消息")
-            await self._validate_message(task_id, body)
-            self._spawn(key, lambda: self.submit_message(task_id, body))
+            await self._validate_message(task_id, body, expected_turn=expected_turn)
+            self._spawn(
+                key, lambda: self.submit_message(task_id, body, expected_turn=expected_turn)
+            )
 
     async def get_messages(self, task_id: int) -> list[ChatTurn]:
         with Session(self.engine) as session:
@@ -421,6 +435,40 @@ class Orchestrator:
             )
             for message in snapshot.values.get("messages", [])
         ]
+
+    async def get_answer_target(self, task_id: int) -> AnswerTarget:
+        key = f"task:{task_id}"
+        processing = key in self._jobs
+        snapshot = await self.graph.aget_state(self._config(key))
+        item_id = snapshot.values.get("awaiting_item_id") if snapshot.interrupts else None
+        with Session(self.engine) as session:
+            task = self._task(session, task_id)
+            if task.status in (TaskStatus.DONE, TaskStatus.CANCELLED):
+                return AnswerTarget(phase="closed")
+            item = session.get(Item, item_id) if item_id is not None else None
+            stem = item.stem if item else ""
+        messages = snapshot.values.get("messages", [])
+        prompt = next(
+            (
+                message["content"]
+                for message in reversed(messages)
+                if message["role"] == "assistant"
+            ),
+            "",
+        )
+        if processing or key in self._jobs:
+            phase = "processing"
+        elif not snapshot.interrupts and (key in self._failed_work or snapshot.next):
+            phase = "failed"
+        else:
+            phase = "waiting" if snapshot.interrupts else "idle"
+        return AnswerTarget(
+            phase=phase,
+            item_id=item_id,
+            prompt=prompt,
+            stem=stem,
+            turn=len(messages),
+        )
 
     async def _run_task(self, key: str, inp: RunState | Command | None) -> None:
         before = await self.graph.aget_state(self._config(key))

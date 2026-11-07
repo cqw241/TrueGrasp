@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     llm_timeout: float = Field(default=60, gt=0)
     llm_validation_retries: int = Field(default=2, ge=0, le=5)
     llm_max_tool_rounds: int = Field(default=8, ge=1, le=32)
+    vision_llm_base_url: str = ""
+    vision_llm_api_key: str = ""
+    vision_llm_model: str = ""
 
     database_url: str = "sqlite:///./data/truegrasp.db"
     checkpoint_db_path: str = "./data/checkpoints.db"

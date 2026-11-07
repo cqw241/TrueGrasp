@@ -299,6 +299,43 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/tasks/{task_id}/answer-target': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Answer Target */
+    get: operations['get_answer_target_api_tasks__task_id__answer_target_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/tasks/{task_id}/answer-photo': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Transcribe Photo
+     * @description 识别当前题目的作答照片，返回待确认草稿，不提交作答。
+     */
+    post: operations['transcribe_photo_api_tasks__task_id__answer_photo_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/tasks/{task_id}/diagnosis': {
     parameters: {
       query?: never
@@ -463,6 +500,31 @@ export interface components {
        * @default 1
        */
       days: number
+    }
+    /** AnswerTarget */
+    AnswerTarget: {
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase: 'idle' | 'processing' | 'waiting' | 'failed' | 'closed'
+      /** Item Id */
+      item_id?: string | null
+      /**
+       * Prompt
+       * @default
+       */
+      prompt: string
+      /**
+       * Stem
+       * @default
+       */
+      stem: string
+      /**
+       * Turn
+       * @default 0
+       */
+      turn: number
     }
     /** Body_import_homework_api_homework_post */
     Body_import_homework_api_homework_post: {
@@ -926,6 +988,11 @@ export interface components {
       | 'definite_integral'
       | 'double_integral'
       | 'limit'
+    /** PhotoUploadError */
+    PhotoUploadError: {
+      /** Detail */
+      detail: string
+    }
     /**
      * Prediction
      * @description 某个错因假设下，学生会写出的答案。
@@ -1124,6 +1191,21 @@ export interface components {
       /** Text */
       text: string
     }
+    /** Transcription */
+    Transcription: {
+      /** Latex */
+      latex: string
+      /**
+       * Doubts
+       * @description Uncertain symbols or regions needing confirmation
+       */
+      doubts: string[]
+      /**
+       * Requires Confirmation
+       * @default true
+       */
+      requires_confirmation: boolean
+    }
     /** ValidationError */
     ValidationError: {
       /** Location */
@@ -1146,6 +1228,7 @@ export interface components {
 }
 export type Accepted = components['schemas']['Accepted']
 export type AdvanceClock = components['schemas']['AdvanceClock']
+export type AnswerTarget = components['schemas']['AnswerTarget']
 export type BodyImportHomeworkApiHomeworkPost =
   components['schemas']['Body_import_homework_api_homework_post']
 export type Bound = components['schemas']['Bound']
@@ -1182,6 +1265,7 @@ export type MasteryState = components['schemas']['MasteryState']
 export type MessageCreate = components['schemas']['MessageCreate']
 export type MessageDone = components['schemas']['MessageDone']
 export type Operation = components['schemas']['Operation']
+export type PhotoUploadError = components['schemas']['PhotoUploadError']
 export type Prediction = components['schemas']['Prediction']
 export type ProbeRecord = components['schemas']['ProbeRecord']
 export type ResolveEscalation = components['schemas']['ResolveEscalation']
@@ -1194,6 +1278,7 @@ export type TeachingGoal = components['schemas']['TeachingGoal']
 export type TimelineEntry = components['schemas']['TimelineEntry']
 export type TimelineKind = components['schemas']['TimelineKind']
 export type TokenDelta = components['schemas']['TokenDelta']
+export type Transcription = components['schemas']['Transcription']
 export type ValidationError = components['schemas']['ValidationError']
 export type $defs = Record<string, never>
 export interface operations {
@@ -1654,7 +1739,9 @@ export interface operations {
   }
   post_message_api_tasks__task_id__messages_post: {
     parameters: {
-      query?: never
+      query?: {
+        expected_turn?: number | null
+      }
       header?: never
       path: {
         task_id: number
@@ -1683,6 +1770,133 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_answer_target_api_tasks__task_id__answer_target_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        task_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AnswerTarget']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  transcribe_photo_api_tasks__task_id__answer_photo_post: {
+    parameters: {
+      query: {
+        item_id: string
+        turn: number
+      }
+      header?: never
+      path: {
+        task_id: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'image/jpeg': string
+        'image/png': string
+        'image/webp': string
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Transcription']
+        }
+      }
+      /** @description 任务不存在 */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 题目或作答轮次已变化 */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 照片超过大小限制 */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 不支持该图片类型 */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 参数无效、图片无法解码或未识别到作答 */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json':
+            | components['schemas']['HTTPValidationError']
+            | components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 模型识别失败 */
+      502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 图片识别服务未配置 */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
         }
       }
     }
