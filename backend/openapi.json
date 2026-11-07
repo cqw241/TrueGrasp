@@ -396,6 +396,300 @@
         }
       }
     },
+    "/api/tasks/controls": {
+      "get": {
+        "tags": [
+          "teacher"
+        ],
+        "summary": "List Task Controls",
+        "description": "教师接管或覆盖过的任务。",
+        "operationId": "list_task_controls_api_tasks_controls_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaskControl"
+                  },
+                  "type": "array",
+                  "title": "Response List Task Controls Api Tasks Controls Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}": {
+      "patch": {
+        "tags": [
+          "teacher"
+        ],
+        "summary": "Override Task",
+        "description": "教师修改或覆盖计划，优先于 Agent 计划。",
+        "operationId": "override_task_api_tasks__task_id__patch",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskOverride"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "student"
+        ],
+        "summary": "Get Task",
+        "operationId": "get_task_api_tasks__task_id__get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/takeover": {
+      "post": {
+        "tags": [
+          "teacher"
+        ],
+        "summary": "Take Over Task",
+        "description": "教师接管辅导，暂停对应的辅导会话。",
+        "operationId": "take_over_task_api_tasks__task_id__takeover_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TakeoverRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskControl"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/handback": {
+      "post": {
+        "tags": [
+          "teacher"
+        ],
+        "summary": "Hand Back Task",
+        "description": "交还 Agent，会话从暂停处恢复。",
+        "operationId": "hand_back_task_api_tasks__task_id__handback_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskControl"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/misconceptions/pending": {
+      "get": {
+        "tags": [
+          "teacher"
+        ],
+        "summary": "List Pending Misconceptions",
+        "description": "辅导中标记的未建模错因，待教师审核。",
+        "operationId": "list_pending_misconceptions_api_misconceptions_pending_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Misconception"
+                  },
+                  "type": "array",
+                  "title": "Response List Pending Misconceptions Api Misconceptions Pending Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/misconceptions/{misconception_id}/adopt": {
+      "post": {
+        "tags": [
+          "teacher"
+        ],
+        "summary": "Adopt Misconception",
+        "description": "采纳待审核错因，进入错因库，后续诊断可以检索到。",
+        "operationId": "adopt_misconception_api_misconceptions__misconception_id__adopt_post",
+        "parameters": [
+          {
+            "name": "misconception_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Misconception Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdoptMisconception"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Misconception"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/escalations": {
       "get": {
         "tags": [
@@ -492,48 +786,6 @@
                   },
                   "type": "array",
                   "title": "Response List Students Api Students Get"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/tasks/{task_id}": {
-      "get": {
-        "tags": [
-          "student"
-        ],
-        "summary": "Get Task",
-        "operationId": "get_task_api_tasks__task_id__get",
-        "parameters": [
-          {
-            "name": "task_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Task Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Task"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1506,6 +1758,24 @@
         "title": "Accepted",
         "description": "异步处理已受理，结果通过 SSE 推送。"
       },
+      "AdoptMisconception": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "title": "AdoptMisconception",
+        "description": "采纳一条未建模错因，进入错因库；可同时修改描述。"
+      },
       "AdvanceClock": {
         "properties": {
           "days": {
@@ -1777,6 +2047,15 @@
         ],
         "title": "CommonIssue",
         "description": "共性问题与课上讲解建议，对应一条 CLASS_REVIEW 任务。"
+      },
+      "ContentSource": {
+        "type": "string",
+        "enum": [
+          "teacher",
+          "unmodeled"
+        ],
+        "title": "ContentSource",
+        "description": "错因、策略卡的来源。"
       },
       "DiagnosisView": {
         "properties": {
@@ -2628,6 +2907,99 @@
         "title": "MessageDone",
         "description": "一条辅导消息结束，前端可以重新拉取该任务的对话。"
       },
+      "Misconception": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "knowledge_point_id": {
+            "type": "string",
+            "title": "Knowledge Point Id"
+          },
+          "family": {
+            "type": "string",
+            "title": "Family"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "triggers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Triggers"
+          },
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/MisconceptionExample"
+            },
+            "type": "array",
+            "title": "Examples"
+          },
+          "probe_item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Probe Item Ids"
+          },
+          "strategy_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Strategy Ids"
+          },
+          "recurs_in": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recurs In"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ContentSource",
+            "default": "teacher"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "knowledge_point_id",
+          "family",
+          "description"
+        ],
+        "title": "Misconception",
+        "description": "错因。ID 全书统一，跨章节跟进靠它匹配。"
+      },
+      "MisconceptionExample": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "wrong": {
+            "type": "string",
+            "title": "Wrong",
+            "description": "LaTeX 公式，如 6\\sin(3x)\\cos(3x)"
+          },
+          "correct": {
+            "type": "string",
+            "title": "Correct",
+            "description": "LaTeX 公式，如 6\\sin(3x)\\cos(3x)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "wrong",
+          "correct"
+        ],
+        "title": "MisconceptionExample"
+      },
       "Operation": {
         "type": "string",
         "enum": [
@@ -2793,6 +3165,17 @@
         ],
         "title": "Student"
       },
+      "TakeoverRequest": {
+        "properties": {
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "TakeoverRequest"
+      },
       "Task": {
         "properties": {
           "id": {
@@ -2917,6 +3300,64 @@
           "status"
         ],
         "title": "TaskChanged"
+      },
+      "TaskControl": {
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "title": "Task Id"
+          },
+          "taken_over": {
+            "type": "boolean",
+            "title": "Taken Over"
+          },
+          "overridden": {
+            "type": "boolean",
+            "title": "Overridden"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "taken_over",
+          "overridden"
+        ],
+        "title": "TaskControl",
+        "description": "教师对一条任务的控制状态，驾驶舱据此标记接管和覆盖。"
+      },
+      "TaskOverride": {
+        "properties": {
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "cancel": {
+            "type": "boolean",
+            "title": "Cancel",
+            "default": false
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "TaskOverride",
+        "description": "教师修改或覆盖一条计划任务；被覆盖的计划不再被 Agent 改回（T16、T24）。"
       },
       "TaskStatus": {
         "type": "string",

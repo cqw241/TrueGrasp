@@ -190,6 +190,127 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/tasks/controls': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * List Task Controls
+     * @description 教师接管或覆盖过的任务。
+     */
+    get: operations['list_task_controls_api_tasks_controls_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/tasks/{task_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Task */
+    get: operations['get_task_api_tasks__task_id__get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    /**
+     * Override Task
+     * @description 教师修改或覆盖计划，优先于 Agent 计划。
+     */
+    patch: operations['override_task_api_tasks__task_id__patch']
+    trace?: never
+  }
+  '/api/tasks/{task_id}/takeover': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Take Over Task
+     * @description 教师接管辅导，暂停对应的辅导会话。
+     */
+    post: operations['take_over_task_api_tasks__task_id__takeover_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/tasks/{task_id}/handback': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Hand Back Task
+     * @description 交还 Agent，会话从暂停处恢复。
+     */
+    post: operations['hand_back_task_api_tasks__task_id__handback_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/misconceptions/pending': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * List Pending Misconceptions
+     * @description 辅导中标记的未建模错因，待教师审核。
+     */
+    get: operations['list_pending_misconceptions_api_misconceptions_pending_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/misconceptions/{misconception_id}/adopt': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Adopt Misconception
+     * @description 采纳待审核错因，进入错因库，后续诊断可以检索到。
+     */
+    post: operations['adopt_misconception_api_misconceptions__misconception_id__adopt_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/escalations': {
     parameters: {
       query?: never
@@ -236,23 +357,6 @@ export interface paths {
     }
     /** List Students */
     get: operations['list_students_api_students_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/api/tasks/{task_id}': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get Task */
-    get: operations['get_task_api_tasks__task_id__get']
     put?: never
     post?: never
     delete?: never
@@ -536,6 +640,14 @@ export interface components {
       /** Task Id */
       task_id: number
     }
+    /**
+     * AdoptMisconception
+     * @description 采纳一条未建模错因，进入错因库；可同时修改描述。
+     */
+    AdoptMisconception: {
+      /** Description */
+      description?: string | null
+    }
     /** AdvanceClock */
     AdvanceClock: {
       /**
@@ -665,6 +777,12 @@ export interface components {
       /** Suggestion */
       suggestion: string
     }
+    /**
+     * ContentSource
+     * @description 错因、策略卡的来源。
+     * @enum {string}
+     */
+    ContentSource: 'teacher' | 'unmodeled'
     /** DiagnosisView */
     DiagnosisView: {
       /** Task Id */
@@ -1027,6 +1145,47 @@ export interface components {
       task_id: number
     }
     /**
+     * Misconception
+     * @description 错因。ID 全书统一，跨章节跟进靠它匹配。
+     */
+    Misconception: {
+      /** Id */
+      id: string
+      /** Knowledge Point Id */
+      knowledge_point_id: string
+      /** Family */
+      family: string
+      /** Description */
+      description: string
+      /** Triggers */
+      triggers?: string[]
+      /** Examples */
+      examples?: components['schemas']['MisconceptionExample'][]
+      /** Probe Item Ids */
+      probe_item_ids?: string[]
+      /** Strategy Ids */
+      strategy_ids?: string[]
+      /** Recurs In */
+      recurs_in?: string[]
+      /** @default teacher */
+      source: components['schemas']['ContentSource']
+    }
+    /** MisconceptionExample */
+    MisconceptionExample: {
+      /** Question */
+      question: string
+      /**
+       * Wrong
+       * @description LaTeX 公式，如 6\sin(3x)\cos(3x)
+       */
+      wrong: string
+      /**
+       * Correct
+       * @description LaTeX 公式，如 6\sin(3x)\cos(3x)
+       */
+      correct: string
+    }
+    /**
      * Operation
      * @description 题目结构化描述 ItemSpec 的运算类型，决定 verify_item 如何重算。
      * @enum {string}
@@ -1103,6 +1262,14 @@ export interface components {
       /** Name */
       name: string
     }
+    /** TakeoverRequest */
+    TakeoverRequest: {
+      /**
+       * Note
+       * @default
+       */
+      note: string
+    }
     /**
      * Task
      * @description 由规划 Agent 创建，教学时钟检查是否到期。
@@ -1152,6 +1319,41 @@ export interface components {
       student_id: string | null
       task_type: components['schemas']['TaskType']
       status: components['schemas']['TaskStatus']
+    }
+    /**
+     * TaskControl
+     * @description 教师对一条任务的控制状态，驾驶舱据此标记接管和覆盖。
+     */
+    TaskControl: {
+      /** Task Id */
+      task_id: number
+      /** Taken Over */
+      taken_over: boolean
+      /** Overridden */
+      overridden: boolean
+      /**
+       * Note
+       * @default
+       */
+      note: string
+    }
+    /**
+     * TaskOverride
+     * @description 教师修改或覆盖一条计划任务；被覆盖的计划不再被 Agent 改回（T16、T24）。
+     */
+    TaskOverride: {
+      /** Due Date */
+      due_date?: string | null
+      /**
+       * Cancel
+       * @default false
+       */
+      cancel: boolean
+      /**
+       * Note
+       * @default
+       */
+      note: string
     }
     /**
      * TaskStatus
@@ -1291,6 +1493,7 @@ export interface components {
   pathItems: never
 }
 export type Accepted = components['schemas']['Accepted']
+export type AdoptMisconception = components['schemas']['AdoptMisconception']
 export type AdvanceClock = components['schemas']['AdvanceClock']
 export type AnswerTarget = components['schemas']['AnswerTarget']
 export type BodyImportHomeworkApiHomeworkPost =
@@ -1301,6 +1504,7 @@ export type ClassOverview = components['schemas']['ClassOverview']
 export type ClockAdvanced = components['schemas']['ClockAdvanced']
 export type ClockState = components['schemas']['ClockState']
 export type CommonIssue = components['schemas']['CommonIssue']
+export type ContentSource = components['schemas']['ContentSource']
 export type DiagnosisView = components['schemas']['DiagnosisView']
 export type Dimension = components['schemas']['Dimension']
 export type DimensionResult = components['schemas']['DimensionResult']
@@ -1328,6 +1532,8 @@ export type MasteryChanged = components['schemas']['MasteryChanged']
 export type MasteryState = components['schemas']['MasteryState']
 export type MessageCreate = components['schemas']['MessageCreate']
 export type MessageDone = components['schemas']['MessageDone']
+export type Misconception = components['schemas']['Misconception']
+export type MisconceptionExample = components['schemas']['MisconceptionExample']
 export type Operation = components['schemas']['Operation']
 export type PhotoUploadError = components['schemas']['PhotoUploadError']
 export type Prediction = components['schemas']['Prediction']
@@ -1335,8 +1541,11 @@ export type ProbeRecord = components['schemas']['ProbeRecord']
 export type QuestionCreate = components['schemas']['QuestionCreate']
 export type ResolveEscalation = components['schemas']['ResolveEscalation']
 export type Student = components['schemas']['Student']
+export type TakeoverRequest = components['schemas']['TakeoverRequest']
 export type Task = components['schemas']['Task']
 export type TaskChanged = components['schemas']['TaskChanged']
+export type TaskControl = components['schemas']['TaskControl']
+export type TaskOverride = components['schemas']['TaskOverride']
 export type TaskStatus = components['schemas']['TaskStatus']
 export type TaskType = components['schemas']['TaskType']
 export type TeachingGoal = components['schemas']['TeachingGoal']
@@ -1634,6 +1843,213 @@ export interface operations {
       }
     }
   }
+  list_task_controls_api_tasks_controls_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TaskControl'][]
+        }
+      }
+    }
+  }
+  get_task_api_tasks__task_id__get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        task_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Task']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  override_task_api_tasks__task_id__patch: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        task_id: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TaskOverride']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Task']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  take_over_task_api_tasks__task_id__takeover_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        task_id: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TakeoverRequest']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TaskControl']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  hand_back_task_api_tasks__task_id__handback_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        task_id: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TaskControl']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_pending_misconceptions_api_misconceptions_pending_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Misconception'][]
+        }
+      }
+    }
+  }
+  adopt_misconception_api_misconceptions__misconception_id__adopt_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        misconception_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AdoptMisconception']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Misconception']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
   list_escalations_api_escalations_get: {
     parameters: {
       query?: never
@@ -1705,37 +2121,6 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Student'][]
-        }
-      }
-    }
-  }
-  get_task_api_tasks__task_id__get: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        task_id: number
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Task']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }

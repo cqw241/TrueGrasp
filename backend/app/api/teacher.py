@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 from app.api.stub import not_implemented
 from app.config import get_settings
 from app.contracts.api import (
+    AdoptMisconception,
     AdvanceClock,
     ClassOverview,
     ClockState,
@@ -20,8 +21,11 @@ from app.contracts.api import (
     HeatCell,
     HomeworkImportResult,
     ResolveEscalation,
+    TakeoverRequest,
+    TaskControl,
+    TaskOverride,
 )
-from app.contracts.entities import Task, TeachingGoal
+from app.contracts.entities import Misconception, Task, TeachingGoal
 from app.contracts.enums import TaskStatus, TaskType
 from app.ingest import HomeworkImporter, IngestError, parse_csv
 from app.ingest.service import MAX_CSV_BYTES
@@ -122,6 +126,42 @@ def list_tasks(
         query = query.where(Task.status == status)
     with Session(request.app.state.orchestrator.engine) as session:
         return list(session.exec(query))
+
+
+@router.get("/tasks/controls")
+def list_task_controls() -> list[TaskControl]:
+    """教师接管或覆盖过的任务。"""
+    not_implemented("T24")
+
+
+@router.patch("/tasks/{task_id}")
+def override_task(task_id: int, body: TaskOverride) -> Task:
+    """教师修改或覆盖计划，优先于 Agent 计划。"""
+    not_implemented("T16")
+
+
+@router.post("/tasks/{task_id}/takeover")
+def take_over_task(task_id: int, body: TakeoverRequest) -> TaskControl:
+    """教师接管辅导，暂停对应的辅导会话。"""
+    not_implemented("T24")
+
+
+@router.post("/tasks/{task_id}/handback")
+def hand_back_task(task_id: int) -> TaskControl:
+    """交还 Agent，会话从暂停处恢复。"""
+    not_implemented("T24")
+
+
+@router.get("/misconceptions/pending")
+def list_pending_misconceptions() -> list[Misconception]:
+    """辅导中标记的未建模错因，待教师审核。"""
+    not_implemented("T16")
+
+
+@router.post("/misconceptions/{misconception_id}/adopt")
+def adopt_misconception(misconception_id: str, body: AdoptMisconception) -> Misconception:
+    """采纳待审核错因，进入错因库，后续诊断可以检索到。"""
+    not_implemented("T16")
 
 
 @router.get("/escalations")

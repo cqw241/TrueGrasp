@@ -103,6 +103,27 @@ shadcn/ui 组件用 `npx shadcn@latest add <组件>` 添加到 `components/ui/`�
 - `POST /api/students/{id}/questions`，请求体 `QuestionCreate {content, attempt}`，返回新建的 `Task`（`type = question`），目前返回 501。T15 实现时还要把 `question` 加进编排层可交互的任务类型（`runtime.py` 的 `INTERACTIVE_TYPES`），并在对话消息里写入 `hint_level` / `solution`，`get_messages` 已经透传这两个字段。
 - `POST /api/students/{id}/question-photo` 识别题目照片，返回 `Transcription`，不创建提问。它和作答照片共用 `_transcribe_upload`（格式、大小、解码检查与视觉模型配置），只是不检查作答轮次。
 
+## T12 教师驾驶舱
+
+页面在 `frontend/src/pages/teacher-cockpit.tsx`，各面板在 `frontend/src/components/cockpit/`。每个面板单独请求数据，后端接口返回 501 时只有该面板显示“功能开发中”，其余面板照常工作。
+
+| 面板 | 接口 | 后端实现 |
+|---|---|---|
+| 教学进度 | `GET /api/clock` | T07 |
+| 班级达标率 | `GET /api/class/overview` | T19，已接通 |
+| 教学目标 | `GET`、`POST /api/goals` | T16 |
+| 全书知识热力图 | `GET /api/class/heatmap` | T19，已接通 |
+| 共性问题 | `GET /api/class/issues` | T08 |
+| 转交列表与证据链 | `GET /api/escalations`、`POST /api/escalations/{task_id}/resolve` | T16 |
+| 干预计划 | `GET /api/tasks`（已接通）、`GET /api/tasks/controls` | T24 |
+| 修改与覆盖计划 | `PATCH /api/tasks/{task_id}`（`TaskOverride`） | T16 |
+| 接管辅导、交还 Agent | `POST /api/tasks/{task_id}/takeover`、`POST /api/tasks/{task_id}/handback`（返回 `TaskControl`） | T24 |
+| 待审核错因与采纳 | `GET /api/misconceptions/pending`、`POST /api/misconceptions/{misconception_id}/adopt`（`AdoptMisconception`） | T16 |
+
+`TaskOverride`、`TaskControl`、`TakeoverRequest`、`AdoptMisconception` 和后四行的路由由 T12 以接口桩的形式加入 `contracts/api.py` 与 `api/teacher.py`，它们是前端对接用的初稿，T16、T24 实现时可以调整，调整后重新生成 `openapi.json` 和 `schema.d.ts`。`GET /api/tasks/controls` 只返回教师接管或覆盖过的任务；它返回 501 时，计划列表照常显示，只是没有“教师接管”“已覆盖”标记。
+
+写操作成功后，前端让相关查询重新拉取；收到 SSE 的 `task_changed`、`evidence_added` 时，也会刷新任务、转交、达标率和热力图。热力图用 ECharts 按需引入，只打包进驾驶舱页面。
+
 ## 提交前检查
 
 CI 在每个 PR 和 `main` 的推送上运行下列检查，提交前先在本地跑一遍。
