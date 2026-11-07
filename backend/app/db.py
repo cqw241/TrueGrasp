@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlalchemy import Engine, event
 from sqlmodel import Session, SQLModel, create_engine
 
+import app.clock.storage  # noqa: F401  注册时钟私有表
 import app.contracts.entities  # noqa: F401  注册全部表
 from app.config import get_settings
 

@@ -1,3 +1,4 @@
+from datetime import date
 from functools import lru_cache
 from typing import Literal
 
@@ -20,6 +21,9 @@ class Settings(BaseSettings):
     vision_llm_base_url: str = ""
     vision_llm_api_key: str = ""
     vision_llm_model: str = ""
+
+    teaching_clock_mode: Literal["demo", "real"] = "demo"
+    teaching_clock_initial_date: date = date(2026, 9, 7)
 
     database_url: str = "sqlite:///./data/truegrasp.db"
     checkpoint_db_path: str = "./data/checkpoints.db"
