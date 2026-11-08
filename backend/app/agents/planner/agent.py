@@ -427,9 +427,8 @@ class TeachingPlanner:
                         + timedelta(days=self.policy.retest_delay_days),
                     )
                 )
-            elif (state is None or state.state not in RANK) and (
-                evidence.kind == EvidenceKind.HOMEWORK
-                or (previous and previous.misconception_ids == [SLIP])
+            elif evidence.kind == EvidenceKind.HOMEWORK and (
+                state is None or state.state not in RANK
             ):
                 add(
                     PlannedTask(

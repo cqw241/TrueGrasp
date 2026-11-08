@@ -921,3 +921,108 @@ async def test_student_starts_task_while_model_is_planning(classroom, tmp_path):
     with Session(classroom) as session:
         assert session.get(Task, pending).status == TaskStatus.ACTIVE
         assert len(session.exec(select(Task)).all()) == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("task_type", [TaskType.TUTORING, TaskType.VERIFICATION])
+async def test_passed_slip_check_does_not_create_another_verification(classroom, task_type):
+    basis = evidence(classroom, student="C")
+    previous = task(classroom, student="C", type=task_type, basis=[basis], causes=["slip"])
+    with Session(classroom) as session:
+        session.get(Mastery, ("C", "kp")).state = MasteryState.TUTORING
+        session.commit()
+    eid = evidence(
+        classroom,
+        student="C",
+        task=previous,
+        correct=True,
+        kind=EvidenceKind.VERIFICATION,
+        dimension=Dimension.CORRECTNESS,
+    )
+    event = event_id(classroom, AnswerSubmitted(task_id=previous, evidence_id=eid))
+    model = PlanningModel()
+    result = await plan(classroom, event, model)
+    assert result.tasks == [] and model.contexts == []
+    with Session(classroom) as session:
+        assert session.get(Mastery, ("C", "kp")).state == MasteryState.TUTORING
+        assert session.get(Evidence, eid).is_correct is True
+
+
+@pytest.mark.anyio
+async def test_failed_slip_check_still_requires_intervention(classroom):
+    previous = task(classroom, student="C", causes=["slip"])
+    eid = evidence(
+        classroom,
+        student="C",
+        task=previous,
+        correct=False,
+        kind=EvidenceKind.VERIFICATION,
+        dimension=Dimension.CORRECTNESS,
+    )
+    event = event_id(classroom, AnswerSubmitted(task_id=previous, evidence_id=eid))
+    result = await plan(classroom, event)
+    assert len(result.tasks) == 1 and result.tasks[0].type == TaskType.TUTORING
+    assert result.tasks[0].round == 2 and eid in result.tasks[0].evidence_ids
+
+
+@pytest.mark.anyio
+async def test_slip_single_verification_closes_task_without_background_failure(classroom, tmp_path):
+    class Tutor:
+        async def turn(self, inp, publish):
+            return TutorTurn(
+                outcome=TutorOutcome.REQUEST_VERIFICATION,
+                message="偶发失误，独立验证",
+                confirmed_misconception_ids=["slip"],
+            )
+
+    class Verifier:
+        calls = 0
+
+        async def compose(self, inp):
+            self.calls += 1
+            assert inp.dimensions == [Dimension.CORRECTNESS]
+            assert inp.confirmed_misconceptions == []
+            spec = ItemSpec(operation="expression", expr="12")
+            return [
+                Item(
+                    id="slip-check",
+                    knowledge_point_id="kp",
+                    purpose=ItemPurpose.VERIFICATION,
+                    dimension=Dimension.CORRECTNESS,
+                    spec=spec,
+                    stem="计算 12",
+                    answer="12",
+                    fingerprint=SympyMathTools().fingerprint(spec),
+                    source=ItemSource.GENERATED,
+                )
+            ]
+
+        async def judge(self, item, answer):
+            return Judgement(is_correct=True, judged_by=JudgedBy.TOOL, reason="单题验证通过")
+
+    basis = evidence(classroom, student="C")
+    tid = task(classroom, student="C", status=TaskStatus.PENDING, basis=[basis])
+    model, verifier = PlanningModel(), Verifier()
+    async with Orchestrator.open(
+        classroom,
+        str(tmp_path / "slip-check.db"),
+        EventBus(),
+        planner=planner(classroom, model),
+        tutor=Tutor(),
+        verifier=verifier,
+        knowledge=NxKnowledgeGraph.from_engine(classroom),
+        teaching_date=lambda: TODAY,
+        pending_poll_interval=0.01,
+    ) as runtime:
+        await runtime.start_task(tid)
+        await runtime.submit_message(
+            tid, MessageCreate(content="12", answering_item_id="slip-check")
+        )
+        await runtime.wait_idle()
+        assert verifier.calls == 1 and model.contexts == []
+        with Session(classroom) as session:
+            assert len(session.exec(select(Task)).all()) == 1
+            assert session.get(Task, tid).status == TaskStatus.DONE
+            assert session.get(Mastery, ("C", "kp")).state == MasteryState.TUTORING
+            events = session.exec(select(Event)).all()
+            assert len(events) == 1 and events[0].processed
