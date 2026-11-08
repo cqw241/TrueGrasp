@@ -338,6 +338,13 @@ class Orchestrator:
                 raise OrchestrationError(409, "任务尚未到期")
             with Session(self.engine) as session:
                 context = session.get(PlanningTaskContext, task_id)
+                if (
+                    context
+                    and task.type == TaskType.VERIFICATION
+                    and context.root_knowledge_point_id != task.knowledge_point_id
+                    and dimensions is None
+                ):
+                    dimensions = [Dimension.CORRECTNESS]
                 if context and task.type == TaskType.PRECHECK:
                     if dimensions is None:
                         dimensions = [Dimension.CROSS_CHAPTER]
@@ -557,6 +564,7 @@ class Orchestrator:
                             else old.knowledge_point_id
                         )
                         == context["root_knowledge_point_id"]
+                        or old.knowledge_point_id == planned.knowledge_point_id
                         for old in active
                     ):
                         continue
@@ -675,6 +683,10 @@ class Orchestrator:
             error = session.exec(
                 select(Evidence)
                 .where(Evidence.id.in_(task.evidence_ids), Evidence.is_correct == False)  # noqa: E712
+                .where(
+                    Evidence.student_id == task.student_id,
+                    Evidence.knowledge_point_id == task.knowledge_point_id,
+                )
                 .order_by(Evidence.id.desc())
             ).first()
             tutor_task = TutorTask(

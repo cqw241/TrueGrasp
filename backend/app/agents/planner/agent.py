@@ -149,8 +149,12 @@ class TeachingPlanner:
             task.due_date = decision.due_date
             task.knowledge_point_id = decision.knowledge_point_id
             # A root-point misconception is not a confirmed misconception of its prerequisite.
-            if task.knowledge_point_id != candidate.context.root_knowledge_point_id:
+            if task.knowledge_point_id != candidate.task.knowledge_point_id:
                 task.misconception_ids = []
+                # There is not yet an error on this prerequisite. Establish one with
+                # an independent entry check before asking the tutor to diagnose it.
+                task.type = TaskType.VERIFICATION
+                task.reason = "先修回溯：先独立检查，按实际错答决定是否辅导；" + task.reason
             result.tasks.append(task)
             result.contexts.append(candidate.context)
         return result
@@ -162,6 +166,10 @@ class TeachingPlanner:
         candidates: list[Candidate] = []
         cancelled: set[int] = set()
         facts: dict = {}
+
+        def root_point(task):
+            context = session.get(PlanningTaskContext, task.id)
+            return context.root_knowledge_point_id if context else task.knowledge_point_id
 
         def add(task: PlannedTask, *, root=None, context=None, issue=None, backtrack=False):
             root = root or task.knowledge_point_id
@@ -256,6 +264,11 @@ class TeachingPlanner:
             root = evidence.knowledge_point_id
             if previous and (metadata := session.get(PlanningTaskContext, previous.id)):
                 root = metadata.root_knowledge_point_id
+            entry_check = (
+                previous is not None
+                and previous.type == TaskType.VERIFICATION
+                and root != previous.knowledge_point_id
+            )
             state = session.get(Mastery, (evidence.student_id, root))
             if state and state.state == MasteryState.ESCALATED:
                 return
@@ -263,6 +276,7 @@ class TeachingPlanner:
             if any(
                 t.student_id == evidence.student_id
                 and t.status == TaskStatus.ACTIVE
+                and (root_point(t) == root or t.knowledge_point_id == evidence.knowledge_point_id)
                 and t.type
                 in (TaskType.TUTORING, TaskType.VERIFICATION, TaskType.PRECHECK, TaskType.RETEST)
                 for t in tasks
@@ -328,6 +342,23 @@ class TeachingPlanner:
                 and m.id == evidence.matched_misconception_id
                 and evidence.is_correct is None
             ]
+            if entry_check and evidence.is_correct is None:
+                raise InvalidPlanError("先修检查尚无法判定，不能凭空创建先修错误诊断")
+            if entry_check and failed:
+                add(
+                    PlannedTask(
+                        type=TaskType.TUTORING,
+                        student_id=evidence.student_id,
+                        knowledge_point_id=evidence.knowledge_point_id,
+                        misconception_ids=causes(evidence.student_id, evidence.knowledge_point_id),
+                        evidence_ids=evidence_ids,
+                        round=previous.round,
+                        reason="先修独立检查未通过，依据该知识点的实际错误启动诊断",
+                        due_date=event.teaching_date,
+                    ),
+                    root=root,
+                )
+                return
             if failed:
                 limited = (
                     goal is not None

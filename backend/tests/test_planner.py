@@ -430,6 +430,7 @@ async def test_backtrack_keeps_original_goal_and_round(classroom, tmp_path):
         await runtime.handle_event(event, dispatch=False)
     with Session(classroom) as session:
         back = session.exec(select(Task).where(Task.knowledge_point_id == "pre")).one()
+        assert back.type == TaskType.VERIFICATION
         assert back.round == 2
         assert session.get(PlanningTaskContext, back.id).root_knowledge_point_id == "kp"
         back.status = TaskStatus.DONE
@@ -440,12 +441,154 @@ async def test_backtrack_keeps_original_goal_and_round(classroom, tmp_path):
         kp="pre",
         task=back_id,
         kind=EvidenceKind.VERIFICATION,
-        dimension=Dimension.DISTRACTOR,
+        dimension=Dimension.CORRECTNESS,
     )
     event = event_id(classroom, AnswerSubmitted(task_id=back_id, evidence_id=failed))
     result = await plan(classroom, event)
+    assert result.tasks[0].type == TaskType.TUTORING
+    assert result.tasks[0].knowledge_point_id == "pre" and result.tasks[0].round == 2
+    assert failed in result.tasks[0].evidence_ids
+    assert result.contexts[0].root_knowledge_point_id == "kp"
+    # Only the actual prerequisite intervention consumes the round; the entry check does not.
+    intervention = task(classroom, kp="pre", round=2, basis=[eid, failed])
+    with Session(classroom) as session:
+        session.add(PlanningTaskContext(task_id=intervention, root_knowledge_point_id="kp"))
+        session.commit()
+    failed_again = evidence(
+        classroom,
+        kp="pre",
+        task=intervention,
+        kind=EvidenceKind.VERIFICATION,
+        dimension=Dimension.DISTRACTOR,
+    )
+    event = event_id(classroom, AnswerSubmitted(task_id=intervention, evidence_id=failed_again))
+    result = await plan(classroom, event)
     assert result.tasks[0].type == TaskType.ESCALATION
     assert result.tasks[0].knowledge_point_id == "kp" and result.tasks[0].round == 2
+
+
+@pytest.mark.anyio
+async def test_other_point_active_task_does_not_drop_new_homework(classroom, tmp_path):
+    active = task(classroom, kp="other", status=TaskStatus.ACTIVE)
+    eid = evidence(classroom)
+    imported = event_id(classroom, HomeworkImported(knowledge_point_ids=["kp"], evidence_ids=[eid]))
+    async with Orchestrator.open(
+        classroom,
+        str(tmp_path / "other-active.db"),
+        EventBus(),
+        planner=planner(classroom),
+        pending_poll_interval=None,
+    ) as runtime:
+        await runtime.handle_event(imported, dispatch=False)
+    with Session(classroom) as session:
+        new = session.exec(select(Task).where(Task.knowledge_point_id == "kp")).all()
+        assert len(new) == 1 and new[0].type == TaskType.TUTORING
+        assert eid in new[0].evidence_ids
+        assert session.get(Task, active).status == TaskStatus.ACTIVE
+        assert session.get(Event, imported).processed
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("correct", [False, True])
+async def test_backtrack_checks_before_tutoring_and_supplies_matching_error(
+    classroom, tmp_path, correct
+):
+    original = task(classroom)
+    error_id = evidence(
+        classroom, task=original, kind=EvidenceKind.VERIFICATION, dimension=Dimension.DISTRACTOR
+    )
+    event = event_id(classroom, AnswerSubmitted(task_id=original, evidence_id=error_id))
+
+    def choose_backtrack(decisions, context):
+        for decision, candidate in zip(decisions, context["candidates"], strict=True):
+            if candidate["allowed_backtrack_ids"]:
+                decision.knowledge_point_id = "pre"
+
+    class EntryVerifier:
+        async def compose(self, inp):
+            assert inp.knowledge_point_id == "pre"
+            assert inp.dimensions == [Dimension.CORRECTNESS]
+            assert inp.confirmed_misconceptions == []
+            spec = ItemSpec(operation="expression", expr="10")
+            return [
+                Item(
+                    id="entry-check",
+                    knowledge_point_id="pre",
+                    purpose=ItemPurpose.VERIFICATION,
+                    dimension=Dimension.CORRECTNESS,
+                    stem="计算 10",
+                    answer="10",
+                    spec=spec,
+                    fingerprint=SympyMathTools().fingerprint(spec),
+                    source=ItemSource.GENERATED,
+                )
+            ]
+
+        async def judge(self, item, answer):
+            return Judgement(is_correct=correct, judged_by=JudgedBy.TOOL, reason="先修检查")
+
+    class TutorEntry:
+        def __init__(self):
+            self.called = False
+
+        async def turn(self, inp, publish):
+            # T09 requires a wrong answer belonging to this student and target point.
+            with Session(classroom) as session:
+                error = session.get(Evidence, inp.task.error_evidence_id)
+                assert error is not None and error.is_correct is False
+                assert error.student_id == inp.task.student_id
+                assert error.knowledge_point_id == inp.task.knowledge_point_id
+                assert error.knowledge_point_id == ("kp" if correct else "pre")
+            assert inp.task.round == 2
+            self.called = True
+            return TutorTurn(outcome=TutorOutcome.AWAIT_STUDENT, message="进入对应知识点诊断")
+
+    tutor = TutorEntry()
+    checkpoint = str(tmp_path / "backtrack-chain.db")
+    async with Orchestrator.open(
+        classroom,
+        checkpoint,
+        EventBus(),
+        planner=planner(classroom, PlanningModel(choose_backtrack)),
+        pending_poll_interval=None,
+    ) as runtime:
+        await runtime.handle_event(event, dispatch=False)
+    with Session(classroom) as session:
+        entry = session.exec(select(Task).where(Task.knowledge_point_id == "pre")).one()
+        entry_id = entry.id
+    # Reopen to prove the entry-check behavior is durable rather than an in-memory override.
+    async with Orchestrator.open(
+        classroom,
+        checkpoint,
+        EventBus(),
+        planner=planner(classroom),
+        tutor=tutor,
+        verifier=EntryVerifier(),
+        knowledge=NxKnowledgeGraph.from_engine(classroom),
+        teaching_date=lambda: TODAY,
+        pending_poll_interval=None,
+    ) as runtime:
+        await runtime.start_task(entry_id)
+        assert not tutor.called
+        await runtime.submit_message(
+            entry_id,
+            MessageCreate(content="10" if correct else "9", answering_item_id="entry-check"),
+        )
+        await runtime.wait_idle()
+        assert tutor.called
+        with Session(classroom) as session:
+            assert session.exec(select(Task).where(Task.type == TaskType.ESCALATION)).all() == []
+
+
+@pytest.mark.anyio
+async def test_same_original_goal_still_blocks_conflicting_work(classroom):
+    active = task(classroom, kp="pre", status=TaskStatus.ACTIVE)
+    with Session(classroom) as session:
+        session.add(PlanningTaskContext(task_id=active, root_knowledge_point_id="kp"))
+        session.commit()
+    eid = evidence(classroom)
+    event = event_id(classroom, HomeworkImported(knowledge_point_ids=["kp"], evidence_ids=[eid]))
+    assert not (await plan(classroom, event)).tasks
 
 
 @pytest.mark.anyio
