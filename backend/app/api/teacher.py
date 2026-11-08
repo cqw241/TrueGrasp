@@ -7,6 +7,7 @@ from openai import OpenAIError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from app.agents.planner.queries import common_issues
 from app.api.stub import not_implemented
 from app.clock.service import ClockError
 from app.config import get_settings
@@ -108,9 +109,10 @@ def class_heatmap(request: Request) -> list[HeatCell]:
 
 
 @router.get("/class/issues")
-def class_issues() -> list[CommonIssue]:
+def class_issues(request: Request) -> list[CommonIssue]:
     """共性问题与课上讲解建议。"""
-    not_implemented("T08")
+    with Session(request.app.state.orchestrator.engine) as session:
+        return common_issues(session)
 
 
 @router.get("/tasks")

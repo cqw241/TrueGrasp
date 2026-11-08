@@ -509,7 +509,11 @@ async def test_application_assembles_verifier_and_owns_client(monkeypatch, tmp_p
     app = create_app(
         engine=engine,
         checkpoint_path=str(tmp_path / "checkpoints.db"),
-        orchestration_dependencies={"verifier": None} if explicit else None,
+        orchestration_dependencies={
+            "planner": None,
+            "tutor": None,
+            **({"verifier": None} if explicit else {}),
+        },
     )
     try:
         async with app.router.lifespan_context(app):

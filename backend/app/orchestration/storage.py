@@ -36,10 +36,26 @@ class ItemExposure(SQLModel, table=True):
     item_id: str = Field(foreign_key="item.id")
 
 
+class PlanningTaskContext(SQLModel, table=True):
+    """Planner-private origin and cross-chapter context, committed with its Task."""
+
+    __tablename__ = "planning_task_context"
+
+    task_id: int = Field(primary_key=True, foreign_key="task.id")
+    root_knowledge_point_id: str = Field(foreign_key="knowledge_point.id")
+    context_knowledge_point_id: str | None = Field(default=None, foreign_key="knowledge_point.id")
+    issue_misconception_id: str | None = None
+
+
 def init_storage(engine: Engine) -> None:
     SQLModel.metadata.create_all(
         engine,
-        tables=[NodeReceipt.__table__, PendingWork.__table__, ItemExposure.__table__],
+        tables=[
+            NodeReceipt.__table__,
+            PendingWork.__table__,
+            ItemExposure.__table__,
+            PlanningTaskContext.__table__,
+        ],
     )
 
 

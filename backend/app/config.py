@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     vision_llm_api_key: str = ""
     vision_llm_model: str = ""
 
+    planner_class_review_min_students: int = Field(default=3, ge=2)
+    planner_retest_delay_days: int = Field(default=3, ge=1)
+
     teaching_clock_mode: Literal["demo", "real"] = "demo"
     teaching_clock_initial_date: date = date(2026, 9, 7)
 

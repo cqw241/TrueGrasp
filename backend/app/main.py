@@ -76,6 +76,19 @@ def create_app(
         llm = None
         try:
             settings = get_settings()
+            if settings.llm_api_key and "planner" not in dependencies:
+                from app.agents.planner import PlanningPolicy, create_planner
+
+                llm = OpenAICompatClient(settings)
+                dependencies["planner"] = create_planner(
+                    engine=business_engine,
+                    llm=llm,
+                    knowledge=dependencies["knowledge"],
+                    policy=PlanningPolicy(
+                        class_review_min_students=settings.planner_class_review_min_students,
+                        retest_delay_days=settings.planner_retest_delay_days,
+                    ),
+                )
             clock = TeachingClock(
                 business_engine,
                 dependencies["knowledge"],
@@ -86,7 +99,8 @@ def create_app(
             dependencies.setdefault("teaching_date", clock.current_date)
             app.state.clock = clock
             if settings.llm_api_key and "verifier" not in dependencies:
-                llm = OpenAICompatClient(settings)
+                if llm is None:
+                    llm = OpenAICompatClient(settings)
                 dependencies["verifier"] = create_verifier(
                     llm=llm, knowledge=dependencies["knowledge"]
                 )

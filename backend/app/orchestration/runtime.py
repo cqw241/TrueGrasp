@@ -58,6 +58,7 @@ from app.orchestration.inputs import build_verifier_input
 from app.orchestration.storage import (
     NodeReceipt,
     PendingWork,
+    PlanningTaskContext,
     init_storage,
     queue_work,
     record_exposure,
@@ -287,7 +288,7 @@ class Orchestrator:
         self._require("planner")
         key = f"event:{event_id}"
         self._seen_work.add(key)
-        async with self._lock(key):
+        async with self._lock("planning"), self._lock(key):
             with Session(self.engine) as session:
                 event = session.get(Event, event_id)
                 if event is None:
@@ -336,15 +337,25 @@ class Orchestrator:
                 )
             if task.due_date is not None and task.due_date > teaching_date:
                 raise OrchestrationError(409, "任务尚未到期")
-            if task.type == TaskType.PRECHECK:
-                with Session(self.engine) as session:
-                    context = session.exec(
+            with Session(self.engine) as session:
+                context = session.get(PlanningTaskContext, task_id)
+                if (
+                    context
+                    and task.type == TaskType.VERIFICATION
+                    and context.root_knowledge_point_id != task.knowledge_point_id
+                    and dimensions is None
+                ):
+                    dimensions = [Dimension.CORRECTNESS]
+                if task.type == TaskType.PRECHECK:
+                    clock_context = session.exec(
                         select(PrecheckContext).where(PrecheckContext.task_id == task_id)
                     ).first()
-                    if context is not None:
-                        if dimensions is None:
-                            dimensions = [Dimension.CROSS_CHAPTER]
-                        if context_knowledge_point_id is None:
+                    if dimensions is None and (context is not None or clock_context is not None):
+                        dimensions = [Dimension.CROSS_CHAPTER]
+                    if context_knowledge_point_id is None:
+                        if clock_context is not None:
+                            context_knowledge_point_id = clock_context.context_knowledge_point_id
+                        elif context is not None:
                             context_knowledge_point_id = context.context_knowledge_point_id
             initial = RunState(
                 kind="task",
@@ -527,19 +538,81 @@ class Orchestrator:
                 return {"task_ids": state.get("task_ids", [])}
             for task_id in plan.cancel_task_ids:
                 task = self._task(session, task_id)
+                if "contexts" in state["plan"] and task.status != TaskStatus.PENDING:
+                    # A student may start pending work while the planner awaits the model.
+                    continue
                 if task.status not in (TaskStatus.DONE, TaskStatus.CANCELLED):
                     task.status = TaskStatus.CANCELLED
                     changed.append(task)
                     if work := session.get(PendingWork, f"task:{task_id}"):
                         work.pending = False
             created = []
-            for planned in plan.tasks:
+            contexts = state["plan"].get("contexts", [])
+            if contexts and len(contexts) != len(plan.tasks):
+                raise ValueError("任务执行上下文数量与规划任务不一致")
+            for index, planned in enumerate(plan.tasks):
                 if (planned.type == TaskType.CLASS_REVIEW) != (planned.student_id is None):
                     raise ValueError("只有课上讲解建议的 student_id 可以为空")
                 if planned.round < 1:
                     raise ValueError("任务轮次必须大于 0")
                 task = Task(**planned.model_dump(), created_on=event.teaching_date)
+                context = contexts[index] if contexts else None
+                if context and planned.student_id is not None:
+                    active = session.exec(
+                        select(Task).where(
+                            Task.student_id == planned.student_id,
+                            Task.status == TaskStatus.ACTIVE,
+                        )
+                    ).all()
+                    if any(
+                        (
+                            old_context.root_knowledge_point_id
+                            if (old_context := session.get(PlanningTaskContext, old.id))
+                            else old.knowledge_point_id
+                        )
+                        == context["root_knowledge_point_id"]
+                        or old.knowledge_point_id == planned.knowledge_point_id
+                        for old in active
+                    ):
+                        continue
+                existing = session.exec(
+                    select(Task).where(
+                        Task.student_id == planned.student_id,
+                        Task.knowledge_point_id == planned.knowledge_point_id,
+                        Task.type == planned.type,
+                        Task.round == planned.round,
+                        Task.status.in_([TaskStatus.PENDING, TaskStatus.ACTIVE]),
+                    )
+                ).all()
+                duplicate = False
+                for old in existing:
+                    old_context = session.get(PlanningTaskContext, old.id)
+                    if planned.type == TaskType.CLASS_REVIEW:
+                        duplicate = (
+                            old_context is not None
+                            and context is not None
+                            and old_context.issue_misconception_id
+                            == context["issue_misconception_id"]
+                        )
+                    elif planned.type == TaskType.PRECHECK:
+                        duplicate = (
+                            old_context is None
+                            or context is None
+                            or (
+                                old_context.context_knowledge_point_id
+                                == context["context_knowledge_point_id"]
+                            )
+                        )
+                    else:
+                        duplicate = True
+                    if duplicate:
+                        break
+                if duplicate:
+                    continue
                 session.add(task)
+                session.flush()
+                if context:
+                    session.add(PlanningTaskContext(task_id=task.id, **context))
                 created.append(task)
             event.processed = True
             session.flush()
@@ -617,6 +690,10 @@ class Orchestrator:
             error = session.exec(
                 select(Evidence)
                 .where(Evidence.id.in_(task.evidence_ids), Evidence.is_correct == False)  # noqa: E712
+                .where(
+                    Evidence.student_id == task.student_id,
+                    Evidence.knowledge_point_id == task.knowledge_point_id,
+                )
                 .order_by(Evidence.id.desc())
             ).first()
             tutor_task = TutorTask(
@@ -786,7 +863,8 @@ class Orchestrator:
                 )
                 session.add(event)
             session.flush()
-            queue_work(session, f"event:{event.id}", {"dispatch": True})
+            # _run_task queues answer events after the checkpoint reaches its next
+            # interrupt or finish. Planning must not race the final answer's finish.
             self._queue_task(session, state)
             session.commit()
             await self.bus.publish(
