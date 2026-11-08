@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from sqlmodel import Session, select
 
-from app.api.stub import not_implemented
+from app.agents.tutor.queries import diagnosis
 from app.contracts.api import DiagnosisView, DimensionResult, TimelineEntry
 from app.contracts.entities import Evidence, KnowledgePoint, Mastery
 from app.ledger import queries
@@ -12,9 +12,13 @@ router = APIRouter(tags=["decision"])
 
 
 @router.get("/tasks/{task_id}/diagnosis")
-def get_diagnosis(task_id: int) -> DiagnosisView:
+def get_diagnosis(task_id: int, request: Request) -> DiagnosisView:
     """假设面板：候选错因、各假设的预测、学生的实际回答、支持或排除。"""
-    not_implemented("T09")
+    with Session(request.app.state.orchestrator.engine) as session:
+        result = diagnosis(session, task_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="任务不存在或尚无诊断记录")
+        return result
 
 
 @router.get("/students/{student_id}/timeline")

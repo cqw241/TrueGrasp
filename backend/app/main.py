@@ -104,6 +104,17 @@ def create_app(
                 dependencies["verifier"] = create_verifier(
                     llm=llm, knowledge=dependencies["knowledge"]
                 )
+            if settings.llm_api_key and "tutor" not in dependencies:
+                from app.agents.tutor import create_tutor
+
+                if llm is None:
+                    llm = OpenAICompatClient(settings)
+                dependencies["tutor"] = create_tutor(
+                    llm=llm,
+                    knowledge=dependencies["knowledge"],
+                    engine=business_engine,
+                    teaching_date=dependencies.get("teaching_date"),
+                )
             async with Orchestrator.open(
                 business_engine,
                 checkpoint_path or get_settings().checkpoint_db_path,
