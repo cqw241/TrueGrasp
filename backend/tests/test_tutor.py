@@ -276,6 +276,33 @@ async def test_unmodeled_is_recorded_for_teacher(setup):
         assert unknown.id in stored.misconception_ids
         evidence = session.get(Evidence, stored.evidence_ids[-1])
         assert evidence.is_correct is None
+        assert evidence.matched_misconception_id == unknown.id
+        hypothesis = session.exec(
+            select(Hypothesis).where(
+                Hypothesis.task_id == task.task_id,
+                Hypothesis.misconception_id == unknown.id,
+            )
+        ).one()
+        assert evidence.id in hypothesis.evidence_ids
+        assert hypothesis.status == HypothesisStatus.PENDING
+        # No teaching goal is configured: undecidable, explicitly linked unknown
+        # evidence must still authorize the downstream teacher escalation.
+        from app.ledger.service import escalate
+
+        escalation = Task(
+            type="escalation",
+            student_id=stored.student_id,
+            knowledge_point_id=stored.knowledge_point_id,
+            misconception_ids=[unknown.id],
+            evidence_ids=[evidence.id],
+            created_on=TODAY,
+        )
+        session.add(escalation)
+        session.flush()
+        escalate(session, escalation, TODAY)
+        assert session.get(Mastery, (stored.student_id, stored.knowledge_point_id)).state == (
+            MasteryState.ESCALATED
+        )
         assert diagnosis(session, task.task_id).hypotheses[0].unmodeled
 
 

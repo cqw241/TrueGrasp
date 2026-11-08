@@ -291,6 +291,7 @@ class DiagnosticTutor:
                         student_answer=inp.student_message or error.student_answer,
                         judged_by=JudgedBy.MODEL,
                         is_correct=None,
+                        matched_misconception_id=unknown.id,
                         teaching_date=today,
                         reason="待审核未建模错因：" + unknown.description,
                     )
