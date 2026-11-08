@@ -26,9 +26,11 @@
 
 进入章节时，T07 按 T02 的 `prerequisites()` 契约检查**直接先修**，逐学生计算三条规则：
 先修有已确认错因、先修未巩固、已确认错因的 `recurs_in` 指向新知识点。
-`SUPPORTED` 假设关联的有效错因作为已确认错因，排除 `slip`；
+确诊判断使用 `ledger.queries.confirmed_hypotheses()`，与 T08 同口径：按
+`(task_id, error_evidence_id)` 分组，只有一个未被排除的候选且其状态为 `SUPPORTED`
+时才确诊；其他候选为 `PENDING` 或 `SUPPORTED` 时均未确诊，`slip` 不作为确认错因。
 缺失掌握记录按未巩固处理，`consolidated/integrated` 均满足巩固门槛。
-T07 直接创建确定性预检任务；T08 消费 `LectureEntered` 时应复用这些任务，避免重复创建。
+T07 直接创建确定性预检任务；T08 消费 `LectureEntered` 时应复用这些任务，避免重复创建；其确诊查询可复用上述共享函数。
 
 预检的 `knowledge_point_id` 是待复查的旧知识点，私有 `PrecheckContext` 保存新章节目标。
 编排层在自动调度、手动启动和恢复时将其作为 `context_knowledge_point_id` 传入验证白名单，

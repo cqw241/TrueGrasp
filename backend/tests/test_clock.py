@@ -495,3 +495,109 @@ async def test_real_chapter_1_2_9_content_roster(business):
             ("missing", "calc.ch2.chain_rule", "calc.ch9.multivar_chain")
         }
         assert session.get(Task, contexts[0].task_id).misconception_ids
+
+
+@pytest.mark.parametrize("second_status", [HypothesisStatus.SUPPORTED, HypothesisStatus.PENDING])
+@pytest.mark.parametrize("kp,mis", [("old", "m"), ("indirect", "recur")])
+async def test_unresolved_diagnosis_does_not_trigger_precheck(business, kp, mis, second_status):
+    with Session(business) as session:
+        # 排除“未巩固”规则，只观察尚未确诊的候选是否错误扩大名单。
+        session.add(
+            Mastery(
+                student_id="A",
+                knowledge_point_id="old",
+                state=MasteryState.CONSOLIDATED,
+                updated_on=TODAY,
+            )
+        )
+        evidence_id = add_history(session, "A", kp, mis)
+        first = session.exec(
+            select(Hypothesis).where(Hypothesis.error_evidence_id == evidence_id)
+        ).one()
+        session.add(
+            Misconception(
+                id="other",
+                knowledge_point_id=kp,
+                family="other",
+                description="另一个待区分的错因",
+                recurs_in=["new"],
+            )
+        )
+        session.add(
+            Hypothesis(
+                student_id="A",
+                task_id=first.task_id,
+                error_evidence_id=evidence_id,
+                misconception_id="other",
+                status=second_status,
+            )
+        )
+        session.commit()
+    await clock_for(business).enter_lecture(9)
+    with Session(business) as session:
+        assert session.exec(select(Task).where(Task.type == TaskType.PRECHECK)).all() == []
+
+    # 排除另一个候选后才确诊，并且任务只携带最终错因。
+    with Session(business) as session:
+        other = session.exec(select(Hypothesis).where(Hypothesis.misconception_id == "other")).one()
+        other.status = HypothesisStatus.REFUTED
+        session.commit()
+    await clock_for(business).enter_lecture(9)
+    with Session(business) as session:
+        task = session.exec(select(Task).where(Task.type == TaskType.PRECHECK)).one()
+        assert task.knowledge_point_id == kp
+        assert task.misconception_ids == [mis]
+
+
+async def test_ambiguous_causes_remain_unconfirmed_when_mastery_triggers_precheck(business):
+    with Session(business) as session:
+        evidence_id = add_history(session, "A", "old", "m")
+        first = session.exec(
+            select(Hypothesis).where(Hypothesis.error_evidence_id == evidence_id)
+        ).one()
+        session.add(
+            Hypothesis(
+                student_id="A",
+                task_id=first.task_id,
+                error_evidence_id=evidence_id,
+                misconception_id="slip",
+                status=HypothesisStatus.SUPPORTED,
+            )
+        )
+        session.commit()
+    await clock_for(business).enter_lecture(9)
+    with Session(business) as session:
+        task = session.exec(select(Task).where(Task.type == TaskType.PRECHECK)).one()
+        assert task.knowledge_point_id == "old"
+        assert task.misconception_ids == []
+        assert "已确认错因" not in task.reason
+
+
+async def test_separate_error_diagnoses_in_one_task_can_confirm_separate_causes(business):
+    with Session(business) as session:
+        session.add(
+            Mastery(
+                student_id="A",
+                knowledge_point_id="old",
+                state=MasteryState.CONSOLIDATED,
+                updated_on=TODAY,
+            )
+        )
+        first_evidence = add_history(session, "A", "old", "m")
+        second_evidence = add_history(session, "A", "indirect", "recur")
+        session.flush()
+        first = session.exec(
+            select(Hypothesis).where(Hypothesis.error_evidence_id == first_evidence)
+        ).one()
+        second = session.exec(
+            select(Hypothesis).where(Hypothesis.error_evidence_id == second_evidence)
+        ).one()
+        second.task_id = first.task_id
+        session.commit()
+    await clock_for(business).enter_lecture(9)
+    with Session(business) as session:
+        tasks = session.exec(select(Task).where(Task.type == TaskType.PRECHECK)).all()
+        assert {(task.knowledge_point_id, tuple(task.misconception_ids)) for task in tasks} == {
+            ("old", ("m",)),
+            ("indirect", ("recur",)),
+        }

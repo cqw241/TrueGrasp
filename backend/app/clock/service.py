@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 from app.clock.storage import DueNotification, LectureEntry, PrecheckContext, TeachingClockState
 from app.contracts.api import ClockState
 from app.contracts.entities import Hypothesis, Mastery, Misconception, Student, Task
-from app.contracts.enums import HypothesisStatus, MasteryState, TaskStatus, TaskType
+from app.contracts.enums import MasteryState, TaskStatus, TaskType
 from app.contracts.events import (
     ClockAdvanced,
     EventPublisher,
@@ -22,6 +22,7 @@ from app.contracts.events import (
 )
 from app.contracts.knowledge import KnowledgeGraph
 from app.contracts.values import SLIP
+from app.ledger.queries import confirmed_hypotheses
 from app.orchestration.storage import queue_work
 
 
@@ -161,9 +162,7 @@ class TeachingClock:
         }
         misconceptions = {m.id: m for m in session.exec(select(Misconception)).all()}
         confirmed: dict[str, list[tuple[Hypothesis, Misconception]]] = {}
-        for hypothesis in session.exec(
-            select(Hypothesis).where(Hypothesis.status == HypothesisStatus.SUPPORTED)
-        ):
+        for hypothesis in confirmed_hypotheses(session):
             mis = misconceptions.get(hypothesis.misconception_id)
             if mis is not None and mis.id != SLIP:
                 confirmed.setdefault(hypothesis.student_id, []).append((hypothesis, mis))
