@@ -12,10 +12,12 @@ from app.agents.tutor.models import CandidateSelection
 from app.agents.tutor.queries import diagnosis
 from app.agents.verifier import create_verifier
 from app.agents.verifier.agent import ItemDraft, ItemReview
+from app.config import Settings
 from app.contracts.agents import PlannerOutput
 from app.contracts.api import MessageCreate
 from app.contracts.entities import Evidence, Mastery
 from app.contracts.enums import EvidenceKind, MasteryState
+from app.db import make_engine
 from app.main import create_app
 from app.orchestration import EventBus, Orchestrator
 from tests.test_tutor import FORMULA, MISS, POINT, TODAY, Model, Publisher, input_for
@@ -181,3 +183,47 @@ async def test_shared_initial_error_cannot_be_pruned_by_model(setup):
             FORMULA,
             "slip",
         }
+
+
+@pytest.mark.parametrize(
+    "disabled", [{}, {"tutor": None}, {"verifier": None}, {"tutor": None, "verifier": None}]
+)
+async def test_auto_tutor_shares_clock_date_and_model_client(tmp_path, monkeypatch, disabled):
+    clients = []
+
+    class Client:
+        def __init__(self, settings):
+            self.closed = False
+            clients.append(self)
+
+        async def aclose(self):
+            self.closed = True
+
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: Settings(llm_api_key="test-only", teaching_clock_initial_date=TODAY),
+    )
+    monkeypatch.setattr("app.main.OpenAICompatClient", Client)
+    engine = make_engine(f"sqlite:///{tmp_path / 'assembly.db'}")
+    try:
+        app = create_app(
+            engine=engine,
+            checkpoint_path=str(tmp_path / "assembly-checkpoints.db"),
+            orchestration_dependencies={"planner": None, **disabled},
+        )
+        async with app.router.lifespan_context(app):
+            runtime = app.state.orchestrator
+            assert len(clients) == (0 if len(disabled) == 2 else 1)
+            for name in ("tutor", "verifier"):
+                agent = getattr(runtime, name)
+                if name in disabled:
+                    assert agent is None
+                else:
+                    assert agent.llm is clients[0]
+            await app.state.clock.advance(4)
+            assert runtime.teaching_date() == TODAY + timedelta(days=4)
+            if runtime.tutor is not None:
+                assert runtime.tutor.teaching_date() == TODAY + timedelta(days=4)
+        assert all(c.closed for c in clients)
+    finally:
+        engine.dispose()

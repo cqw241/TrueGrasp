@@ -509,14 +509,17 @@ async def test_application_assembles_verifier_and_owns_client(monkeypatch, tmp_p
     app = create_app(
         engine=engine,
         checkpoint_path=str(tmp_path / "checkpoints.db"),
-        orchestration_dependencies={"verifier": None} if explicit else None,
+        orchestration_dependencies={
+            "planner": None,
+            "tutor": None,
+            **({"verifier": None} if explicit else {}),
+        },
     )
     try:
         async with app.router.lifespan_context(app):
             verifier = app.state.orchestrator.verifier
             if explicit:
-                assert verifier is None
-                assert app.state.orchestrator.tutor.llm is clients[0]
+                assert verifier is None and not clients
             else:
                 assert isinstance(verifier, IndependentVerifier)
                 assert verifier.llm is clients[0] and not clients[0].closed
