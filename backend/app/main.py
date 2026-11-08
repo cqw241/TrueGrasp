@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
+from app.agents.tutor import create_tutor
 from app.agents.verifier import create_verifier
 from app.api import decision, health, stream, student, teacher
 from app.config import get_settings
@@ -68,11 +69,21 @@ def create_app(
         llm = None
         try:
             settings = get_settings()
-            if settings.llm_api_key and "verifier" not in dependencies:
+            if settings.llm_api_key and any(
+                name not in dependencies for name in ("tutor", "verifier")
+            ):
                 llm = OpenAICompatClient(settings)
-                dependencies["verifier"] = create_verifier(
-                    llm=llm, knowledge=dependencies["knowledge"]
-                )
+                if "verifier" not in dependencies:
+                    dependencies["verifier"] = create_verifier(
+                        llm=llm, knowledge=dependencies["knowledge"]
+                    )
+                if "tutor" not in dependencies:
+                    dependencies["tutor"] = create_tutor(
+                        llm=llm,
+                        knowledge=dependencies["knowledge"],
+                        engine=business_engine,
+                        teaching_date=dependencies.get("teaching_date"),
+                    )
             async with Orchestrator.open(
                 business_engine,
                 checkpoint_path or get_settings().checkpoint_db_path,

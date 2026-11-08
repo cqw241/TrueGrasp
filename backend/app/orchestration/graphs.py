@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -11,6 +12,7 @@ from sqlmodel import Session, select
 from app.contracts.agents import TutorTurnInput, VerifierInput
 from app.contracts.entities import Item, Task
 from app.contracts.enums import Dimension, ItemPurpose, ItemSource, TaskType
+from app.orchestration.context import current_teaching_date
 from app.orchestration.inputs import used_fingerprints
 from app.orchestration.storage import ItemExposure
 from app.verify.tools import SympyMathTools
@@ -94,7 +96,11 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
     verifier_graph = verifier.compile(checkpointer=False)
 
     async def call_tutor(state: RunState) -> dict:
-        result = await tutor_graph.ainvoke({"input": runtime.tutor_input(state)})
+        token = current_teaching_date.set(date.fromisoformat(state["teaching_date"]))
+        try:
+            result = await tutor_graph.ainvoke({"input": runtime.tutor_input(state)})
+        finally:
+            current_teaching_date.reset(token)
         return {"tutor_turn": result["output"]}
 
     def prepare_verification(state: RunState) -> dict:
