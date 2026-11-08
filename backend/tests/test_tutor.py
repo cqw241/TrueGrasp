@@ -237,6 +237,94 @@ async def test_no_progress_requests_allowed_backtrack(setup):
         assert session.get(Mastery, ("A", POINT)).state == MasteryState.TUTORING
 
 
+@pytest.mark.parametrize("fallback", [False, True])
+async def test_shared_students_preserve_seed_items(setup, fallback):
+    engine, knowledge, first_task = setup
+    seeds = {item.id: item.model_dump() for item in knowledge.seed_items(POINT)}
+    tasks = [first_task]
+    with Session(engine) as session:
+        for student_id in ("B", "C"):
+            session.add(Student(id=student_id, name=student_id))
+            session.flush()
+            error = Evidence(
+                student_id=student_id,
+                knowledge_point_id=POINT,
+                kind=EvidenceKind.HOMEWORK,
+                item_id="calc.ch2.chain_rule_multi.demo_homework",
+                student_answer="2*sin(3*x)*cos(3*x)",
+                is_correct=False,
+                judged_by=JudgedBy.TOOL,
+                teaching_date=TODAY,
+            )
+            session.add(error)
+            session.flush()
+            stored = Task(
+                type="tutoring",
+                student_id=student_id,
+                knowledge_point_id=POINT,
+                evidence_ids=[error.id],
+                created_on=TODAY,
+            )
+            session.add(stored)
+            session.flush()
+            tasks.append(
+                TutorTask(
+                    task_id=stored.id,
+                    student_id=student_id,
+                    knowledge_point_id=POINT,
+                    error_evidence_id=error.id,
+                    round=1,
+                    allowed_backtrack_ids=first_task.allowed_backtrack_ids,
+                )
+            )
+        session.commit()
+
+    class SharedModel(Model):
+        async def generate(self, messages, output, tools=None):
+            if fallback and output is QuestionDraft:
+                self.practice += 1
+                raise LLMOutputError("exercise seed fallback")
+            return await super().generate(messages, output, tools)
+
+    model = SharedModel()
+    tutor = create_tutor(llm=model, knowledge=knowledge, engine=engine)
+    first_probe_ids = set()
+    for task, answers, expected in zip(
+        tasks,
+        (
+            ["3*cos(3*x)", "-2*cos(5*x)*sin(5*x)"],
+            ["cos(3*x)"],
+            ["3*cos(3*x)", "-10*cos(5*x)*sin(5*x)"],
+        ),
+        (MISS, FORMULA, SLIP),
+        strict=True,
+    ):
+        publisher = Publisher()
+        turn = await tutor.turn(input_for(task), publisher)
+        first_probe_ids.add(turn.awaiting_item_id)
+        for answer in answers:
+            turn = await tutor.turn(input_for(task, answer, turn.awaiting_item_id), publisher)
+        if expected != SLIP:
+            with Session(engine) as session:
+                practice = session.get(Item, turn.awaiting_item_id)
+                assert practice.purpose == "practice"
+                assert practice.dimension is None and not practice.predictions
+                if fallback:
+                    assert practice.source == "seed"
+            turn = await tutor.turn(input_for(task, practice.answer, practice.id), publisher)
+        assert turn.outcome == TutorOutcome.REQUEST_VERIFICATION
+        assert turn.confirmed_misconception_ids == [expected]
+        with Session(engine) as session:
+            for seed_id, original in seeds.items():
+                persisted = session.get(Item, seed_id)
+                assert persisted is not None, f"seed removed: {seed_id}"
+                assert persisted.model_dump() == original
+        assert {item.id: item.model_dump() for item in knowledge.seed_items(POINT)} == seeds
+    assert len(first_probe_ids) == 3
+    if fallback:
+        assert model.practice == 6
+
+
 async def test_unmodeled_is_recorded_for_teacher(setup):
     engine, knowledge, task = setup
     with Session(engine) as session:

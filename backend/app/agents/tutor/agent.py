@@ -517,7 +517,9 @@ class DiagnosticTutor:
         return None
 
     def _copy_item(self, seed, task, probe, candidates):
-        item = seed.model_copy(deep=True)
+        # SQLModel.model_copy also copies ORM identity; rebuild a transient row
+        # from fields so saving this question inserts rather than updates the seed.
+        item = Item.model_validate(seed.model_dump())
         item.id = f"tutor.{uuid4().hex}"
         item.knowledge_point_id = task.knowledge_point_id
         if probe:
