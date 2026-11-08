@@ -13,6 +13,8 @@ from sqlmodel import Session, select
 from app.agents.planner import InvalidPlanError, PlanningPolicy, create_planner
 from app.agents.planner.models import Decision, PlanningDecisions
 from app.agents.planner.queries import common_issues
+from app.clock.service import TeachingClock
+from app.clock.storage import PrecheckContext
 from app.config import Settings
 from app.contracts.agents import Judgement, PlannerInput, TutorTurn
 from app.contracts.api import MessageCreate
@@ -851,7 +853,9 @@ async def test_non_direct_recurrence_rule_and_configurable_threshold(classroom):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("disabled", [{"planner": None}, {"planner": None, "verifier": None}])
+@pytest.mark.parametrize(
+    "disabled", [{}, {"planner": None}, {"verifier": None}, {"planner": None, "verifier": None}]
+)
 async def test_application_respects_explicit_disable_and_closes_shared_client(
     classroom, tmp_path, monkeypatch, disabled
 ):
@@ -870,11 +874,16 @@ async def test_application_respects_explicit_disable_and_closes_shared_client(
     app = create_app(
         engine=classroom,
         checkpoint_path=str(tmp_path / "lifespan.db"),
-        orchestration_dependencies=disabled,
+        orchestration_dependencies={"tutor": None, **disabled},
     )
     async with app.router.lifespan_context(app):
-        assert app.state.orchestrator.planner is None
-        assert len(clients) == (0 if "verifier" in disabled else 1)
+        assert len(clients) == (0 if len(disabled) == 2 else 1)
+        for name in ("planner", "verifier"):
+            agent = getattr(app.state.orchestrator, name)
+            if name in disabled:
+                assert agent is None
+            else:
+                assert agent.llm is clients[0]
     assert all(c.closed for c in clients)
 
 
@@ -1026,3 +1035,66 @@ async def test_slip_single_verification_closes_task_without_background_failure(c
             assert session.get(Mastery, ("C", "kp")).state == MasteryState.TUTORING
             events = session.exec(select(Event)).all()
             assert len(events) == 1 and events[0].processed
+
+
+@pytest.mark.anyio
+async def test_clock_and_planner_share_prechecks_without_losing_chapter_context(
+    classroom, tmp_path
+):
+    with Session(classroom) as session:
+        session.add(
+            KnowledgePoint(
+                id="future2", name="第二个后续情境", lecture=9, section=2, prerequisite_ids=["kp"]
+            )
+        )
+        session.commit()
+    knowledge = NxKnowledgeGraph.from_engine(classroom)
+    bus = EventBus()
+    model = PlanningModel()
+    inputs = []
+
+    class Verifier:
+        async def compose(self, inp):
+            inputs.append(inp)
+            return [
+                Item(
+                    id=f"clock-planner-{len(inputs)}",
+                    knowledge_point_id=inp.knowledge_point_id,
+                    purpose=ItemPurpose.VERIFICATION,
+                    dimension=inp.dimensions[0],
+                    stem="跨章新题",
+                    answer="1",
+                    fingerprint=f"clock-planner-{len(inputs)}",
+                    source=ItemSource.GENERATED,
+                )
+            ]
+
+    async with Orchestrator.open(
+        classroom,
+        str(tmp_path / "clock-planner.db"),
+        bus,
+        planner=create_planner(engine=classroom, llm=model, knowledge=knowledge),
+        verifier=Verifier(),
+        knowledge=knowledge,
+        pending_poll_interval=None,
+    ) as runtime:
+        clock = TeachingClock(
+            classroom, knowledge, bus, initial_date=TODAY, wake=runtime.recover_pending
+        )
+        await clock.enter_lecture(9)
+        await runtime.wait_idle()
+        await clock.enter_lecture(9)
+        await runtime.wait_idle()
+        with Session(classroom) as session:
+            tasks = session.exec(select(Task).where(Task.type == TaskType.PRECHECK)).all()
+            assert len(tasks) == 6
+            assert all(t.status == TaskStatus.ACTIVE for t in tasks)
+            assert {
+                (p.student_id, p.context_knowledge_point_id)
+                for p in session.exec(select(PrecheckContext))
+            } == {(student, target) for student in "ABC" for target in ("future", "future2")}
+        assert len(inputs) == 6
+        assert {i.context_knowledge_point_id for i in inputs} == {"future", "future2"}
+        assert all(i.dimensions == [Dimension.CROSS_CHAPTER] for i in inputs)
+        assert model.contexts == []  # The clock already created every required precheck.
+    await bus.close()

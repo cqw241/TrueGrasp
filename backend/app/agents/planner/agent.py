@@ -14,7 +14,7 @@ from app.agents.planner.models import (
     PlanningResult,
     TaskContext,
 )
-from app.agents.planner.queries import confirmed_hypotheses, homework_groups
+from app.agents.planner.queries import homework_groups
 from app.contracts.agents import PlannedTask, PlannerInput
 from app.contracts.entities import (
     Event,
@@ -43,7 +43,7 @@ from app.contracts.events import (
 from app.contracts.knowledge import KnowledgeGraph
 from app.contracts.llm import ChatMessage, LLMClient
 from app.contracts.values import SLIP
-from app.ledger.queries import RANK, current_goal
+from app.ledger.queries import RANK, confirmed_hypotheses, current_goal
 from app.orchestration.storage import PlanningTaskContext
 
 PROMPT = """你是高校高等数学教学规划 Agent。依据教师目标和可追溯证据安排教学。

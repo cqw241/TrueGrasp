@@ -14,3 +14,6 @@ backend/data/
 .vscode/*
 !.vscode/extensions.json
 .DS_Store
+
+# 独立任务工作区
+.worktrees/

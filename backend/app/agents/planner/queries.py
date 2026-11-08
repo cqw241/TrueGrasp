@@ -5,23 +5,11 @@ from collections import defaultdict
 from sqlmodel import Session, select
 
 from app.contracts.api import CommonIssue
-from app.contracts.entities import Evidence, Hypothesis, Mastery, Misconception, Task
-from app.contracts.enums import EvidenceKind, HypothesisStatus, TaskStatus, TaskType
+from app.contracts.entities import Evidence, Mastery, Misconception, Task
+from app.contracts.enums import EvidenceKind, TaskStatus, TaskType
 from app.contracts.values import SLIP
-from app.ledger.queries import RANK
+from app.ledger.queries import RANK, confirmed_hypotheses
 from app.orchestration.storage import PlanningTaskContext
-
-
-def confirmed_hypotheses(session: Session) -> list[Hypothesis]:
-    groups = defaultdict(list)
-    for hypothesis in session.exec(select(Hypothesis).order_by(Hypothesis.id)):
-        groups[(hypothesis.task_id, hypothesis.error_evidence_id)].append(hypothesis)
-    result = []
-    for group in groups.values():
-        alive = [h for h in group if h.status != HypothesisStatus.REFUTED]
-        if len(alive) == 1 and alive[0].status == HypothesisStatus.SUPPORTED:
-            result.append(alive[0])
-    return result
 
 
 def homework_groups(session: Session, kp_ids: set[str]) -> dict:

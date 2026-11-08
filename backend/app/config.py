@@ -1,3 +1,4 @@
+from datetime import date
 from functools import lru_cache
 from typing import Literal
 
@@ -23,6 +24,9 @@ class Settings(BaseSettings):
 
     planner_class_review_min_students: int = Field(default=3, ge=2)
     planner_retest_delay_days: int = Field(default=3, ge=1)
+
+    teaching_clock_mode: Literal["demo", "real"] = "demo"
+    teaching_clock_initial_date: date = date(2026, 9, 7)
 
     database_url: str = "sqlite:///./data/truegrasp.db"
     checkpoint_db_path: str = "./data/checkpoints.db"

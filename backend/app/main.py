@@ -2,7 +2,7 @@ import asyncio
 import signal
 import threading
 from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager, suppress
 from types import FrameType
 from typing import Any
 
@@ -10,9 +10,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
-from app.agents.planner import PlanningPolicy, create_planner
 from app.agents.verifier import create_verifier
 from app.api import decision, health, stream, student, teacher
+from app.clock.service import TeachingClock
 from app.config import get_settings
 from app.db import get_engine, init_db
 from app.knowledge.graph import NxKnowledgeGraph
@@ -52,6 +52,13 @@ def _close_stream_on_exit_signal(bus: EventBus) -> Iterator[None]:
             signal.signal(sig, handler)
 
 
+async def _follow_real_date(clock: TeachingClock, interval: float = 30) -> None:
+    while True:
+        await asyncio.sleep(interval)
+        if clock.needs_date_sync():
+            await clock.scan()
+
+
 def create_app(
     *,
     engine: Engine | None = None,
@@ -69,11 +76,10 @@ def create_app(
         llm = None
         try:
             settings = get_settings()
-            if settings.llm_api_key and any(
-                name not in dependencies for name in ("planner", "verifier")
-            ):
+            if settings.llm_api_key and "planner" not in dependencies:
+                from app.agents.planner import PlanningPolicy, create_planner
+
                 llm = OpenAICompatClient(settings)
-            if llm is not None and "planner" not in dependencies:
                 dependencies["planner"] = create_planner(
                     engine=business_engine,
                     llm=llm,
@@ -83,7 +89,18 @@ def create_app(
                         retest_delay_days=settings.planner_retest_delay_days,
                     ),
                 )
-            if llm is not None and "verifier" not in dependencies:
+            clock = TeachingClock(
+                business_engine,
+                dependencies["knowledge"],
+                bus,
+                mode=settings.teaching_clock_mode,
+                initial_date=settings.teaching_clock_initial_date,
+            )
+            dependencies.setdefault("teaching_date", clock.current_date)
+            app.state.clock = clock
+            if settings.llm_api_key and "verifier" not in dependencies:
+                if llm is None:
+                    llm = OpenAICompatClient(settings)
                 dependencies["verifier"] = create_verifier(
                     llm=llm, knowledge=dependencies["knowledge"]
                 )
@@ -95,8 +112,21 @@ def create_app(
             ) as runtime:
                 app.state.orchestrator = runtime
                 app.state.event_bus = bus
-                with _close_stream_on_exit_signal(bus):
-                    yield
+                clock.wake = runtime.recover_pending
+                await clock.scan()
+                clock_job = (
+                    asyncio.create_task(_follow_real_date(clock), name="teaching-clock")
+                    if clock.mode == "real"
+                    else None
+                )
+                try:
+                    with _close_stream_on_exit_signal(bus):
+                        yield
+                finally:
+                    if clock_job is not None:
+                        clock_job.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await clock_job
         finally:
             await bus.close()
             if llm is not None:

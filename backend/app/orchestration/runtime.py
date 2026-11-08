@@ -15,6 +15,7 @@ from langgraph.types import Command
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
+from app.clock.storage import PrecheckContext
 from app.contracts.agents import (
     Judgement,
     Planner,
@@ -345,11 +346,17 @@ class Orchestrator:
                     and dimensions is None
                 ):
                     dimensions = [Dimension.CORRECTNESS]
-                if context and task.type == TaskType.PRECHECK:
-                    if dimensions is None:
+                if task.type == TaskType.PRECHECK:
+                    clock_context = session.exec(
+                        select(PrecheckContext).where(PrecheckContext.task_id == task_id)
+                    ).first()
+                    if dimensions is None and (context is not None or clock_context is not None):
                         dimensions = [Dimension.CROSS_CHAPTER]
                     if context_knowledge_point_id is None:
-                        context_knowledge_point_id = context.context_knowledge_point_id
+                        if clock_context is not None:
+                            context_knowledge_point_id = clock_context.context_knowledge_point_id
+                        elif context is not None:
+                            context_knowledge_point_id = context.context_knowledge_point_id
             initial = RunState(
                 kind="task",
                 task_id=task_id,

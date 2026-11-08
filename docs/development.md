@@ -4,6 +4,47 @@
 
 后端模块的划分与负责人见[开发计划](../开发计划.md)第 1 节。模块之间的契约（实体、Agent 输入输出、接口桩、事件类型）都在 `backend/app/contracts/`，改动前先和柴确认。HTTP 接口定义导出在 `backend/openapi.json`，启动后端后也可以在 `/docs` 查看。
 
+## T07 教学时钟与章前预检
+
+`app.clock.service.TeachingClock` 提供 `state()`、`current_date()`、`await scan()`、
+`await advance(days)` 和 `await enter_lecture(lecture)`。调用前执行 `init_db(engine)`，
+传入已加载的 `KnowledgeGraph` 和事件发布端；可将 `wake` 绑定到
+`runtime.recover_pending`。应用启动时自动组装为 `app.state.clock`，并默认将
+`current_date` 注入编排层；显式传入的 `teaching_date` 依赖仍优先。
+
+- `TEACHING_CLOCK_MODE=demo`（默认）：教学日期、当前讲次保存在业务库。首次初始化使用
+  `TEACHING_CLOCK_INITIAL_DATE`（默认 `2026-09-07`），当前讲次从 1 开始；重启不重置。
+- `TEACHING_CLOCK_MODE=real`：使用 `Asia/Shanghai` 当日日期，每 30 秒检查是否跨日，
+  跨日扫描到期任务；手动推进返回 409。切换模式保留讲次，切回 demo 从最后保存的日期继续。
+- `GET /api/clock` 返回现有 `ClockState`；`POST /api/clock/advance` 接收 `{"days": 4}`；
+  `POST /api/clock/lecture` 接收 `{"lecture": 9}`。HTTP 请求与响应契约不变。
+
+启动、推进日期和进入章节都会扫描 `pending`、到期日期不晚于当前教学日期的任务，
+写入 `TaskDue` 领域事件。没有到期日期的任务不由时钟调度，`active/done/cancelled`
+任务也不重复启动。每个任务只生成一次到期通知；事件、通知记录、编排 `PendingWork`
+同事务提交。缺少 T08 规划 Agent 时保留待办，待接入后恢复，不生成模拟规划。
+
+进入章节时，T07 按 T02 的 `prerequisites()` 契约检查**直接先修**，逐学生计算三条规则：
+先修有已确认错因、先修未巩固、已确认错因的 `recurs_in` 指向新知识点。
+确诊判断使用 `ledger.queries.confirmed_hypotheses()`，与 T08 同口径：按
+`(task_id, error_evidence_id)` 分组，只有一个未被排除的候选且其状态为 `SUPPORTED`
+时才确诊；其他候选为 `PENDING` 或 `SUPPORTED` 时均未确诊，`slip` 不作为确认错因。
+缺失掌握记录按未巩固处理，`consolidated/integrated` 均满足巩固门槛。
+T07 直接创建确定性预检任务；T08 消费 `LectureEntered` 时应复用这些任务，避免重复创建；其确诊查询可复用上述共享函数。
+
+预检的 `knowledge_point_id` 是待复查的旧知识点，私有 `PrecheckContext` 保存新章节目标。
+编排层在自动调度、手动启动和恢复时将其作为 `context_knowledge_point_id` 传入验证白名单，
+默认维度为 `cross_chapter`。例如链式法则旧错指向第九讲多元复合求导时，仍检验原错因。
+任务保留触发理由及依据证据；以“讲次、学生、旧知识点、新目标”去重。
+重复进入章节允许补建新命中组合，已有任务结束或取消也不自动重建。
+已掌握但有历史确认错因的学生仍会触发预检；缺失记录时名单可能覆盖全班，不能硬编码演示名单。
+
+提交后通过现有 `ClockAdvanced`、`TaskChanged` 刷新前端。SSE 不回放；数据库事件与待办
+承担恢复责任。私有表启动时自动创建，无需修改既有表或公共契约；仍按单进程部署。
+
+验收：`cd backend && uv run pytest tests/test_clock.py -q`。覆盖日期推进、启动与跨日补扫、
+事务回滚及去重、三条规则的精确名单、真实第 1→2→9 讲内容，以及独立验证上下文恢复。
+
 ## T03 编排内核
 
 `backend/app/orchestration/` 实现 LangGraph 主图、辅导与验证子图、SQLite checkpoint、验证输入白名单和 SSE 广播总线。业务实体仍存入 `DATABASE_URL`，任务对话与等待点存入 `CHECKPOINT_DB_PATH`。部署按单进程运行，SSE 不跨进程广播、不回放历史；重新连接后通过 REST 读取当前状态。收到 Ctrl+C 或 SIGTERM 时立即结束 SSE 流，否则 uvicorn 会一直等连接关闭，旧进程不退出，`--reload` 也会卡住。
@@ -20,7 +61,7 @@
 |---|---|
 | `planner`、`tutor`、`verifier` | 实现 `contracts.agents` 中的三个 Protocol |
 | `knowledge` | 实现 `contracts.knowledge.KnowledgeGraph`，辅导输入使用 `ancestors()` 构造允许回溯的知识点 |
-| `teaching_date` | 无参函数，返回 T07 的当前教学日期；未注入时沿用任务 checkpoint 的日期，首次启动默认用任务创建日期 |
+| `teaching_date` | 无参函数，应用默认注入 T07 当前教学日期。直接使用 `Orchestrator.open` 且未注入时，沿用任务 checkpoint 的日期，首次启动用任务创建日期 |
 | `evidence_writer` | 同步函数 `(session, evidence) -> Evidence`，默认使用 T19 账本，在同一事务中追加证据并迁移掌握状态，不能自行 commit；规则见 [账本说明](ledger.md) |
 
 生命周期内通过 `app.state.orchestrator` 获取运行时，`app.state.event_bus` 获取发布端。脚本和集成测试也可通过 `async with Orchestrator.open(engine, checkpoint_path, bus, **dependencies)` 管理运行时。业务库需先初始化，调用方负责释放传入的 engine 和 bus。
@@ -33,7 +74,7 @@
 | `await get_messages(task_id)` | 从 checkpoint 读取本任务的 `ChatTurn` 列表及题目附件 |
 | `await wait_idle()` | 等后台任务执行到等待点或结束；脚本和测试用此方法获取后台异常 |
 
-`start_task()` 可显式传入 `teaching_date`、`dimensions` 和 `context_knowledge_point_id`。初次验证默认考查正确性、抗诱错、近迁移；仅偶发失误时只考查正确性，复测默认考查保持，跨章节预检由调用方明确指定维度和后续知识点。
+`start_task()` 可显式传入 `teaching_date`、`dimensions` 和 `context_knowledge_point_id`。初次验证默认考查正确性、抗诱错、近迁移；仅偶发失误时只考查正确性，复测默认考查保持，T07 创建的跨章节预检自动读取持久化上下文；其他调用方可明确指定维度和后续知识点。
 
 规划创建的未来任务保持 `pending`；T07 提交 `TaskDue` 事件后，内核会启动该任务。班级讲解建议和转教师任务只保存和通知。辅导申请重规划时，当前任务取消，原因写入 `Task.reason`，并用 `TaskDue` 唤起一次规划；这次规划的新任务保持待办，不递归启动新一轮辅导。
 
