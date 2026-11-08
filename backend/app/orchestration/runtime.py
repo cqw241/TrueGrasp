@@ -15,6 +15,7 @@ from langgraph.types import Command
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
+from app.clock.storage import PrecheckContext
 from app.contracts.agents import (
     Judgement,
     Planner,
@@ -335,6 +336,16 @@ class Orchestrator:
                 )
             if task.due_date is not None and task.due_date > teaching_date:
                 raise OrchestrationError(409, "任务尚未到期")
+            if task.type == TaskType.PRECHECK:
+                with Session(self.engine) as session:
+                    context = session.exec(
+                        select(PrecheckContext).where(PrecheckContext.task_id == task_id)
+                    ).first()
+                    if context is not None:
+                        if dimensions is None:
+                            dimensions = [Dimension.CROSS_CHAPTER]
+                        if context_knowledge_point_id is None:
+                            context_knowledge_point_id = context.context_knowledge_point_id
             initial = RunState(
                 kind="task",
                 task_id=task_id,

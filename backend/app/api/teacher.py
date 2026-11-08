@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.api.stub import not_implemented
+from app.clock.service import ClockError
 from app.config import get_settings
 from app.contracts.api import (
     AdoptMisconception,
@@ -36,20 +37,23 @@ router = APIRouter(tags=["teacher"])
 
 
 @router.get("/clock")
-def get_clock() -> ClockState:
-    not_implemented("T07")
+def get_clock(request: Request) -> ClockState:
+    return request.app.state.clock.state()
 
 
 @router.post("/clock/advance")
-def advance_clock(body: AdvanceClock) -> ClockState:
+async def advance_clock(body: AdvanceClock, request: Request) -> ClockState:
     """推进教学日期，扫描到期任务并生成事件。"""
-    not_implemented("T07")
+    try:
+        return await request.app.state.clock.advance(body.days)
+    except ClockError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/clock/lecture")
-def enter_lecture(body: EnterLecture) -> ClockState:
+async def enter_lecture(body: EnterLecture, request: Request) -> ClockState:
     """课程进入新章节，按三条规则创建章前预检。"""
-    not_implemented("T07")
+    return await request.app.state.clock.enter_lecture(body.lecture)
 
 
 @router.get("/goals")

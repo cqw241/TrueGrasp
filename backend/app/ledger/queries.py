@@ -1,6 +1,6 @@
 """Read models for planner and teacher/student views."""
 
-from collections import Counter
+from collections import Counter, defaultdict
 
 from sqlmodel import Session, select
 
@@ -25,6 +25,19 @@ from app.contracts.enums import (
 )
 
 RANK = {MasteryState.INITIAL: 1, MasteryState.CONSOLIDATED: 2, MasteryState.INTEGRATED: 3}
+
+
+def confirmed_hypotheses(session: Session) -> list[Hypothesis]:
+    """与 T08 一致：同一次错误诊断只剩一个未排除候选，且该候选受支持，才确诊。"""
+    groups = defaultdict(list)
+    for hypothesis in session.exec(select(Hypothesis).order_by(Hypothesis.id)):
+        groups[(hypothesis.task_id, hypothesis.error_evidence_id)].append(hypothesis)
+    result = []
+    for group in groups.values():
+        alive = [h for h in group if h.status != HypothesisStatus.REFUTED]
+        if len(alive) == 1 and alive[0].status == HypothesisStatus.SUPPORTED:
+            result.append(alive[0])
+    return result
 
 
 def current_goal(session: Session, kp_id: str | None = None) -> TeachingGoal | None:
