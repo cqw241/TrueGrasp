@@ -7,19 +7,27 @@ import pytest
 from httpx2 import ASGITransport, AsyncClient
 from sqlmodel import Session, select
 
+from app.agents.planner import create_planner
 from app.agents.tutor import create_tutor
 from app.agents.tutor.models import CandidateSelection
 from app.agents.tutor.queries import diagnosis
+from app.agents.tutor.student_question import (
+    AttemptReview,
+    Guidance,
+    QuestionDraft,
+    StudentQuestions,
+)
 from app.agents.verifier import create_verifier
 from app.agents.verifier.agent import ItemDraft, ItemReview
 from app.config import Settings
 from app.contracts.agents import PlannerOutput
 from app.contracts.api import MessageCreate
-from app.contracts.entities import Evidence, Mastery
-from app.contracts.enums import EvidenceKind, MasteryState
+from app.contracts.entities import Evidence, Mastery, Task
+from app.contracts.enums import EvidenceKind, MasteryState, TaskType
 from app.db import make_engine
 from app.main import create_app
 from app.orchestration import EventBus, Orchestrator
+from tests.test_planner import PlanningModel
 from tests.test_tutor import FORMULA, MISS, POINT, TODAY, Model, Publisher, input_for
 from tests.test_tutor import setup as setup
 
@@ -71,6 +79,100 @@ class CombinedModel(Model):
                 predictions=predictions,
             )
         return await super().generate(messages, output, tools)
+
+
+@pytest.mark.parametrize("initial", ["", "cos(x)"])
+async def test_student_question_diagnosis_hints_and_independent_followup(setup, tmp_path, initial):
+    engine, knowledge, _ = setup
+    guidance = []
+
+    class ModelForQuestion(CombinedModel):
+        async def generate(self, messages, output, tools=None):
+            payload = json.loads(messages[-1].content)
+            if output is QuestionDraft:
+                return QuestionDraft(
+                    knowledge_point_id=POINT,
+                    spec={"operation": "derivative", "expr": "sin(8*x)", "variables": ["x"]},
+                    answer="8*cos(8*x)" if payload["problem"] != "bad" else "7",
+                )
+            if output is AttemptReview:
+                return AttemptReview(
+                    final_answer=payload["attempt"] if payload["attempt"] == "cos(x)" else "",
+                    observation="需要检查内层导数",
+                )
+            if output is Guidance:
+                guidance.append(payload)
+                return Guidance(text="请检查内层函数和自变量的关系。")
+            return await super().generate(messages, output, tools)
+
+    model, planning = ModelForQuestion(), PlanningModel()
+    app = create_app(
+        engine=engine,
+        checkpoint_path=str(tmp_path / "question.db"),
+        orchestration_dependencies={
+            "tutor": create_tutor(llm=model, knowledge=knowledge, engine=engine),
+            "verifier": create_verifier(llm=model, knowledge=knowledge),
+            "planner": create_planner(engine=engine, llm=planning, knowledge=knowledge),
+            "questions": StudentQuestions(model, knowledge),
+        },
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        runtime = app.state.orchestrator
+        url = "/api/students/A/questions"
+        assert (await client.post(url, json={"content": "bad"})).status_code == 422
+        response = await client.post(url, json={"content": "求 sin(8x) 的导数", "attempt": initial})
+        assert response.status_code == 202
+        question = response.json()
+        task_id = question["id"]
+        assert question["type"] == "question"
+        await runtime.wait_idle()
+
+        async def reply(text):
+            target = await runtime.get_answer_target(task_id)
+            assert target.phase == "waiting"
+            result = await client.post(
+                f"/api/tasks/{task_id}/messages",
+                params={"expected_turn": target.turn},
+                json={"content": text, "answering_item_id": target.item_id},
+            )
+            assert result.status_code == 202
+            await runtime.wait_idle()
+
+        if initial:
+            probe = (await runtime.get_messages(task_id))[-1]
+            assert probe.item and not probe.item.answer and not probe.item.predictions
+            await reply("cos(3*x)")
+            assert guidance[-1]["strategy_cards"][0]["id"] == "numeric_slope_conflict"
+        else:
+            assert "尝试" in (await runtime.get_messages(task_id))[-1].content
+            await reply("不知道如何处理内层")
+            assert (await runtime.get_messages(task_id))[-1].hint_level is None
+            await reply("还是不会")
+        for level in (1, 2, 3):
+            last = (await runtime.get_messages(task_id))[-1]
+            assert last.hint_level == level
+            assert not last.solution
+            assert "8*cos(8*x)" not in last.content
+            await reply("还是不会")
+        last = (await runtime.get_messages(task_id))[-1]
+        assert last.solution and "8*cos(8*x)" in last.content
+        assert (await runtime.get_answer_target(task_id)).phase == "closed"
+        with Session(engine) as session:
+            evidence = session.get(Evidence, question["evidence_ids"][0])
+            assert evidence.student_answer == initial
+            assert evidence.is_correct is None
+            verify = session.exec(select(Task).where(Task.type == TaskType.VERIFICATION)).one()
+            assert evidence.id in verify.evidence_ids
+            assert verify.knowledge_point_id == POINT
+            task = session.get(Task, task_id)
+            assert task.status == "done"
+            followup_id = verify.id
+        followup = (await runtime.get_messages(followup_id))[-1]
+        assert followup.item.dimension == "correctness"
+        assert followup.item.stem != "求 sin(8x) 的导数"
 
 
 @pytest.mark.parametrize(

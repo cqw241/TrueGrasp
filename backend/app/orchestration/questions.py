@@ -1,0 +1,179 @@
+"""Student questions use the regular task checkpoint, diagnosis and planning queues."""
+
+from datetime import date
+from uuid import uuid4
+
+from fastapi import HTTPException
+from openai import OpenAIError
+from sqlmodel import Session
+
+from app.contracts.api import ChatTurn, QuestionCreate
+from app.contracts.entities import Evidence, Item, Student, Task
+from app.contracts.enums import EvidenceKind, ItemPurpose, ItemSource, JudgedBy, TaskType
+from app.contracts.events import EvidenceAdded
+from app.llm.client import LLMOutputError
+from app.orchestration.storage import NodeReceipt, queue_work, record_exposure
+
+QUESTION_FOLLOWUP = "主动提问后的同类题："
+
+
+async def create_question(runtime, student_id: str, body: QuestionCreate) -> Task:
+    content, attempt = body.content.strip(), body.attempt.strip()
+    if not content or max(len(content), len(attempt)) > 8000:
+        raise HTTPException(422, "请提供题目，题目和尝试均不得超过 8000 字")
+    with Session(runtime.engine) as session:
+        if session.get(Student, student_id) is None:
+            raise HTTPException(404, "学生不存在")
+    runtime._require("questions", "tutor", "planner", "verifier", "knowledge")
+    try:
+        draft = await runtime.questions.solve(content)
+    except (OpenAIError, LLMOutputError) as exc:
+        raise HTTPException(502, "暂时无法核验题目，请重试") from exc
+    if draft is None:
+        raise HTTPException(422, "无法独立核验这道题，请补全题目条件或输入可计算的高数题")
+
+    today = runtime.teaching_date() if runtime.teaching_date else date.today()
+    with Session(runtime.engine, expire_on_commit=False) as session:
+        item = Item(
+            id=f"student-question.{uuid4().hex}",
+            knowledge_point_id=draft.knowledge_point_id,
+            purpose=ItemPurpose.PRACTICE,
+            source=ItemSource.GENERATED,
+            stem=content,
+            spec=draft.spec,
+            answer=draft.answer,
+            fingerprint=runtime.questions.tools.fingerprint(draft.spec),
+        )
+        task = Task(
+            type=TaskType.QUESTION,
+            student_id=student_id,
+            knowledge_point_id=item.knowledge_point_id,
+            reason="学生主动提问",
+            created_on=today,
+        )
+        session.add(item)
+        session.add(task)
+        session.flush()
+        evidence = Evidence(
+            student_id=student_id,
+            task_id=task.id,
+            item_id=item.id,
+            knowledge_point_id=task.knowledge_point_id,
+            kind=EvidenceKind.PRACTICE,
+            student_answer=attempt,
+            judged_by=JudgedBy.TOOL,
+            reason=f"学生主动提问（题目已独立核验）：{content}",
+            teaching_date=today,
+        )
+        session.add(evidence)
+        session.flush()
+        task.evidence_ids = [evidence.id]
+        record_exposure(session, student_id, task.id, item)
+        session.add(
+            NodeReceipt(key=f"question:{task.id}", result={"item": item.id, "attempt": attempt})
+        )
+        queue_work(session, f"task:{task.id}", {"teaching_date": today.isoformat()})
+        session.commit()
+    await runtime._publish_task(task)
+    await runtime.bus.publish(
+        EvidenceAdded(
+            student_id=student_id,
+            evidence_id=evidence.id,
+            knowledge_point_id=task.knowledge_point_id,
+        )
+    )
+    runtime.recover_pending()
+    return task
+
+
+async def question_turn(runtime, state) -> dict:
+    task_id = state["task_id"]
+    history = state["messages"]
+    incoming = state.get("incoming_message")
+    with Session(runtime.engine) as session:
+        task = runtime._task(session, task_id)
+        initial = session.get(NodeReceipt, f"question:{task_id}").result
+        item = session.get(Item, initial["item"])
+        confirmed_ids = state.get("tutor_turn", {}).get("confirmed_misconception_ids", [])
+        session.expunge(item)
+    if not history:
+        history = [ChatTurn(role="user", content=item.stem).model_dump(mode="json")]
+        if not initial["attempt"]:
+            return _reply(history, "请先写下你的尝试，或说说你卡在哪一步。")
+        attempt = initial["attempt"]
+        history.append(ChatTurn(role="user", content=attempt).model_dump(mode="json"))
+    else:
+        attempt = incoming["content"] if incoming else state["question_attempt"]
+
+    level = state.get("question_hint", 0)
+    # Leaving the T09 probe loop resumes work on the student's original problem.
+    if state["phase"] == "question_diagnosis":
+        observation = state["question_observation"]
+    else:
+        review = await runtime.questions.review(item, attempt)
+        observation = review.observation
+        check = None
+        if review.final_answer:
+            check = runtime.questions.tools.check_equivalent(
+                review.final_answer, item.answer, item.spec.answer_mode, item.spec.variables
+            ).equivalent
+        if check is True:
+            return _reply(history, "你的结果通过了核验。接下来可以做一道同类新题。", finished=True)
+        if level == 0 and not state.get("question_attempt"):
+            checkpoint = {"question_attempt": attempt, "question_observation": observation}
+            if check is False:
+                with Session(runtime.engine) as session:
+                    task = runtime._task(session, task_id)
+                    key = f"question:{task_id}:first_attempt"
+                    if session.get(NodeReceipt, key) is None:
+                        evidence = Evidence(
+                            student_id=task.student_id,
+                            knowledge_point_id=task.knowledge_point_id,
+                            task_id=task.id,
+                            item_id=item.id,
+                            kind=EvidenceKind.PRACTICE,
+                            student_answer=review.final_answer,
+                            is_correct=False,
+                            judged_by=JudgedBy.TOOL,
+                            reason="主动提问的首次尝试与核验结果不等价",
+                            teaching_date=date.fromisoformat(state["teaching_date"]),
+                        )
+                        session.add(evidence)
+                        session.flush()
+                        task.evidence_ids = [*task.evidence_ids, evidence.id]
+                        session.add(NodeReceipt(key=key, result={"evidence_id": evidence.id}))
+                        session.commit()
+                return {
+                    **checkpoint,
+                    "phase": "question_diagnosis",
+                    "incoming_message": None,
+                    "messages": history,
+                }
+            prompt = await runtime.questions.guide(item, attempt, observation, [], 0)
+            return {
+                **checkpoint,
+                **_reply(history, prompt or "你已经用了哪个公式？请写出卡住的那一步。"),
+            }
+
+    next_level = level + 1
+    text = await runtime.questions.guide(item, attempt, observation, confirmed_ids, next_level)
+    if next_level == 4:
+        return _reply(
+            history, f"{text}\n\n核验结果：${item.answer}$。", finished=True, solution=True
+        )
+    if not text:
+        raise ValueError("辅导模型未返回提示")
+    return {
+        **_reply(history, text, hint=next_level),
+        "question_hint": next_level,
+    }
+
+
+def _reply(history, content, *, hint=None, finished=False, solution=False):
+    message = ChatTurn(role="assistant", content=content, hint_level=hint, solution=solution)
+    return {
+        "phase": "question_finished" if finished else "question",
+        "messages": [*history, message.model_dump(mode="json")],
+        "awaiting_item_id": None,
+        "incoming_message": None,
+    }

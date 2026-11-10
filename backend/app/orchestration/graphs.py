@@ -14,6 +14,7 @@ from app.contracts.entities import Item, Task
 from app.contracts.enums import Dimension, ItemPurpose, ItemSource, TaskType
 from app.orchestration.context import current_teaching_date
 from app.orchestration.inputs import used_fingerprints
+from app.orchestration.questions import QUESTION_FOLLOWUP, question_turn
 from app.orchestration.storage import ItemExposure
 from app.verify.tools import SympyMathTools
 
@@ -46,6 +47,9 @@ class RunState(TypedDict, total=False):
     judgement: dict[str, Any]
     followup_event_ids: list[int]
     replan_event_id: int
+    question_hint: int
+    question_attempt: str
+    question_observation: str
 
 
 class TutorState(TypedDict):
@@ -103,11 +107,20 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
             current_teaching_date.reset(token)
         return {"tutor_turn": result["output"]}
 
+    async def call_question(state: RunState) -> dict:
+        return await question_turn(runtime, state)
+
     def prepare_verification(state: RunState) -> dict:
         if state.get("dimensions") is None:
             with Session(runtime.engine) as session:
                 task = session.get(Task, state["task_id"])
-                if task and task.type == TaskType.VERIFICATION and not task.misconception_ids:
+                if (
+                    task
+                    and task.type == TaskType.VERIFICATION
+                    and task.reason.startswith(QUESTION_FOLLOWUP)
+                ):
+                    state = {**state, "dimensions": [Dimension.CORRECTNESS.value]}
+                elif task and task.type == TaskType.VERIFICATION and not task.misconception_ids:
                     seed_dimensions = set(
                         session.exec(
                             select(Item.dimension).where(
@@ -206,6 +219,7 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
         "activate": runtime.activate,
         "tutor": call_tutor,
         "save_tutor": runtime.save_tutor,
+        "question": call_question,
         "prepare_verification": prepare_verification,
         "compose_verification": compose_verification,
         "save_items": runtime.save_items,
@@ -226,16 +240,33 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
     graph.add_edge("save_plan", END)
     graph.add_conditional_edges(
         "activate",
-        lambda state: "tutor" if state["phase"] == "tutoring" else "prepare_verification",
+        lambda state: {
+            "tutoring": "tutor",
+            "question": "question",
+            "verifying": "prepare_verification",
+        }[state["phase"]],
+    )
+    graph.add_conditional_edges(
+        "question",
+        lambda state: {
+            "question": "wait_input",
+            "question_diagnosis": "tutor",
+            "question_finished": "finish",
+        }[state["phase"]],
     )
     graph.add_edge("tutor", "save_tutor")
     graph.add_conditional_edges(
         "save_tutor",
-        lambda state: {
-            "await_student": "wait_input",
-            "request_verification": "prepare_verification",
-            "request_replan": "replan",
-        }[state["tutor_turn"]["outcome"]],
+        lambda state: (
+            {
+                "await_student": "wait_input",
+                "request_verification": "prepare_verification",
+                "request_replan": "replan",
+            }[state["tutor_turn"]["outcome"]]
+            if state["phase"] != "question_diagnosis"
+            or state["tutor_turn"]["outcome"] == "await_student"
+            else "question"
+        ),
     )
     graph.add_edge("prepare_verification", "compose_verification")
     graph.add_edge("compose_verification", "save_items")
@@ -250,7 +281,12 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
     graph.add_edge("wait_input", "accept_input")
     graph.add_conditional_edges(
         "accept_input",
-        lambda state: "tutor" if state["phase"] == "tutoring" else "judge_verification",
+        lambda state: {
+            "tutoring": "tutor",
+            "question_diagnosis": "tutor",
+            "question": "question",
+            "verifying": "judge_verification",
+        }[state["phase"]],
     )
     graph.add_edge("judge_verification", "save_evidence")
     graph.add_conditional_edges(
