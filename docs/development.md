@@ -173,7 +173,9 @@ shadcn/ui 组件用 `npx shadcn@latest add <组件>` 添加到 `components/ui/`�
 | 接管辅导、交还 Agent | `POST /api/tasks/{task_id}/takeover`、`POST /api/tasks/{task_id}/handback`（返回 `TaskControl`） | T24 |
 | 待审核错因与采纳 | `GET /api/misconceptions/pending`、`POST /api/misconceptions/{misconception_id}/adopt`（`AdoptMisconception`） | T16 |
 
-`TaskOverride`、`TaskControl`、`TakeoverRequest`、`AdoptMisconception` 和后四行的路由由 T12 以接口桩的形式加入 `contracts/api.py` 与 `api/teacher.py`，它们是前端对接用的初稿，T16、T24 实现时可以调整，调整后重新生成 `openapi.json` 和 `schema.d.ts`。`GET /api/tasks/controls` 只返回教师接管或覆盖过的任务；它返回 501 时，计划列表照常显示，只是没有“教师接管”“已覆盖”标记。
+T16 接通上述教师接口并沿用 T12 的契约。创建目标后持久化规划事件；转交列表同时保留待处理与已处理记录，驾驶舱人数统计待处理学生。处理转交会追加教师证据，保留历史作答和掌握状态。
+
+`GET /api/tasks/controls` 返回当前接管和已覆盖的任务。接管后暂停该学生的 Agent 会话与自动调度，交还后沿用原 checkpoint；计划改期或取消后，Agent 不会撤销同一计划的人工决定。学生相关处理分别追加账本证据，班级计划的覆盖保留独立审计记录。采纳待审核错因后，同一进程的诊断立即可检索该错因。
 
 写操作成功后，前端让相关查询重新拉取；收到 SSE 的 `task_changed`、`evidence_added` 时，也会刷新任务、转交、达标率和热力图。热力图用 ECharts 按需引入，只打包进驾驶舱页面。
 

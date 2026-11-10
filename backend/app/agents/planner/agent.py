@@ -44,8 +44,13 @@ from app.contracts.knowledge import KnowledgeGraph
 from app.contracts.llm import ChatMessage, LLMClient
 from app.contracts.values import SLIP
 from app.ledger.queries import RANK, confirmed_hypotheses, current_goal
-from app.orchestration.questions import QUESTION_FOLLOWUP
-from app.orchestration.storage import BACKTRACK_REASON_PREFIX, PlanningTaskContext
+from app.orchestration.storage import (
+    BACKTRACK_REASON_PREFIX,
+    QUESTION_FOLLOWUP,
+    PlanningTaskContext,
+    TeacherTaskControl,
+    matches_teacher_override,
+)
 
 PROMPT = """你是高校高等数学教学规划 Agent。依据教师目标和可追溯证据安排教学。
 候选已经由程序按目标差距、先修阻塞、截止日期、复发风险排序。保留该优先级，
@@ -170,6 +175,7 @@ class TeachingPlanner:
         candidates: list[Candidate] = []
         cancelled: set[int] = set()
         facts: dict = {}
+        controls = {row.task_id: row for row in session.exec(select(TeacherTaskControl))}
 
         def root_point(task):
             context = session.get(PlanningTaskContext, task.id)
@@ -183,6 +189,12 @@ class TeachingPlanner:
                 issue_misconception_id=issue,
             )
             for old in tasks:
+                if (
+                    (control := controls.get(old.id))
+                    and control.overridden
+                    and (matches_teacher_override(session, old, task, metadata.model_dump()))
+                ):
+                    return
                 if old.id in cancelled:
                     continue
                 old_context = session.get(PlanningTaskContext, old.id)
@@ -208,7 +220,9 @@ class TeachingPlanner:
                         and old.misconception_ids == task.misconception_ids
                     ):
                         return
-                    if old.status == TaskStatus.PENDING:
+                    if old.status == TaskStatus.PENDING and not (
+                        control and (control.overridden or control.taken_over)
+                    ):
                         cancelled.add(old.id)
                 elif old.status in OPEN or (
                     old.status == TaskStatus.DONE
@@ -492,7 +506,8 @@ class TeachingPlanner:
                 row = session.exec(
                     select(Evidence)
                     .where(
-                        (Evidence.task_id == previous.id) | Evidence.id.in_(previous.evidence_ids)
+                        (Evidence.task_id == previous.id) | Evidence.id.in_(previous.evidence_ids),
+                        Evidence.kind != EvidenceKind.TEACHER,
                     )
                     .order_by(Evidence.teaching_date.desc(), Evidence.id.desc())
                 ).first()
@@ -507,7 +522,10 @@ class TeachingPlanner:
                 kp_ids.update(goal.knowledge_point_ids)
                 rows = session.exec(
                     select(Evidence)
-                    .where(Evidence.knowledge_point_id.in_(kp_ids))
+                    .where(
+                        Evidence.knowledge_point_id.in_(kp_ids),
+                        Evidence.kind != EvidenceKind.TEACHER,
+                    )
                     .order_by(Evidence.teaching_date, Evidence.id)
                 ).all()
                 for row in {(e.student_id, e.knowledge_point_id): e for e in rows}.values():
@@ -564,7 +582,11 @@ class TeachingPlanner:
                 issue=cause,
             )
         for task in tasks:
-            if task.type == TaskType.CLASS_REVIEW and task.status == TaskStatus.PENDING:
+            if (
+                task.type == TaskType.CLASS_REVIEW
+                and task.status == TaskStatus.PENDING
+                and not ((control := controls.get(task.id)) and control.overridden)
+            ):
                 context = session.get(PlanningTaskContext, task.id)
                 if (
                     context

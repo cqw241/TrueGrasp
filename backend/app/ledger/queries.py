@@ -68,7 +68,16 @@ def class_overview(session: Session) -> ClassOverview:
             )
         ):
             goal_met += 1
-    escalated = len({row.student_id for row in rows if row.state == MasteryState.ESCALATED})
+    escalated = len(
+        set(
+            session.exec(
+                select(Task.student_id).where(
+                    Task.type == TaskType.ESCALATION,
+                    Task.status.in_((TaskStatus.PENDING, TaskStatus.ACTIVE)),
+                )
+            )
+        )
+    )
     return ClassOverview(
         students=len(students),
         goal_met=goal_met,

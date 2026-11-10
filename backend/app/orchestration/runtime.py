@@ -55,14 +55,17 @@ from app.ledger.service import append_evidence, escalate, start_tutoring
 from app.orchestration.bus import EventBus
 from app.orchestration.graphs import RunState, build_graph
 from app.orchestration.inputs import build_verifier_input
-from app.orchestration.questions import QUESTION_FOLLOWUP
 from app.orchestration.storage import (
+    QUESTION_FOLLOWUP,
     NodeReceipt,
     PendingWork,
     PlanningTaskContext,
+    TeacherTaskControl,
     init_storage,
+    matches_teacher_override,
     queue_work,
     record_exposure,
+    teacher_has_student,
 )
 
 logger = logging.getLogger(__name__)
@@ -163,6 +166,8 @@ class Orchestrator:
                 raise OrchestrationError(409, f"任务已结束：{task.status}")
             if task.type not in INTERACTIVE_TYPES or task.student_id is None:
                 raise OrchestrationError(409, "该任务不接受学生交互")
+            if teacher_has_student(session, task.student_id):
+                raise OrchestrationError(409, "教师接管中，辅导暂时暂停")
             if task.type in (TaskType.TUTORING, TaskType.QUESTION):
                 self._require("planner", "tutor", "verifier", "knowledge")
                 if task.type == TaskType.QUESTION:
@@ -235,6 +240,8 @@ class Orchestrator:
                     continue
                 if kind == "task":
                     task = self._task(session, int(target))
+                    if teacher_has_student(session, task.student_id):
+                        continue
                     if self.verifier is None or (
                         task.type in (TaskType.TUTORING, TaskType.QUESTION)
                         and (self.planner is None or self.tutor is None or self.knowledge is None)
@@ -260,6 +267,11 @@ class Orchestrator:
                 )
         except OrchestrationError:
             # 直接调用和后台恢复可能先后处理同一工作；已经确认的工作不再重开任务。
+            if kind == "task":
+                with Session(self.engine) as session:
+                    task = self._task(session, int(target))
+                    if teacher_has_student(session, task.student_id):
+                        return
             if self._pending(key):
                 raise
 
@@ -501,6 +513,8 @@ class Orchestrator:
             task = self._task(session, task_id)
             if task.status in (TaskStatus.DONE, TaskStatus.CANCELLED):
                 return AnswerTarget(phase="closed")
+            if teacher_has_student(session, task.student_id):
+                return AnswerTarget(phase="idle", prompt="教师接管中，辅导暂时暂停。")
             item = session.get(Item, item_id) if item_id is not None else None
             stem = item.stem if item else ""
         messages = snapshot.values.get("messages", [])
@@ -570,6 +584,10 @@ class Orchestrator:
                 return {"task_ids": state.get("task_ids", [])}
             for task_id in plan.cancel_task_ids:
                 task = self._task(session, task_id)
+                if (control := session.get(TeacherTaskControl, task_id)) and (
+                    control.overridden or control.taken_over
+                ):
+                    continue
                 if "contexts" in state["plan"] and task.status != TaskStatus.PENDING:
                     # A student may start pending work while the planner awaits the model.
                     continue
@@ -579,6 +597,13 @@ class Orchestrator:
                     if work := session.get(PendingWork, f"task:{task_id}"):
                         work.pending = False
             created = []
+            overridden = list(
+                session.exec(
+                    select(Task)
+                    .join(TeacherTaskControl, TeacherTaskControl.task_id == Task.id)
+                    .where(TeacherTaskControl.overridden)
+                )
+            )
             contexts = state["plan"].get("contexts", [])
             if contexts and len(contexts) != len(plan.tasks):
                 raise ValueError("任务执行上下文数量与规划任务不一致")
@@ -589,6 +614,8 @@ class Orchestrator:
                     raise ValueError("任务轮次必须大于 0")
                 task = Task(**planned.model_dump(), created_on=event.teaching_date)
                 context = contexts[index] if contexts else None
+                if any(matches_teacher_override(session, old, task, context) for old in overridden):
+                    continue
                 question_followup = planned.reason.startswith(QUESTION_FOLLOWUP)
                 if context and planned.student_id is not None and not question_followup:
                     active = session.exec(

@@ -42,6 +42,13 @@ export function TaskAnswer({ taskId }: { taskId: number }) {
   if (phase === 'closed') {
     return <p className="text-muted-foreground text-sm">任务已结束。</p>
   }
+  if (phase === 'idle' && target.data.prompt) {
+    return (
+      <p role="status" className="text-muted-foreground text-sm">
+        {target.data.prompt}
+      </p>
+    )
+  }
   return (
     <div className="space-y-3">
       {photoExpired && (

@@ -1,7 +1,7 @@
 """知识图谱（T04），实现 app.contracts.knowledge.KnowledgeGraph。
 
 内容入库后从业务库加载，用 NetworkX 建图，边的方向是“先修 → 后续”。
-加载后不再读库：重新入库内容或采纳未建模错因后，需要重新调用 ``from_engine``。
+加载后不再读库；教师审核通过的错因通过 ``add_adopted_misconception`` 更新共享图谱。
 """
 
 from collections import deque
@@ -85,6 +85,9 @@ class NxKnowledgeGraph:
 
     def misconceptions(self, kp_id: str) -> list[Misconception]:
         return [m for m in self._misconceptions.values() if m.knowledge_point_id == kp_id]
+
+    def add_adopted_misconception(self, misconception: Misconception) -> None:
+        self._misconceptions[misconception.id] = misconception
 
     def misconception(self, misconception_id: str) -> Misconception:
         return self._misconceptions[misconception_id]

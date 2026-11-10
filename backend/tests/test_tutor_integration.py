@@ -23,11 +23,13 @@ from app.agents.tutor.student_question import (
 from app.agents.verifier import create_verifier
 from app.agents.verifier.agent import ItemDraft, ItemReview
 from app.auth import authorize
+from app.clock.storage import DueNotification
 from app.config import Settings
 from app.contracts.agents import PlannerOutput
 from app.contracts.api import MessageCreate
-from app.contracts.entities import Event, Evidence, Mastery, Task
-from app.contracts.enums import EvidenceKind, MasteryState, TaskType
+from app.contracts.entities import Event, Evidence, Mastery, Misconception, Task
+from app.contracts.enums import ContentSource, EvidenceKind, MasteryState, TaskType
+from app.contracts.events import HomeworkImported, make_event
 from app.db import make_engine
 from app.main import create_app
 from app.orchestration import EventBus, Orchestrator
@@ -262,6 +264,166 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
         assert shown["id"] == followup.item.id and shown["answer"] == ""
         assert shown["spec"] is None and shown["fingerprint"] is None
         assert not shown["predictions"] and not shown["rubric"]
+
+
+async def test_teacher_takeover_survives_restart_and_handback_keeps_same_probe(setup, tmp_path):
+    engine, knowledge, task = setup
+    model = CombinedModel()
+    with Session(engine) as session:
+        verify = Task(
+            type=TaskType.VERIFICATION, student_id="A", knowledge_point_id=POINT, created_on=TODAY
+        )
+        session.add(verify)
+        session.commit()
+        verify_url = f"/api/tasks/{verify.id}"
+    dependencies = {
+        "tutor": create_tutor(llm=model, knowledge=knowledge, engine=engine),
+        "verifier": create_verifier(llm=model, knowledge=knowledge),
+        "planner": Planner(),
+        "teaching_date": lambda: TODAY,
+    }
+    task_url = f"/api/tasks/{task.task_id}"
+    for restart in (False, True):
+        app = create_app(
+            engine=engine,
+            checkpoint_path=str(tmp_path / "pause.db"),
+            orchestration_dependencies=dependencies,
+        )
+        async with (
+            app.router.lifespan_context(app),
+            AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+        ):
+            runtime = app.state.orchestrator
+            if not restart:
+                assert (await client.post(task_url + "/start")).status_code == 202
+                await runtime.wait_idle()
+                probe = (await client.get(task_url + "/answer-target")).json()
+                assert probe["phase"] == "waiting"
+                assert (await client.post(task_url + "/takeover", json={})).json()["taken_over"]
+                call_count = len(model.calls)
+            paused = (await client.get(task_url + "/answer-target")).json()
+            assert paused["phase"] == "idle" and "教师接管" in paused["prompt"]
+            assert (await client.get("/api/tasks/controls")).json()[0]["taken_over"]
+            assert (await client.post(task_url + "/start")).status_code == 409
+            assert (await client.post(verify_url + "/start")).status_code == 409
+            reply = {"content": "cos(3*x)", "answering_item_id": probe["item_id"]}
+            assert (await client.post(task_url + "/messages", json=reply)).status_code == 409
+            assert len(model.calls) == call_count
+            if restart:
+                assert not (await client.post(task_url + "/handback")).json()["taken_over"]
+                await runtime.wait_idle()
+                assert (await client.get(task_url + "/answer-target")).json() == probe
+                assert not (await client.get(verify_url + "/answer-target")).json()["prompt"]
+                assert (await client.post(task_url + "/messages", json=reply)).status_code == 202
+                await runtime.wait_idle()
+                view = (await client.get(task_url + "/diagnosis")).json()
+                assert view["probes"][0]["student_answer"] == "cos(3*x)"
+    with Session(engine) as session:
+        reasons = list(
+            session.exec(
+                select(Evidence.reason)
+                .where(Evidence.kind == EvidenceKind.TEACHER)
+                .order_by(Evidence.id)
+            )
+        )
+        assert reasons == ["教师接管辅导", "教师交还 Agent"]
+
+
+async def test_teacher_adoption_reaches_diagnosis_and_override_blocks_replan(setup, tmp_path):
+    engine, _, task = setup
+    with Session(engine) as session:
+        session.add(
+            Misconception(
+                id="unmodeled.test",
+                knowledge_point_id=POINT,
+                family="chain",
+                description="待审核描述",
+                source=ContentSource.UNMODELED,
+            )
+        )
+        session.flush()
+        session.add(
+            Evidence(
+                student_id="A",
+                task_id=task.task_id,
+                knowledge_point_id=POINT,
+                kind=EvidenceKind.DIAGNOSIS,
+                matched_misconception_id="unmodeled.test",
+                judged_by="model",
+                teaching_date=TODAY,
+            )
+        )
+        session.commit()
+    app = create_app(
+        engine=engine,
+        checkpoint_path=str(tmp_path / "teacher.db"),
+        orchestration_dependencies={"tutor": None, "planner": None, "verifier": None},
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        runtime = app.state.orchestrator
+        graph = app.state.knowledge
+        runtime.planner = create_planner(engine=engine, knowledge=graph, llm=PlanningModel())
+        pending = (await client.get("/api/misconceptions/pending")).json()
+        assert [row["id"] for row in pending] == ["unmodeled.test"]
+        adopted = await client.post(
+            "/api/misconceptions/unmodeled.test/adopt", json={"description": "内外层次序颠倒"}
+        )
+        assert adopted.status_code == 200 and adopted.json()["source"] == "teacher"
+        assert (await client.get("/api/misconceptions/pending")).json() == []
+        assert graph.misconception("unmodeled.test").description == "内外层次序颠倒"
+        model = Model()
+        tutor = create_tutor(llm=model, knowledge=graph, engine=engine)
+        await tutor.turn(input_for(task), Publisher())
+        pool = next(
+            payload["pool"] for output, payload in model.calls if output is CandidateSelection
+        )
+        assert any(row["id"] == "unmodeled.test" for row in pool)
+
+        today = app.state.clock.current_date()
+        due = (today + timedelta(days=2)).isoformat()
+        changed = await client.patch(
+            f"/api/tasks/{task.task_id}", json={"due_date": due, "note": "移到下次答疑"}
+        )
+        assert changed.status_code == 200 and changed.json()["due_date"] == due
+        assert (await client.post("/api/clock/advance", json={"days": 1})).status_code == 200
+        await runtime.wait_idle()
+        with Session(engine) as session:
+            assert session.get(DueNotification, task.task_id) is None
+        advanced = await client.post("/api/clock/advance", json={"days": 1})
+        assert advanced.json()["teaching_date"] == due
+        await runtime.wait_idle()
+        with Session(engine) as session:
+            notification = session.get(DueNotification, task.task_id)
+            assert session.get(Event, notification.event_id).processed
+
+        changed = await client.patch(
+            f"/api/tasks/{task.task_id}", json={"cancel": True, "note": "改为课堂讲解"}
+        )
+        assert changed.json()["status"] == "cancelled"
+        assert (await client.get("/api/tasks/controls")).json()[0]["overridden"]
+        with Session(engine) as session:
+            event = make_event(
+                HomeworkImported(
+                    knowledge_point_ids=[POINT], evidence_ids=[task.error_evidence_id]
+                ),
+                TODAY,
+            )
+            session.add(event)
+            session.commit()
+            event_id = event.id
+        await runtime.handle_event(event_id, dispatch=False)
+        with Session(engine) as session:
+            assert session.get(Event, event_id).processed
+            assert [
+                t.id for t in session.exec(select(Task).where(Task.type == TaskType.TUTORING))
+            ] == [task.task_id]
+            records = session.exec(
+                select(Evidence).where(Evidence.kind == EvidenceKind.TEACHER)
+            ).all()
+            assert len(records) == 3 and all(row.is_correct is None for row in records)
 
 
 @pytest.mark.parametrize(
