@@ -44,7 +44,7 @@ from app.contracts.knowledge import KnowledgeGraph
 from app.contracts.llm import ChatMessage, LLMClient
 from app.contracts.values import SLIP
 from app.ledger.queries import RANK, confirmed_hypotheses, current_goal
-from app.orchestration.storage import PlanningTaskContext
+from app.orchestration.storage import BACKTRACK_REASON_PREFIX, PlanningTaskContext
 
 PROMPT = """你是高校高等数学教学规划 Agent。依据教师目标和可追溯证据安排教学。
 候选已经由程序按目标差距、先修阻塞、截止日期、复发风险排序。保留该优先级，
@@ -154,7 +154,9 @@ class TeachingPlanner:
                 # There is not yet an error on this prerequisite. Establish one with
                 # an independent entry check before asking the tutor to diagnose it.
                 task.type = TaskType.VERIFICATION
-                task.reason = "先修回溯：先独立检查，按实际错答决定是否辅导；" + task.reason
+                task.reason = (
+                    f"{BACKTRACK_REASON_PREFIX}先独立检查，按实际错答决定是否辅导；" + task.reason
+                )
             result.tasks.append(task)
             result.contexts.append(candidate.context)
         return result

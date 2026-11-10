@@ -41,6 +41,7 @@ from app.contracts.enums import (
     MasteryState,
     TaskStatus,
     TaskType,
+    TimelineKind,
     TutorOutcome,
 )
 from app.contracts.events import (
@@ -55,6 +56,7 @@ from app.db import init_db, make_engine
 from app.ingest import HomeworkAnalysis, HomeworkImporter
 from app.knowledge.graph import NxKnowledgeGraph
 from app.knowledge.ingest import ingest
+from app.ledger import queries
 from app.ledger.service import append_evidence
 from app.main import create_app
 from app.orchestration import EventBus, Orchestrator
@@ -445,6 +447,13 @@ async def test_backtrack_keeps_original_goal_and_round(classroom, tmp_path):
         kind=EvidenceKind.VERIFICATION,
         dimension=Dimension.CORRECTNESS,
     )
+    with Session(classroom) as session:
+        entries = [entry for entry in queries.timeline(session, "A") if entry.task_id == back_id]
+        assert [entry.kind for entry in entries] == [
+            TimelineKind.BACKTRACK,
+            TimelineKind.VERIFICATION,
+        ]
+        assert entries[1].evidence_ids == [failed]
     event = event_id(classroom, AnswerSubmitted(task_id=back_id, evidence_id=failed))
     result = await plan(classroom, event)
     assert result.tasks[0].type == TaskType.TUTORING
