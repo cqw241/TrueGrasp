@@ -14,8 +14,6 @@ from app.contracts.events import EvidenceAdded
 from app.llm.client import LLMOutputError
 from app.orchestration.storage import NodeReceipt, queue_work, record_exposure
 
-QUESTION_FOLLOWUP = "主动提问后的同类题："
-
 
 async def create_question(runtime, student_id: str, body: QuestionCreate) -> Task:
     content, attempt = body.content.strip(), body.attempt.strip()

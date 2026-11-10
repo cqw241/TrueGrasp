@@ -250,7 +250,7 @@ function TaskActions({
         <Button size="sm" variant="outline" onClick={() => onEdit(task)}>
           修改
         </Button>
-        {task.type === 'tutoring' &&
+        {(task.type === 'tutoring' || task.type === 'question') &&
           (control?.taken_over ? (
             <Button
               size="sm"
