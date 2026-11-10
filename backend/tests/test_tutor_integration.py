@@ -19,6 +19,7 @@ from app.agents.tutor.student_question import (
 )
 from app.agents.verifier import create_verifier
 from app.agents.verifier.agent import ItemDraft, ItemReview
+from app.clock.storage import DueNotification
 from app.config import Settings
 from app.contracts.agents import PlannerOutput
 from app.contracts.api import MessageCreate
@@ -292,6 +293,23 @@ async def test_teacher_adoption_reaches_diagnosis_and_override_blocks_replan(set
         )
         assert any(row["id"] == "unmodeled.test" for row in pool)
 
+        today = app.state.clock.current_date()
+        due = (today + timedelta(days=2)).isoformat()
+        changed = await client.patch(
+            f"/api/tasks/{task.task_id}", json={"due_date": due, "note": "移到下次答疑"}
+        )
+        assert changed.status_code == 200 and changed.json()["due_date"] == due
+        assert (await client.post("/api/clock/advance", json={"days": 1})).status_code == 200
+        await runtime.wait_idle()
+        with Session(engine) as session:
+            assert session.get(DueNotification, task.task_id) is None
+        advanced = await client.post("/api/clock/advance", json={"days": 1})
+        assert advanced.json()["teaching_date"] == due
+        await runtime.wait_idle()
+        with Session(engine) as session:
+            notification = session.get(DueNotification, task.task_id)
+            assert session.get(Event, notification.event_id).processed
+
         changed = await client.patch(
             f"/api/tasks/{task.task_id}", json={"cancel": True, "note": "改为课堂讲解"}
         )
@@ -316,7 +334,7 @@ async def test_teacher_adoption_reaches_diagnosis_and_override_blocks_replan(set
             records = session.exec(
                 select(Evidence).where(Evidence.kind == EvidenceKind.TEACHER)
             ).all()
-            assert len(records) == 2 and all(row.is_correct is None for row in records)
+            assert len(records) == 3 and all(row.is_correct is None for row in records)
 
 
 @pytest.mark.parametrize(
