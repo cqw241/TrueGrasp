@@ -1,9 +1,12 @@
 """Run with the backend Python from the repository root: python -m demo.scripts --help."""
 
 import argparse
+import getpass
 import json
+import os
 import sqlite3
 import sys
+from contextlib import suppress
 from datetime import date
 from pathlib import Path
 
@@ -28,6 +31,10 @@ def parse(argv: list[str] | None):
     parser = argparse.ArgumentParser(prog="python -m demo.scripts")
     parser.add_argument("--url", default="http://127.0.0.1:8000", help="backend origin")
     parser.add_argument("--wait", type=float, default=600, help="long operation timeout, seconds")
+    parser.add_argument(
+        "--username", default=os.environ.get("TRUEGRASP_DEMO_USER"), help="teacher account"
+    )
+    parser.add_argument("--password-stdin", action="store_true", help="read password from stdin")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("status", help="read clock, class data and teacher interface status")
     commands.add_parser("goal", help="create or reuse the T20 goal using T16")
@@ -77,9 +84,32 @@ def main(argv: list[str] | None = None) -> int:
                     file.write(actual.model_dump_json(indent=2) + "\n")
                 emit({"checkpoint": actual.checkpoint, **summary})
             case _:
+                if not args.username:
+                    raise DemoError("在线操作需要教师账号：--username 或 TRUEGRASP_DEMO_USER")
+                password = (
+                    sys.stdin.readline().rstrip("\r\n")
+                    if args.password_stdin
+                    else getpass.getpass("教师密码: ")
+                )
+                if not password:
+                    raise DemoError("教师密码不能为空")
                 with httpx.Client(base_url=args.url, timeout=15, trust_env=False) as client:
-                    return online(DemoAPI(client, args.wait), args)
-    except (DemoError, OSError, ValueError, httpx.HTTPError, sqlite3.Error, SQLAlchemyError) as exc:
+                    api = DemoAPI(client, args.wait)
+                    api.login(args.username, password)
+                    try:
+                        return online(api, args)
+                    finally:
+                        with suppress(httpx.HTTPError):
+                            client.post("/api/auth/logout")
+    except (
+        DemoError,
+        EOFError,
+        OSError,
+        ValueError,
+        httpx.HTTPError,
+        sqlite3.Error,
+        SQLAlchemyError,
+    ) as exc:
         print(f"T14: {exc}", file=sys.stderr)
         return 1
     return 0

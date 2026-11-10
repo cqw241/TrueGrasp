@@ -18,6 +18,10 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 另开终端，在仓库根目录执行。非默认端口在子命令前加 `--url http://127.0.0.1:端口`；
 慢操作可用 `--wait 秒数`。Windows 可设置 `$env:PYTHONUTF8 = '1'` 保存 UTF-8 日志。
+先按 [登录与权限说明](../../docs/development.md#t26-登录与权限)创建教师账号，
+并设置 `$env:TRUEGRASP_DEMO_USER = '教师账号'`；在线命令会交互读取密码并在结束时退出。
+也可在子命令前使用 `--username 教师账号`；自动化可用 `--password-stdin` 从标准输入提供密码，
+不要把密码写入命令参数、脚本或版本库。`save`、`restore` 和 `capture` 是离线操作，不需要登录。
 
 ```powershell
 $py = (Resolve-Path backend/.venv/Scripts/python.exe).Path

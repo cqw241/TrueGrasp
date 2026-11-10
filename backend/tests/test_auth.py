@@ -1,9 +1,14 @@
 """认证、对象授权和事件隔离验收。"""
 
 import asyncio
+import importlib
+import io
+import sys
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from httpx2 import ASGITransport, AsyncClient
@@ -146,6 +151,48 @@ def test_switch_login_revokes_previous_session(app_client):
     assert login(client, "bob", "bob-pass").status_code == 200
     assert app.state.auth_store.principal(previous) is None
     assert client.get("/api/auth/me").json()["student_id"] == "B"
+
+
+def test_demo_api_uses_teacher_session(app_client, monkeypatch):
+    client, _, _ = app_client
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2]))
+    demo = importlib.import_module("demo.scripts.online")
+    api = demo.DemoAPI(client, 20)
+    api.login("teacher", "teacher-pass")
+    assert api.clock().lecture == 1
+    with pytest.raises(demo.DemoError, match="教师账号"):
+        api.login("alice", "alice-pass")
+    assert client.get("/api/auth/me").status_code == 401
+
+
+def test_demo_cli_password_stdin_and_logout(monkeypatch, capsys):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2]))
+    cli = importlib.import_module("demo.scripts.__main__")
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        if request.url.path == "/api/auth/login":
+            return httpx.Response(
+                200,
+                json={"role": "teacher"},
+                headers={"set-cookie": "truegrasp_session=test; Path=/"},
+            )
+        assert request.headers["cookie"] == "truegrasp_session=test"
+        if request.url.path == "/api/clock":
+            return httpx.Response(200, json={"teaching_date": "2026-09-07", "lecture": 1})
+        return httpx.Response(204)
+
+    client_type = httpx.Client
+    monkeypatch.setattr(
+        cli.httpx,
+        "Client",
+        lambda **kwargs: client_type(transport=httpx.MockTransport(handler), **kwargs),
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO("fake-password\n"))
+    assert cli.main(["--username", "teacher", "--password-stdin", "clock"]) == 0
+    assert calls == ["/api/auth/login", "/api/clock", "/api/auth/logout"]
+    assert "fake-password" not in capsys.readouterr().out
 
 
 def test_event_visibility(app_client):
