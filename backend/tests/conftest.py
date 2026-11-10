@@ -4,10 +4,22 @@ import pytest
 
 from app.auth import Principal
 
+LEGACY_BUSINESS_TESTS = {
+    "test_clock",
+    "test_demo_scripts",
+    "test_ingest",
+    "test_knowledge",
+    "test_ledger",
+    "test_orchestration",
+    "test_planner",
+    "test_tutor_integration",
+    "test_verifier",
+}
+
 
 @pytest.fixture(autouse=True)
 def business_test_identity(request, monkeypatch, tmp_path):
-    if request.module.__name__.endswith("test_auth"):
+    if request.module.__name__.rsplit(".", 1)[-1] not in LEGACY_BUSINESS_TESTS:
         yield
         return
     import app.main
