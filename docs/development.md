@@ -152,9 +152,8 @@ shadcn/ui 组件用 `npx shadcn@latest add <组件>` 添加到 `components/ui/`�
 | `components/student/ask-question.tsx` | 主动提问：输入或拍下题目，可附上自己的尝试，提交后打开新建的 `question` 任务，提示在该任务的对话里展示 |
 | `components/student/progress.tsx` | 个人进度：各知识点掌握状态按讲分组，以及最近的学习时间线；收到本人的 `mastery_changed` 时刷新 |
 
-主动提问的接口已在 T11 定好，后端实现留给 T15：
-
-- `POST /api/students/{id}/questions`，请求体 `QuestionCreate {content, attempt}`，返回新建的 `Task`（`type = question`），目前返回 501。T15 实现时还要把 `question` 加进编排层可交互的任务类型（`runtime.py` 的 `INTERACTIVE_TYPES`），并在对话消息里写入 `hint_level` / `solution`，`get_messages` 已经透传这两个字段。
+- `POST /api/students/{id}/questions` 接收题目与可选的尝试或卡点，核验模型解题结果后返回 `question` 任务。当前支持 `verify_item` 能核验的题型；条件不全或无法核验时返回 422，请学生补充题目。
+- 可核验的错误答案进入诊断追问；只有卡点时先追问具体步骤。三层提示通过 `hint_level` 标注，用完仍未解出时才发送 `solution`。结案触发规划 Agent 安排同类独立验证，账本记录提问，近七天同知识点的重复提问进入规划上下文。
 - `POST /api/students/{id}/question-photo` 识别题目照片，返回 `Transcription`，不创建提问。它和作答照片共用 `_transcribe_upload`（格式、大小、解码检查与视觉模型配置），只是不检查作答轮次。
 
 ## T12 教师驾驶舱

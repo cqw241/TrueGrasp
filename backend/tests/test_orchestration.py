@@ -636,7 +636,7 @@ async def test_photo_transcription_requires_current_question_and_explicit_submis
         assert (await client.get("/api/tasks/1/answer-target")).json()["item_id"] != "probe"
 
 
-async def test_question_photo_transcribes_and_question_is_stubbed(business, tmp_path, dependencies):
+async def test_question_photo_and_unconfigured_question_service(business, tmp_path, dependencies):
     from io import BytesIO
 
     from PIL import Image

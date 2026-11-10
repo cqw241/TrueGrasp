@@ -117,6 +117,16 @@ def create_app(
                     engine=business_engine,
                     teaching_date=dependencies.get("teaching_date"),
                 )
+            if (
+                settings.llm_api_key
+                and "questions" not in dependencies
+                and all(dependencies.get(name) for name in ("planner", "tutor", "verifier"))
+            ):
+                from app.agents.tutor.student_question import StudentQuestions
+
+                if llm is None:
+                    llm = OpenAICompatClient(settings)
+                dependencies["questions"] = StudentQuestions(llm, dependencies["knowledge"])
             async with Orchestrator.open(
                 business_engine,
                 checkpoint_path or get_settings().checkpoint_db_path,

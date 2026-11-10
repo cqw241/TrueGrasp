@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
@@ -55,6 +55,7 @@ from app.ledger.service import append_evidence, escalate, start_tutoring
 from app.orchestration.bus import EventBus
 from app.orchestration.graphs import RunState, build_graph
 from app.orchestration.inputs import build_verifier_input
+from app.orchestration.questions import QUESTION_FOLLOWUP
 from app.orchestration.storage import (
     NodeReceipt,
     PendingWork,
@@ -65,7 +66,16 @@ from app.orchestration.storage import (
 )
 
 logger = logging.getLogger(__name__)
-INTERACTIVE_TYPES = {TaskType.TUTORING, TaskType.VERIFICATION, TaskType.RETEST, TaskType.PRECHECK}
+if TYPE_CHECKING:
+    from app.agents.tutor.student_question import StudentQuestions
+
+INTERACTIVE_TYPES = {
+    TaskType.TUTORING,
+    TaskType.VERIFICATION,
+    TaskType.RETEST,
+    TaskType.PRECHECK,
+    TaskType.QUESTION,
+}
 
 
 class OrchestrationError(Exception):
@@ -83,6 +93,7 @@ class Orchestrator:
         *,
         planner: Planner | None = None,
         tutor: Tutor | None = None,
+        questions: StudentQuestions | None = None,
         verifier: Verifier | None = None,
         knowledge: KnowledgeGraph | None = None,
         evidence_writer: Callable[[Session, Evidence], Evidence] = append_evidence,
@@ -95,6 +106,7 @@ class Orchestrator:
         self.bus = bus
         self.planner = planner
         self.tutor = tutor
+        self.questions = questions
         self.verifier = verifier
         self.knowledge = knowledge
         self.evidence_writer = evidence_writer
@@ -151,8 +163,10 @@ class Orchestrator:
                 raise OrchestrationError(409, f"任务已结束：{task.status}")
             if task.type not in INTERACTIVE_TYPES or task.student_id is None:
                 raise OrchestrationError(409, "该任务不接受学生交互")
-            if task.type == TaskType.TUTORING:
+            if task.type in (TaskType.TUTORING, TaskType.QUESTION):
                 self._require("planner", "tutor", "verifier", "knowledge")
+                if task.type == TaskType.QUESTION:
+                    self._require("questions")
             else:
                 self._require("verifier")
             return task
@@ -222,9 +236,11 @@ class Orchestrator:
                 if kind == "task":
                     task = self._task(session, int(target))
                     if self.verifier is None or (
-                        task.type == TaskType.TUTORING
+                        task.type in (TaskType.TUTORING, TaskType.QUESTION)
                         and (self.planner is None or self.tutor is None or self.knowledge is None)
                     ):
+                        continue
+                    if task.type == TaskType.QUESTION and self.questions is None:
                         continue
                 self._spawn(
                     work.key,
@@ -375,7 +391,9 @@ class Orchestrator:
     async def _validate_message(
         self, task_id: int, body: MessageCreate, *, expected_turn: int | None = None
     ):
-        self._check_task(task_id)
+        task = self._check_task(task_id)
+        if task.type == TaskType.QUESTION and not body.content.strip():
+            raise OrchestrationError(422, "请写下你的尝试或卡点")
         snapshot = await self.graph.aget_state(self._config(f"task:{task_id}"))
         if not snapshot.interrupts:
             raise OrchestrationError(409, "任务当前没有等待学生回复")
@@ -446,14 +464,21 @@ class Orchestrator:
 
     async def get_messages(self, task_id: int) -> list[ChatTurn]:
         with Session(self.engine) as session:
-            self._task(session, task_id)
+            task = self._task(session, task_id)
+            hide_answers = task.type == TaskType.QUESTION
         snapshot = await self.graph.aget_state(self._config(f"task:{task_id}"))
         # SQLModel 的 table 模型作为嵌套字段时走构造路径；显式验证以还原枚举和值对象。
         return [
             ChatTurn(
                 role=message["role"],
                 content=message["content"],
-                item=Item.model_validate(message["item"]) if message.get("item") else None,
+                item=Item.model_validate(
+                    {**message["item"], "answer": "", "predictions": [], "spec": None, "rubric": []}
+                    if hide_answers
+                    else message["item"]
+                )
+                if message.get("item")
+                else None,
                 hint_level=message.get("hint_level"),
                 solution=message.get("solution", False),
             )
@@ -557,7 +582,8 @@ class Orchestrator:
                     raise ValueError("任务轮次必须大于 0")
                 task = Task(**planned.model_dump(), created_on=event.teaching_date)
                 context = contexts[index] if contexts else None
-                if context and planned.student_id is not None:
+                question_followup = planned.reason.startswith(QUESTION_FOLLOWUP)
+                if context and planned.student_id is not None and not question_followup:
                     active = session.exec(
                         select(Task).where(
                             Task.student_id == planned.student_id,
@@ -586,6 +612,10 @@ class Orchestrator:
                 ).all()
                 duplicate = False
                 for old in existing:
+                    if question_followup and not set(old.evidence_ids).intersection(
+                        planned.evidence_ids
+                    ):
+                        continue
                     old_context = session.get(PlanningTaskContext, old.id)
                     if planned.type == TaskType.CLASS_REVIEW:
                         duplicate = (
@@ -682,7 +712,12 @@ class Orchestrator:
             await self._publish_task(task)
             if task.type == TaskType.TUTORING:
                 await self._publish_mastery(task)
-            return {"phase": "tutoring" if task.type == TaskType.TUTORING else "verifying"}
+            return {
+                "phase": {
+                    TaskType.TUTORING: "tutoring",
+                    TaskType.QUESTION: "question",
+                }.get(task.type, "verifying")
+            }
 
     def tutor_input(self, state: RunState) -> dict:
         with Session(self.engine) as session:
@@ -889,6 +924,16 @@ class Orchestrator:
             task = self._task(session, state["task_id"])
             task.status = TaskStatus.DONE
             result = {"awaiting_item_id": None, "incoming_message": None}
+            if task.type == TaskType.QUESTION:
+                event = make_event(
+                    AnswerSubmitted(task_id=task.id, evidence_id=task.evidence_ids[0]),
+                    date.fromisoformat(state["teaching_date"]),
+                    task.student_id,
+                )
+                session.add(event)
+                session.flush()
+                queue_work(session, f"event:{event.id}", {"dispatch": True})
+                result["followup_event_ids"] = [*state["followup_event_ids"], event.id]
             session.add(NodeReceipt(key=receipt_key, result=result))
             self._queue_task(session, state)
             session.commit()

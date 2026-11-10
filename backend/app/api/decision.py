@@ -5,16 +5,28 @@ from sqlmodel import Session, select
 
 from app.agents.tutor.queries import diagnosis
 from app.contracts.api import DiagnosisView, DimensionResult, TimelineEntry
-from app.contracts.entities import Evidence, KnowledgePoint, Mastery
+from app.contracts.entities import Evidence, KnowledgePoint, Mastery, Task
+from app.contracts.enums import TaskStatus, TaskType
 from app.ledger import queries
 
 router = APIRouter(tags=["decision"])
+
+
+def _question_in_progress(task: Task | None, request: Request) -> bool:
+    return (
+        request.state.principal.role == "student"
+        and task is not None
+        and task.type == TaskType.QUESTION
+        and task.status in (TaskStatus.PENDING, TaskStatus.ACTIVE)
+    )
 
 
 @router.get("/tasks/{task_id}/diagnosis")
 def get_diagnosis(task_id: int, request: Request) -> DiagnosisView:
     """假设面板：候选错因、各假设的预测、学生的实际回答、支持或排除。"""
     with Session(request.app.state.orchestrator.engine) as session:
+        if _question_in_progress(session.get(Task, task_id), request):
+            raise HTTPException(status_code=403, detail="请完成当前辅导后再查看诊断")
         result = diagnosis(session, task_id)
         if result is None:
             raise HTTPException(status_code=404, detail="任务不存在或尚无诊断记录")
@@ -48,6 +60,10 @@ def get_evidence(evidence_id: int, request: Request) -> Evidence:
         evidence = session.get(Evidence, evidence_id)
         if evidence is None:
             raise HTTPException(status_code=404, detail="证据不存在")
+        if evidence.task_id is not None and _question_in_progress(
+            session.get(Task, evidence.task_id), request
+        ):
+            raise HTTPException(status_code=403, detail="请完成当前辅导后再查看证据")
         return evidence
 
 
