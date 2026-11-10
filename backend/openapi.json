@@ -27,6 +27,82 @@
         }
       }
     },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "operationId": "me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
     "/api/clock": {
       "get": {
         "tags": [
@@ -45,7 +121,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/clock/advance": {
@@ -87,7 +168,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/clock/lecture": {
@@ -129,7 +215,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/goals": {
@@ -154,7 +245,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -193,7 +289,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/homework": {
@@ -235,7 +336,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/class/overview": {
@@ -256,7 +362,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/class/heatmap": {
@@ -281,7 +392,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/class/issues": {
@@ -307,7 +423,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/tasks": {
@@ -318,6 +439,11 @@
         "summary": "List Tasks",
         "description": "干预计划；学生辅导台也用它取任务卡。",
         "operationId": "list_tasks_api_tasks_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "student_id",
@@ -419,7 +545,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/tasks/{task_id}": {
@@ -430,6 +561,11 @@
         "summary": "Override Task",
         "description": "教师修改或覆盖计划，优先于 Agent 计划。",
         "operationId": "override_task_api_tasks__task_id__patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -480,6 +616,11 @@
         ],
         "summary": "Get Task",
         "operationId": "get_task_api_tasks__task_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -523,6 +664,11 @@
         "summary": "Take Over Task",
         "description": "教师接管辅导，暂停对应的辅导会话。",
         "operationId": "take_over_task_api_tasks__task_id__takeover_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -576,6 +722,11 @@
         "summary": "Hand Back Task",
         "description": "交还 Agent，会话从暂停处恢复。",
         "operationId": "hand_back_task_api_tasks__task_id__handback_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -634,7 +785,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/misconceptions/{misconception_id}/adopt": {
@@ -645,6 +801,11 @@
         "summary": "Adopt Misconception",
         "description": "采纳待审核错因，进入错因库，后续诊断可以检索到。",
         "operationId": "adopt_misconception_api_misconceptions__misconception_id__adopt_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "misconception_id",
@@ -712,7 +873,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/escalations/{task_id}/resolve": {
@@ -723,6 +889,11 @@
         "summary": "Resolve Escalation",
         "description": "教师处理转交，记为一条单独的证据，不覆盖历史。",
         "operationId": "resolve_escalation_api_escalations__task_id__resolve_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -790,7 +961,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/tasks/{task_id}/start": {
@@ -801,6 +977,11 @@
         "summary": "Start Task",
         "description": "学生打开任务卡，辅导 Agent 先发言。",
         "operationId": "start_task_api_tasks__task_id__start_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -843,6 +1024,11 @@
         ],
         "summary": "List Messages",
         "operationId": "list_messages_api_tasks__task_id__messages_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -887,6 +1073,11 @@
         ],
         "summary": "Post Message",
         "operationId": "post_message_api_tasks__task_id__messages_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -956,6 +1147,11 @@
         ],
         "summary": "Get Answer Target",
         "operationId": "get_answer_target_api_tasks__task_id__answer_target_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -999,6 +1195,11 @@
         "summary": "Transcribe Photo",
         "description": "识别当前题目的作答照片，返回待确认草稿，不提交作答。",
         "operationId": "transcribe_photo_api_tasks__task_id__answer_photo_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -1153,6 +1354,11 @@
         "summary": "Transcribe Question Photo",
         "description": "识别学生要提问的题目照片，返回草稿供学生校对，不创建提问。",
         "operationId": "transcribe_question_photo_api_students__student_id__question_photo_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "student_id",
@@ -1276,6 +1482,11 @@
         "summary": "Ask Question",
         "description": "学生主动提问（技术文档第 5 节 ⑥）。\n\n创建一条 ``question`` 任务，辅导 Agent 先请学生尝试。之后的分层提示与完整解答作为\n该任务的对话推送，由 ``ChatTurn.hint_level`` 与 ``ChatTurn.solution`` 标注。",
         "operationId": "ask_question_api_students__student_id__questions_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "student_id",
@@ -1329,6 +1540,11 @@
         "summary": "Get Diagnosis",
         "description": "假设面板：候选错因、各假设的预测、学生的实际回答、支持或排除。",
         "operationId": "get_diagnosis_api_tasks__task_id__diagnosis_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -1371,6 +1587,11 @@
         ],
         "summary": "Get Timeline",
         "operationId": "get_timeline_api_students__student_id__timeline_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "student_id",
@@ -1417,6 +1638,11 @@
         ],
         "summary": "Get Mastery",
         "operationId": "get_mastery_api_students__student_id__mastery_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "student_id",
@@ -1464,6 +1690,11 @@
         "summary": "Get Verification",
         "description": "六维验证结果及判定方式。",
         "operationId": "get_verification_api_students__student_id__verification_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "student_id",
@@ -1519,6 +1750,11 @@
         ],
         "summary": "Get Evidence",
         "operationId": "get_evidence_api_evidence__evidence_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "evidence_id",
@@ -1561,6 +1797,11 @@
         ],
         "summary": "List Points",
         "operationId": "list_points_api_knowledge_points_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "lecture",
@@ -1615,6 +1856,11 @@
         "summary": "Get Path",
         "description": "跨章节知识路径，如第 1→2→9 讲；不连通时为空列表。",
         "operationId": "get_path_api_knowledge_path_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "source",
@@ -1738,7 +1984,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     }
   },
@@ -2786,6 +3037,28 @@
         ],
         "title": "KnowledgePoint"
       },
+      "Login": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Login"
+      },
       "Mastery": {
         "properties": {
           "student_id": {
@@ -3553,6 +3826,40 @@
         ],
         "title": "Transcription"
       },
+      "User": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "teacher",
+              "student"
+            ],
+            "title": "Role"
+          },
+          "student_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "role",
+          "student_id"
+        ],
+        "title": "User"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -3592,6 +3899,13 @@
           "type"
         ],
         "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "APIKeyCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "truegrasp_session"
       }
     }
   }

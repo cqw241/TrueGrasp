@@ -111,6 +111,12 @@ class EventStream {
     }
     source.onerror = () => {
       this.needsResync = true
+      void fetch('/api/auth/me')
+        .then((response) => {
+          if (response.status === 401)
+            window.dispatchEvent(new Event('auth-expired'))
+        })
+        .catch(() => {})
       // 网络中断时浏览器会自动重连（CONNECTING）；后端返回错误状态时连接直接关闭（CLOSED），需要自己重连。
       if (source.readyState === EventSource.CLOSED) {
         this.source = null
@@ -132,6 +138,11 @@ class EventStream {
     this.source = null
     this.needsResync = false
     this.setStatus('connecting')
+  }
+
+  reset() {
+    window.clearTimeout(this.closeTimer)
+    this.disconnect()
   }
 
   private setStatus(status: StreamStatus) {

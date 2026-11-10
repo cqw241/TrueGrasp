@@ -123,6 +123,8 @@ def list_tasks(
     status: TaskStatus | None = None,
 ) -> list[Task]:
     """干预计划；学生辅导台也用它取任务卡。"""
+    if request.state.principal.role == "student":
+        student_id = request.state.principal.student_id
     query = select(Task).order_by(Task.id.desc())
     if student_id is not None:
         query = query.where(Task.student_id == student_id)
