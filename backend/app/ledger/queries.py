@@ -160,12 +160,15 @@ def timeline(session: Session, student_id: str) -> list[TimelineEntry]:
             ),
         }.get(row.kind)
         if kind is not None:
+            question = task is not None and task.type == TaskType.QUESTION
             result.append(
                 TimelineEntry(
                     teaching_date=row.teaching_date,
                     kind=kind,
                     knowledge_point_id=row.knowledge_point_id,
-                    title=kind.value,
+                    title="主动提问"
+                    if question and row.reason.startswith("学生主动提问")
+                    else kind.value,
                     detail=row.reason,
                     task_id=row.task_id,
                     evidence_ids=[row.id],

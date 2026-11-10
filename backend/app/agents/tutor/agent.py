@@ -29,6 +29,7 @@ from app.contracts.enums import (
     ItemPurpose,
     ItemSource,
     JudgedBy,
+    TaskType,
     TutorOutcome,
 )
 from app.contracts.events import EventPublisher, EvidenceAdded, HypothesisUpdated, TokenDelta
@@ -212,7 +213,11 @@ class DiagnosticTutor:
                                     key,
                                     TutorTurn(
                                         outcome=TutorOutcome.REQUEST_VERIFICATION,
-                                        message="追问的表现支持偶发失误。接下来做一道独立验证题。",
+                                        message=(
+                                            "追问的表现支持偶发失误。回到原题继续尝试。"
+                                            if task.type == TaskType.QUESTION
+                                            else "追问的表现支持偶发失误。接下来做一道独立验证题。"
+                                        ),
                                         confirmed_misconception_ids=[SLIP],
                                     ),
                                 )
@@ -332,6 +337,19 @@ class DiagnosticTutor:
                     session.add(h)
                     session.flush()
                     state.hypothesis_ids.append(h.id)
+
+            if task.type == TaskType.QUESTION and state.phase == "practice":
+                return self._commit(
+                    session,
+                    task,
+                    state,
+                    key,
+                    TutorTurn(
+                        outcome=TutorOutcome.REQUEST_VERIFICATION,
+                        message="追问已定位错因，继续处理原题。",
+                        confirmed_misconception_ids=[state.confirmed_id],
+                    ),
+                )
 
             self._stage(session, task, state, key + ":candidates")
             await self._publish_state(task.id, publish)
