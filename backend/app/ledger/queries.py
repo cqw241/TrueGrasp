@@ -138,6 +138,9 @@ def verification(session: Session, student_id: str, kp_id: str) -> list[Dimensio
 
 
 def timeline(session: Session, student_id: str) -> list[TimelineEntry]:
+    # Orchestration uses the ledger service; defer this import to avoid a cycle.
+    from app.orchestration.storage import BACKTRACK_REASON_PREFIX, PlanningTaskContext
+
     tasks = session.exec(select(Task).where(Task.student_id == student_id)).all()
     task_map = {t.id: t for t in tasks}
     rows = session.exec(
@@ -168,7 +171,57 @@ def timeline(session: Session, student_id: str) -> list[TimelineEntry]:
                     evidence_ids=[row.id],
                 )
             )
+    backtrack_candidates = [
+        task
+        for task in tasks
+        if task.type == TaskType.VERIFICATION
+        and task.status in (TaskStatus.ACTIVE, TaskStatus.DONE)
+        and task.reason.startswith(BACKTRACK_REASON_PREFIX)
+    ]
+    contexts = (
+        {
+            row.task_id: row
+            for row in session.exec(
+                select(PlanningTaskContext).where(
+                    PlanningTaskContext.task_id.in_([task.id for task in backtrack_candidates])
+                )
+            )
+        }
+        if backtrack_candidates
+        else {}
+    )
     for task in tasks:
+        context = contexts.get(task.id)
+        if context is not None and context.root_knowledge_point_id != task.knowledge_point_id:
+            first_answer = next(
+                (
+                    row
+                    for row in rows
+                    if row.task_id == task.id and row.kind == EvidenceKind.VERIFICATION
+                ),
+                None,
+            )
+            event_date = first_answer.teaching_date if first_answer else task.created_on
+            date_label = "首条作答日期" if first_answer else "任务创建日期"
+            entry = TimelineEntry(
+                teaching_date=event_date,
+                kind=TimelineKind.BACKTRACK,
+                knowledge_point_id=task.knowledge_point_id,
+                title="先修回溯",
+                detail=f"{date_label}：{event_date}；{task.reason}",
+                task_id=task.id,
+                evidence_ids=task.evidence_ids,
+            )
+            # A same-day entry check must follow its backtrack, not precede it.
+            position = next(
+                (
+                    index
+                    for index, row in enumerate(result)
+                    if row.task_id == task.id and row.teaching_date == event_date
+                ),
+                len(result),
+            )
+            result.insert(position, entry)
         if task.type == TaskType.ESCALATION and task.status != TaskStatus.CANCELLED:
             result.append(
                 TimelineEntry(

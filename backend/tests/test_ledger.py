@@ -23,12 +23,15 @@ from app.contracts.enums import (
     EvidenceKind,
     JudgedBy,
     MasteryState,
+    TaskStatus,
     TaskType,
+    TimelineKind,
 )
 from app.db import init_db, make_engine
 from app.ledger import queries
 from app.ledger.service import append_evidence, escalate, start_tutoring
 from app.main import create_app
+from app.orchestration.storage import PlanningTaskContext
 
 TODAY = date(2026, 9, 7)
 
@@ -355,6 +358,79 @@ def test_query_models_and_latest_results(session):
     assert queries.class_overview(session).goal_met == 1
     assert queries.heatmap(session)[0].mastered_ratio == 1
     assert len(queries.timeline(session, "A")) == 4
+
+
+def test_timeline_reports_only_started_real_backtrack(session):
+    session.add(KnowledgePoint(id="pre", name="composition", lecture=1, section=1))
+    session.flush()
+    for task_id, student, status, reason in (
+        (2, "A", TaskStatus.ACTIVE, "先修回溯：先独立检查"),
+        (3, "A", TaskStatus.PENDING, "先修回溯：先独立检查"),
+        (4, "A", TaskStatus.DONE, "普通独立验证"),
+        (5, "B", TaskStatus.DONE, "先修回溯：先独立检查"),
+    ):
+        session.add(
+            Task(
+                id=task_id,
+                type=TaskType.VERIFICATION,
+                student_id=student,
+                knowledge_point_id="pre",
+                created_on=TODAY,
+                status=status,
+                reason=reason,
+            )
+        )
+        session.add(PlanningTaskContext(task_id=task_id, root_knowledge_point_id="kp"))
+    session.add(
+        Task(
+            id=6,
+            type=TaskType.PRECHECK,
+            student_id="A",
+            knowledge_point_id="pre",
+            created_on=TODAY,
+            status=TaskStatus.DONE,
+            reason="先修回溯：先独立检查",
+        )
+    )
+    session.add(PlanningTaskContext(task_id=6, root_knowledge_point_id="kp"))
+    session.add(
+        Task(
+            id=7,
+            type=TaskType.VERIFICATION,
+            student_id="A",
+            knowledge_point_id="pre",
+            created_on=TODAY,
+            status=TaskStatus.DONE,
+            reason="先修回溯：先独立检查",
+        )
+    )
+    session.add(PlanningTaskContext(task_id=7, root_knowledge_point_id="pre"))
+    session.flush()
+
+    entries = queries.timeline(session, "A")
+    backtracks = [entry for entry in entries if entry.kind == TimelineKind.BACKTRACK]
+    assert [(entry.task_id, entry.knowledge_point_id) for entry in backtracks] == [(2, "pre")]
+    assert "先修回溯" in backtracks[0].detail
+    assert "任务创建日期" in backtracks[0].detail
+
+    answer_date = TODAY + timedelta(days=3)
+    session.add(
+        Evidence(
+            student_id="A",
+            knowledge_point_id="pre",
+            task_id=2,
+            kind=EvidenceKind.VERIFICATION,
+            dimension=Dimension.CORRECTNESS,
+            is_correct=True,
+            judged_by=JudgedBy.TOOL,
+            teaching_date=answer_date,
+        )
+    )
+    session.flush()
+    related = [entry for entry in queries.timeline(session, "A") if entry.task_id == 2]
+    assert [entry.kind for entry in related] == [TimelineKind.BACKTRACK, TimelineKind.VERIFICATION]
+    assert related[0].teaching_date == answer_date
+    assert "首条作答日期" in related[0].detail
 
 
 @pytest.mark.anyio
