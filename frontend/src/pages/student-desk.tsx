@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useStreamEvent } from '@/hooks/use-event-stream'
 import { lectureLabel, taskStatusLabel, taskTypeLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/auth'
 
 // 学生能在辅导台上作答的任务；转交教师、课上讲解是教师端的任务。
 const studentTaskTypes = new Set<TaskType>([
@@ -25,6 +26,7 @@ const studentTaskTypes = new Set<TaskType>([
 ])
 
 export default function StudentDesk() {
+  const { user } = useAuth()
   const students = api.useQuery('get', '/api/students')
   const knowledge = api.useQuery('get', '/api/knowledge/points')
   const points = useMemo(
@@ -46,20 +48,24 @@ export default function StudentDesk() {
           return (
             <Tabs key={selected.id} defaultValue="tasks" className="gap-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <label className="flex items-center gap-3 text-sm">
-                  学生
-                  <select
-                    className="bg-background rounded-md border px-3 py-2"
-                    value={selected.id}
-                    onChange={(event) => setStudentId(event.target.value)}
-                  >
-                    {data.map((student) => (
-                      <option key={student.id} value={student.id}>
-                        {student.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {user?.role === 'teacher' ? (
+                  <label className="flex items-center gap-3 text-sm">
+                    学生
+                    <select
+                      className="bg-background rounded-md border px-3 py-2"
+                      value={selected.id}
+                      onChange={(event) => setStudentId(event.target.value)}
+                    >
+                      {data.map((student) => (
+                        <option key={student.id} value={student.id}>
+                          {student.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <span className="text-sm">{selected.name}</span>
+                )}
                 <TabsList>
                   <TabsTrigger value="tasks">任务</TabsTrigger>
                   <TabsTrigger value="progress">我的进度</TabsTrigger>

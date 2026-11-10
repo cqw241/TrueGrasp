@@ -37,6 +37,14 @@ class DemoAPI:
             raise DemoError(f"{method} /api{route}: HTTP {response.status_code} {response.text}")
         return response.json()
 
+    def login(self, username: str, password: str) -> None:
+        user = self.request(
+            "POST", "/auth/login", json={"username": username, "password": password}
+        )
+        if user.get("role") != "teacher":
+            self.client.post("/api/auth/logout")
+            raise DemoError("在线演示操作需要教师账号")
+
     def clock(self) -> ClockState:
         return ClockState.model_validate(self.request("GET", "/clock"))
 

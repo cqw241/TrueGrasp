@@ -6,12 +6,13 @@ from contextlib import asynccontextmanager, contextmanager, suppress
 from types import FrameType
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
 from app.agents.verifier import create_verifier
-from app.api import decision, health, stream, student, teacher
+from app.api import auth, decision, health, stream, student, teacher
+from app.auth import AuthStore, authorize
 from app.clock.service import TeachingClock
 from app.config import get_settings
 from app.db import get_engine, init_db
@@ -68,6 +69,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         business_engine = engine if engine is not None else get_engine()
+        app.state.auth_store = AuthStore(get_settings().auth_db_path)
         init_db(business_engine)
         knowledge = NxKnowledgeGraph.from_engine(business_engine)
         app.state.knowledge = knowledge
@@ -151,8 +153,10 @@ def create_app(
     async def orchestration_error(_: Request, exc: OrchestrationError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
-    for module in (health, teacher, student, decision, stream):
+    for module in (health, auth):
         app.include_router(module.router, prefix="/api")
+    for module in (teacher, student, decision, stream):
+        app.include_router(module.router, prefix="/api", dependencies=[Depends(authorize)])
     return app
 
 

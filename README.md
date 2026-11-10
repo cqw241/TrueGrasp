@@ -25,6 +25,8 @@
 cd backend
 cp .env.example .env   # 填写 LLM_API_KEY
 uv sync
+uv run python -m app.auth_account teacher --role teacher
+uv run python -m app.auth_account student-a --role student --student-id A
 uv run uvicorn app.main:app --reload
 ```
 
@@ -36,6 +38,6 @@ npm install
 npm run dev
 ```
 
-打开后进入教师驾驶舱；侧边栏底部显示“实时连接正常”即前后端已连通。
+账号命令会交互式读取密码；学生账号绑定的 ID 需要与导入的学生一致。打开前端后登录，教师进入驾驶舱，学生进入本人辅导台；侧边栏底部显示“实时连接正常”即前后端已连通。
 
 学生辅导台支持在待答题下拍照或选择图片（JPEG、PNG、WebP，最大 8 MB、2400 万像素）。识别后可在公式框中校对，再提交作答。后端需配置同时支持图片输入和 JSON 输出的 OpenAI 兼容模型；可在 `backend/.env` 中用 `VISION_LLM_BASE_URL`、`VISION_LLM_API_KEY` 和 `VISION_LLM_MODEL` 单独设置，未设置时沿用 `LLM_*`。已有独立验证、复测或预检任务可使用已配置的验证 Agent 作答；辅导 Agent 已接入，辅导任务仍依赖 T08 规划 Agent；开发验收可注入规划桩。教师端的批量作业导入仍走原有流程。

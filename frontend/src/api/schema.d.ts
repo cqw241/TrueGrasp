@@ -21,6 +21,57 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/auth/login': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Login */
+    post: operations['login_api_auth_login_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/auth/me': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Me */
+    get: operations['me_api_auth_me_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/auth/logout': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Logout */
+    post: operations['logout_api_auth_logout_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/clock': {
     parameters: {
       query?: never
@@ -1083,6 +1134,13 @@ export interface components {
       /** Exam Tags */
       exam_tags?: components['schemas']['ExamTag'][]
     }
+    /** Login */
+    Login: {
+      /** Username */
+      username: string
+      /** Password */
+      password: string
+    }
     /** Mastery */
     Mastery: {
       /** Student Id */
@@ -1472,6 +1530,18 @@ export interface components {
        */
       requires_confirmation: boolean
     }
+    /** User */
+    User: {
+      /** Username */
+      username: string
+      /**
+       * Role
+       * @enum {string}
+       */
+      role: 'teacher' | 'student'
+      /** Student Id */
+      student_id: string | null
+    }
     /** ValidationError */
     ValidationError: {
       /** Location */
@@ -1527,6 +1597,7 @@ export type ItemSource = components['schemas']['ItemSource']
 export type ItemSpec = components['schemas']['ItemSpec']
 export type JudgedBy = components['schemas']['JudgedBy']
 export type KnowledgePoint = components['schemas']['KnowledgePoint']
+export type Login = components['schemas']['Login']
 export type Mastery = components['schemas']['Mastery']
 export type MasteryChanged = components['schemas']['MasteryChanged']
 export type MasteryState = components['schemas']['MasteryState']
@@ -1553,6 +1624,7 @@ export type TimelineEntry = components['schemas']['TimelineEntry']
 export type TimelineKind = components['schemas']['TimelineKind']
 export type TokenDelta = components['schemas']['TokenDelta']
 export type Transcription = components['schemas']['Transcription']
+export type User = components['schemas']['User']
 export type ValidationError = components['schemas']['ValidationError']
 export type $defs = Record<string, never>
 export interface operations {
@@ -1575,6 +1647,77 @@ export interface operations {
             [key: string]: string
           }
         }
+      }
+    }
+  }
+  login_api_auth_login_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Login']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['User']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  me_api_auth_me_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['User']
+        }
+      }
+    }
+  }
+  logout_api_auth_logout_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/truegrasp.db"
     checkpoint_db_path: str = "./data/checkpoints.db"
 
+    auth_db_path: str = "./data/auth.db"
+    auth_session_hours: int = Field(default=8, ge=1, le=168)
+    auth_cookie_secure: bool = False
+    auth_public_origin: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
