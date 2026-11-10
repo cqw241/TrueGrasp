@@ -1,6 +1,6 @@
 # T09 诊断辅导 Agent
 
-入口为 `create_tutor(llm=..., knowledge=..., engine=..., tools=None, teaching_date=None)`，返回实现既有 `Tutor.turn()` 的 `DiagnosticTutor`。模型、数学工具、知识图谱及业务库由组合入口注入，客户端由调用方管理。配置模型密钥后应用默认装配 tutor 和 verifier，复用同一个模型客户端；显式传入实例或 `None` 分别覆盖对应依赖。
+入口为 `create_tutor(llm=..., knowledge=..., engine=..., tools=None, teaching_date=None)`，返回实现既有 `Tutor.turn()` 的 `DiagnosticTutor`。模型、数学工具、知识图谱及业务库由组合入口注入，客户端由调用方管理。配置模型密钥后应用默认装配 planner、tutor 和 verifier，复用同一个模型客户端；显式传入实例或 `None` 分别覆盖对应依赖。
 
 ## 行为
 
@@ -27,7 +27,7 @@
 
 `GET /api/tasks/{task_id}/diagnosis` 返回初始错误、全部候选及按顺序排列的追问，包括尚未作答时的预测；无诊断返回 404。沿用现有 contracts、OpenAPI 及前端类型。
 
-T08 尚未实现，现有编排仍要求辅导任务注入 planner；T09 的完整链路测试使用确定性规划桩。真实自动重规划、回溯任务创建及转教师由 T08 接续，审核采纳由 T16 接续；本模块不会伪造这些产物。
+T08 已接入自动重规划、回溯任务创建及转教师；T09 原验收中的完整链路测试使用确定性规划桩，合并后的完整演示仍需端到端预跑。审核采纳由 T16 接续；本模块不会伪造这些产物。
 
 未建模证据通过 `matched_misconception_id` 关联新建错因，并同时关联假设和任务；`is_correct=None`、假设保持待检验。T08 用该关联识别无法判定的未建模错因，即使没有教学目标也可生成转教师任务，由账本完成升级。
 
