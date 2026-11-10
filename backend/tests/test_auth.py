@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx2 import ASGITransport, AsyncClient
 from sqlmodel import Session
 
 from app.api.stream import events, visible
@@ -17,6 +18,8 @@ from app.contracts.events import EvidenceAdded, MessageDone, TokenDelta
 from app.db import init_db, make_engine
 from app.main import create_app
 from app.orchestration.bus import EventBus
+from tests.test_tutor import TODAY, Model
+from tests.test_tutor import setup as setup
 
 
 @pytest.fixture
@@ -197,6 +200,82 @@ async def test_stream_filters_other_student_before_delivery(app_client):
     delivered = await asyncio.wait_for(pending, timeout=2)
     assert delivered.text == "mine"
     await stream.aclose()
+
+
+@pytest.mark.anyio
+async def test_t13_t26_teacher_view_updates_after_student_answer(setup, tmp_path, monkeypatch):
+    from app.agents.tutor import create_tutor
+    from app.agents.verifier import create_verifier
+    from tests.test_tutor_integration import Planner
+
+    monkeypatch.setenv("AUTH_DB_PATH", str(tmp_path / "integration-auth.db"))
+    get_settings.cache_clear()
+    engine, knowledge, task = setup
+    model = Model()
+    tutor = create_tutor(llm=model, knowledge=knowledge, engine=engine)
+    app = create_app(
+        engine=engine,
+        checkpoint_path=str(tmp_path / "integration-checkpoint.db"),
+        orchestration_dependencies={
+            "tutor": tutor,
+            "knowledge": knowledge,
+            "verifier": create_verifier(llm=model, knowledge=knowledge),
+            "planner": Planner(),
+        },
+    )
+    async with app.router.lifespan_context(app):
+        store = app.state.auth_store
+        store.put_account("teacher", "teacher-pass", "teacher", None)
+        store.put_account("alice", "alice-pass", "student", "A")
+        store.put_account("bob", "bob-pass", "student", "B")
+        transport = ASGITransport(app=app)
+        async with (
+            AsyncClient(transport=transport, base_url="http://test") as teacher,
+            AsyncClient(transport=transport, base_url="http://test") as student,
+            AsyncClient(transport=transport, base_url="http://test") as other,
+        ):
+            for client, name, password in (
+                (teacher, "teacher", "teacher-pass"),
+                (student, "alice", "alice-pass"),
+                (other, "bob", "bob-pass"),
+            ):
+                assert (
+                    await client.post(
+                        "/api/auth/login", json={"username": name, "password": password}
+                    )
+                ).status_code == 200
+            runtime = app.state.orchestrator
+            await runtime.start_task(task.task_id, teaching_date=TODAY)
+            before = (await teacher.get(f"/api/tasks/{task.task_id}/diagnosis")).json()
+            assert before["probes"][0]["student_answer"] is None
+            assert len(before["hypotheses"]) == 3
+            assert (await other.get(f"/api/tasks/{task.task_id}/diagnosis")).status_code == 404
+            token = teacher.cookies.get(COOKIE)
+            principal = store.principal(token)
+            request = SimpleNamespace(
+                cookies={COOKIE: token}, state=SimpleNamespace(principal=principal), app=app
+            )
+            stream = events(request)
+            pending = asyncio.create_task(anext(stream))
+            await asyncio.sleep(0.05)
+            target = await runtime.get_answer_target(task.task_id)
+            response = await student.post(
+                f"/api/tasks/{task.task_id}/messages",
+                json={"content": "3*cos(3*x)", "answering_item_id": target.item_id},
+            )
+            assert response.status_code == 202
+            await runtime.wait_idle()
+            event = await asyncio.wait_for(pending, timeout=5)
+            while event.type not in {"hypothesis_updated", "evidence_added", "message_done"}:
+                event = await asyncio.wait_for(anext(stream), timeout=5)
+            after = (await teacher.get(f"/api/tasks/{task.task_id}/diagnosis")).json()
+            assert after["probes"][0]["student_answer"] == "3*cos(3*x)"
+            assert any(h["status"] == "refuted" for h in after["hypotheses"])
+            assert (
+                await teacher.get(f"/api/evidence/{after['error_evidence']['id']}")
+            ).status_code == 200
+            await stream.aclose()
+    get_settings.cache_clear()
 
 
 @pytest.fixture
