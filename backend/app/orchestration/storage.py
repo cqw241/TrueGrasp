@@ -11,6 +11,9 @@ from sqlmodel import Field, Session, SQLModel
 from app.contracts.entities import Item
 from app.contracts.enums import ItemPurpose
 
+# Persisted in Task.reason; keep this marker stable for existing backtrack tasks.
+BACKTRACK_REASON_PREFIX = "先修回溯："
+
 
 class NodeReceipt(SQLModel, table=True):
     __tablename__ = "orchestration_receipt"
