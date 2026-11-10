@@ -1,5 +1,18 @@
 # 开发指南
 
+## T26 登录与权限
+
+认证数据默认保存在 `backend/data/auth.db`，独立于业务库和 checkpoint；演示快照恢复不要覆盖该文件。启动前在 `backend` 执行：
+
+```bash
+uv run python -m app.auth_account teacher --role teacher
+uv run python -m app.auth_account student-a --role student --student-id A
+```
+
+命令交互读取密码，更新现有账号会使其旧会话失效。学生 ID 应与业务库中的学生一致；不要将认证数据库或密码提交到仓库。`AUTH_DB_PATH` 设置认证库路径，`AUTH_SESSION_HOURS` 设置会话有效期（默认 8 小时）。公网 HTTPS 部署必须设置 `AUTH_COOKIE_SECURE=true` 和 `AUTH_PUBLIC_ORIGIN=https://<实际域名>`；反向代理应正确转发主机信息并关闭 SSE 缓冲。
+
+`POST /api/auth/login`、`GET /api/auth/me` 和 `POST /api/auth/logout` 管理同源 HttpOnly Cookie 会话。业务 API 默认要求登录，教师可访问班级数据；学生按服务端绑定 ID 访问本人记录，任务和证据按所有权检查。SSE 根据角色过滤事件，会话退出或到期后断开，重连时前端重新查询数据。健康检查保持匿名可用。部署时创建评委账号后，分别验证教师全班访问、学生越权拒绝和事件更新。
+
 ## 模块与接口约定
 
 后端模块的划分与负责人见[开发计划](../开发计划.md)第 1 节。模块之间的契约（实体、Agent 输入输出、接口桩、事件类型）都在 `backend/app/contracts/`，改动前先和柴确认。HTTP 接口定义导出在 `backend/openapi.json`，启动后端后也可以在 `/docs` 查看。

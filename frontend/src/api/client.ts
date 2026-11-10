@@ -33,6 +33,7 @@ function detailOf(body: unknown): string | null {
 const throwOnError: Middleware = {
   async onResponse({ response }) {
     if (response.ok) return
+    if (response.status === 401) window.dispatchEvent(new Event('auth-expired'))
     const body: unknown = await response
       .clone()
       .json()

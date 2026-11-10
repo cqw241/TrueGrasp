@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/sheet'
 import { useStreamStatus } from '@/hooks/use-event-stream'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/auth'
 
 const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/teacher', label: '教师驾驶舱', icon: LayoutDashboard },
@@ -37,9 +38,12 @@ function Brand() {
 }
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
+  const { user, logout } = useAuth()
   return (
     <nav className="flex flex-col gap-1">
-      {NAV.map(({ to, label, icon: Icon }) => (
+      {NAV.filter(
+        ({ to }) => user?.role === 'teacher' || to === '/student',
+      ).map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}
@@ -57,6 +61,13 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
           {label}
         </NavLink>
       ))}
+      <Button
+        variant="ghost"
+        className="justify-start"
+        onClick={() => void logout()}
+      >
+        退出登录
+      </Button>
     </nav>
   )
 }

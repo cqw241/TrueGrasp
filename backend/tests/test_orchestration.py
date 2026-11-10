@@ -731,6 +731,9 @@ async def test_unconfigured_agents_and_sse_http(business, tmp_path):
         app.router.lifespan_context(app),
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
     ):
+        app.state.auth_store.put_account("test", "test-password", "teacher", None)
+        token, _ = app.state.auth_store.login("test", "test-password", 3600)
+        client.cookies.set("truegrasp_session", token)
         assert (await client.get("/api/health")).json() == {"status": "ok"}
         assert (await client.get("/api/tasks/1/messages")).json() == []
         assert (await client.post("/api/tasks/1/start")).status_code == 501

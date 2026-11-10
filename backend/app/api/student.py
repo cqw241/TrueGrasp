@@ -60,7 +60,10 @@ class PhotoUploadError(BaseModel):
 @router.get("/students")
 def list_students(request: Request) -> list[Student]:
     with Session(request.app.state.orchestrator.engine) as session:
-        return list(session.exec(select(Student).order_by(Student.id)).all())
+        query = select(Student).order_by(Student.id)
+        if request.state.principal.role == "student":
+            query = query.where(Student.id == request.state.principal.student_id)
+        return list(session.exec(query).all())
 
 
 @router.get("/tasks/{task_id}")
