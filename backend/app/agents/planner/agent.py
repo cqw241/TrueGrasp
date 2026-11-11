@@ -47,6 +47,7 @@ from app.ledger.queries import (
     RANK,
     confirmed_hypotheses,
     current_goal,
+    goal_revision,
     has_open_escalation,
     last_escalation_closure,
 )
@@ -97,9 +98,12 @@ class TeachingPlanner:
                 raise InvalidPlanError("规划事件不存在或教学日期不一致")
             if event.processed:
                 return PlanningResult()
+            revision = goal_revision(session)
             candidates, cancelled, facts = self._discover(session, event)
         if not candidates:
-            return PlanningResult(cancel_task_ids=sorted(cancelled), summary="无新增教学任务")
+            return PlanningResult(
+                cancel_task_ids=sorted(cancelled), summary="无新增教学任务", goal_revision=revision
+            )
         candidates.sort(
             key=lambda c: (
                 -c.goal_gap,
@@ -140,7 +144,9 @@ class TeachingPlanner:
                 f"{group['students']} 人同因线索，其中 {group['confirmed']} 人已确认"
             )
         result = PlanningResult(
-            cancel_task_ids=sorted(cancelled), summary="；".join([*counts, decisions.summary])
+            cancel_task_ids=sorted(cancelled),
+            summary="；".join([*counts, decisions.summary]),
+            goal_revision=revision,
         )
         for candidate in candidates:
             decision = by_id[candidate.id]

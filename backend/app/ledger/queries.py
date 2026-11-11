@@ -3,6 +3,7 @@
 from collections import Counter, defaultdict
 from datetime import date
 
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.contracts.api import ClassOverview, DimensionResult, HeatCell, TimelineEntry
@@ -46,6 +47,11 @@ def current_goal(session: Session, kp_id: str | None = None) -> TeachingGoal | N
     return next(
         (goal for goal in goals if kp_id is None or kp_id in goal.knowledge_point_ids), None
     )
+
+
+def goal_revision(session: Session) -> int:
+    """Teacher goals are append-only; their latest id versions planning policy."""
+    return session.exec(select(func.max(TeachingGoal.id))).one() or 0
 
 
 def has_open_escalation(session: Session, student_id: str, kp_id: str) -> bool:

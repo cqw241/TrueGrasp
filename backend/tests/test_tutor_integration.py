@@ -30,7 +30,7 @@ from app.contracts.agents import PlannerOutput
 from app.contracts.api import MessageCreate
 from app.contracts.entities import Event, Evidence, Mastery, Misconception, Task, TeachingGoal
 from app.contracts.enums import ContentSource, EvidenceKind, MasteryState, TaskType
-from app.contracts.events import HomeworkImported, TaskDue, make_event
+from app.contracts.events import AnswerSubmitted, HomeworkImported, TaskDue, make_event
 from app.db import make_engine
 from app.ledger.service import append_evidence, escalate
 from app.main import create_app
@@ -459,6 +459,123 @@ async def test_teacher_adoption_reaches_diagnosis_and_override_blocks_replan(set
                 ("cancelled", [task.error_evidence_id]),
                 ("pending", [later_evidence]),
             ]
+
+
+async def test_teacher_postpones_an_active_probe_without_losing_it(setup, tmp_path, monkeypatch):
+    engine, knowledge, task = setup
+    monkeypatch.setenv("TEACHING_CLOCK_INITIAL_DATE", TODAY.isoformat())
+    app = create_app(
+        engine=engine,
+        checkpoint_path=str(tmp_path / "active-date.db"),
+        orchestration_dependencies={
+            "tutor": create_tutor(llm=Model(), knowledge=knowledge, engine=engine),
+            "verifier": object(),
+            "planner": Planner(),
+        },
+    )
+    path = f"/api/tasks/{task.task_id}"
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        runtime = app.state.orchestrator
+        assert (await client.post(path + "/start")).status_code == 202
+        await runtime.wait_idle()
+        target = (await client.get(path + "/answer-target")).json()
+        tomorrow = (TODAY + timedelta(days=1)).isoformat()
+        assert (await client.patch(path, json={"due_date": tomorrow})).status_code == 200
+        reply = {"answering_item_id": target["item_id"], "content": "cos(3*x)"}
+        assert (await client.get(path + "/answer-target")).json()["phase"] == "idle"
+        assert (await client.post(path + "/start")).status_code == 409
+        assert (await client.post(path + "/messages", json=reply)).status_code == 409
+        assert (await client.get(path + "/diagnosis")).json()["probes"][0]["student_answer"] is None
+        assert (await client.post("/api/clock/advance", json={"days": 1})).status_code == 200
+        assert (await client.get(path + "/answer-target")).json() == target
+        assert (await client.post(path + "/messages", json=reply)).status_code == 202
+        await runtime.wait_idle()
+        assert (await client.get(path + "/diagnosis")).json()["probes"][0][
+            "student_answer"
+        ] == reply["content"]
+
+
+@pytest.mark.parametrize("dispatch", [False, True])
+async def test_lowered_round_limit_invalidates_an_inflight_retry(setup, tmp_path, dispatch):
+    engine, knowledge, task = setup
+    proposed, release = asyncio.Event(), asyncio.Event()
+
+    class PausedPlanner(PlanningModel):
+        async def generate(self, *args):
+            result = await super().generate(*args)
+            if any(
+                c["task"]["type"] == "tutoring" and c["task"]["round"] == 2
+                for c in self.contexts[-1]["candidates"]
+            ):
+                proposed.set()
+                await release.wait()
+            return result
+
+    model = PausedPlanner()
+    app = create_app(
+        engine=engine,
+        checkpoint_path=str(tmp_path / "limit-race.db"),
+        orchestration_dependencies={
+            "planner": create_planner(engine=engine, llm=model, knowledge=knowledge),
+            "teaching_date": lambda: TODAY,
+        },
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        runtime = app.state.orchestrator
+
+        async def set_limit(max_rounds):
+            response = await client.post(
+                "/api/goals",
+                json={
+                    "knowledge_point_ids": [POINT],
+                    "deadline": str(TODAY),
+                    "max_rounds": max_rounds,
+                },
+            )
+            assert response.status_code == 200
+
+        await set_limit(3)
+        await runtime.wait_idle()
+        with Session(engine) as session:
+            session.get(Task, task.task_id).status = "done"
+            evidence = append_evidence(
+                session,
+                Evidence(
+                    student_id="A",
+                    knowledge_point_id=POINT,
+                    task_id=task.task_id,
+                    kind=EvidenceKind.VERIFICATION,
+                    dimension="correctness",
+                    student_answer="0",
+                    is_correct=False,
+                    judged_by="tool",
+                    teaching_date=TODAY,
+                ),
+            )
+            event = make_event(
+                AnswerSubmitted(task_id=task.task_id, evidence_id=evidence.id), TODAY, "A"
+            )
+            session.add(event)
+            session.commit()
+            event_id = event.id
+        pending_plan = asyncio.create_task(runtime.handle_event(event_id, dispatch=dispatch))
+        try:
+            await asyncio.wait_for(proposed.wait(), timeout=5)
+            await set_limit(1)
+        finally:
+            release.set()
+            await pending_plan
+        await runtime.wait_idle()
+        assert len((await client.get("/api/escalations")).json()) == 1
+        with Session(engine) as session:
+            assert session.get(Event, event_id).processed
+            assert not session.exec(select(Task).where(Task.round > 1)).all()
 
 
 async def test_teacher_adoption_refreshes_inflight_escalation(setup, tmp_path):

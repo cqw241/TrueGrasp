@@ -53,3 +53,4 @@ class PlanningResult(PlannerOutput):
     """Extra checkpoint-only context, consumed by orchestration before public validation."""
 
     contexts: list[TaskContext] = []
+    goal_revision: int | None = None
