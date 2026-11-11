@@ -15,7 +15,7 @@ from app.contracts.enums import Dimension, ItemPurpose, ItemSource, TaskType
 from app.orchestration.context import current_teaching_date
 from app.orchestration.inputs import used_fingerprints
 from app.orchestration.questions import question_turn
-from app.orchestration.storage import QUESTION_FOLLOWUP, ItemExposure
+from app.orchestration.storage import QUESTION_FOLLOWUP, ItemExposure, VerificationExposureConflict
 from app.verify.tools import SympyMathTools
 
 if TYPE_CHECKING:
@@ -52,6 +52,7 @@ class RunState(TypedDict, total=False):
     question_hint: int
     question_clarified: bool
     question_diagnosed: bool
+    question_diagnostic_evidence_id: int
     question_attempt: str
     question_observation: str
 
@@ -165,7 +166,10 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
                     session, task.student_id, state["shown_item_ids"]
                 ):
                     return {"stale_verification_item": True}
-        return {**runtime.present_item(state), "stale_verification_item": False}
+        try:
+            return {**runtime.present_item(state), "stale_verification_item": False}
+        except VerificationExposureConflict:
+            return {"stale_verification_item": True}
 
     async def replace_verification_item(state: RunState) -> dict:
         items = state["verification_items"].copy()

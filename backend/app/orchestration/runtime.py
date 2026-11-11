@@ -192,6 +192,30 @@ class Orchestrator:
                 work.pending = False
                 session.commit()
 
+    def _pending_question_reply(self, key: str) -> dict | None:
+        with Session(self.engine) as session:
+            work = session.get(PendingWork, key)
+            return work.payload if work and work.pending and "reply" in work.payload else None
+
+    def _persist_question_reply(self, key, snapshot, body, teaching_date=None) -> dict:
+        today = teaching_date or (self.teaching_date() if self.teaching_date else None)
+        payload = {
+            "teaching_date": today.isoformat() if today else snapshot.values["teaching_date"],
+            "reply": body.model_dump(mode="json"),
+            "turn": len(snapshot.values["messages"]),
+        }
+        with Session(self.engine) as session:
+            work = session.get(PendingWork, key)
+            if work and work.pending and "reply" in work.payload:
+                raise OrchestrationError(409, "该任务正在处理上一条消息")
+            queue_work(session, key, payload, reactivate=True)
+            session.commit()
+        return payload
+
+    @staticmethod
+    def _reply_command(payload: dict) -> Command:
+        return Command(resume=payload["reply"], update={"teaching_date": payload["teaching_date"]})
+
     @staticmethod
     def _queue_task(session: Session, state: RunState) -> None:
         queue_work(
@@ -366,7 +390,11 @@ class Orchestrator:
             if task.due_date is not None and task.due_date > max(today, teaching_date):
                 raise OrchestrationError(409, "任务尚未到期")
             if snapshot.interrupts:
-                self._acknowledge(key)
+                reply = self._pending_question_reply(key)
+                if reply and reply["turn"] == len(snapshot.values["messages"]):
+                    await self._run_task(key, self._reply_command(reply))
+                else:
+                    self._acknowledge(key)
                 return
             with Session(self.engine) as session:
                 context = session.get(PlanningTaskContext, task_id)
@@ -443,9 +471,13 @@ class Orchestrator:
     ) -> None:
         key = f"task:{task_id}"
         async with self._lock(key):
-            await self._validate_message(
+            snapshot = await self._validate_message(
                 task_id, body, expected_turn=expected_turn, teaching_date=teaching_date
             )
+            if snapshot.values["phase"] in ("question", "question_diagnosis"):
+                payload = self._persist_question_reply(key, snapshot, body, teaching_date)
+                await self._run_task(key, self._reply_command(payload))
+                return
             current_date = teaching_date or (self.teaching_date() if self.teaching_date else None)
             await self._run_task(
                 key,
@@ -466,7 +498,7 @@ class Orchestrator:
             task = self._check_task(
                 task_id, recovering=self._recovering_terminal(task_id, snapshot)
             )
-            if snapshot.interrupts:
+            if snapshot.interrupts and not self._pending_question_reply(key):
                 return
             today = self._task_date(task, snapshot)
             if task.due_date is not None and task.due_date > today:
@@ -483,7 +515,11 @@ class Orchestrator:
         async with self._lock(key):
             if key in self._jobs:
                 raise OrchestrationError(409, "该任务正在处理上一条消息")
-            await self._validate_message(task_id, body, expected_turn=expected_turn)
+            snapshot = await self._validate_message(task_id, body, expected_turn=expected_turn)
+            if snapshot.values["phase"] in ("question", "question_diagnosis"):
+                self._persist_question_reply(key, snapshot, body)
+                self._spawn(key, lambda: self.start_task(task_id))
+                return
             self._spawn(
                 key, lambda: self.submit_message(task_id, body, expected_turn=expected_turn)
             )
@@ -544,7 +580,7 @@ class Orchestrator:
         )
         if processing or key in self._jobs:
             phase = "processing"
-        elif not snapshot.interrupts and (key in self._failed_work or snapshot.next):
+        elif key in self._failed_work or (not snapshot.interrupts and snapshot.next):
             phase = "failed"
         else:
             phase = "waiting" if snapshot.interrupts else "idle"
@@ -650,6 +686,7 @@ class Orchestrator:
                         select(Task).where(
                             Task.student_id == planned.student_id,
                             Task.status == TaskStatus.ACTIVE,
+                            Task.type != TaskType.QUESTION,
                         )
                     ).all()
                     if any(
@@ -811,6 +848,8 @@ class Orchestrator:
                 )
                 .order_by(Evidence.id.desc())
             ).first()
+            if state.get("question_diagnostic_evidence_id") is not None:
+                error = session.get(Evidence, state["question_diagnostic_evidence_id"])
             tutor_task = TutorTask(
                 task_id=task.id,
                 student_id=task.student_id,
@@ -927,10 +966,6 @@ class Orchestrator:
 
     def accept_input(self, state: RunState) -> dict:
         message = MessageCreate.model_validate(state["incoming_message"])
-        if state["phase"] in ("question", "question_diagnosis"):
-            with Session(self.engine) as session:
-                self._queue_task(session, state)
-                session.commit()
         return {
             "messages": [
                 *state["messages"],
