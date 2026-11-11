@@ -731,6 +731,11 @@ export interface components {
        * @default 0
        */
       turn: number
+      /**
+       * Accepts Text
+       * @default false
+       */
+      accepts_text: boolean
     }
     /** Body_import_homework_api_homework_post */
     Body_import_homework_api_homework_post: {

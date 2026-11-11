@@ -149,6 +149,7 @@ class AnswerTarget(BaseModel):
     prompt: str = ""
     stem: str = ""
     turn: int = 0
+    accepts_text: bool = False  # Some item-bound turns accept a description of a stuck step.
 
 
 class Accepted(BaseModel):

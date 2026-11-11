@@ -119,6 +119,7 @@ function AnswerEditor({
   onRefresh: () => Promise<void>
 }) {
   const { item_id: itemId, turn = 0 } = target
+  const acceptsText = target.accepts_text || !itemId
   const [answer, setAnswer] = useState('')
   const [preview, setPreview] = useState('')
   const [doubts, setDoubts] = useState<string[] | null>(null)
@@ -341,7 +342,7 @@ function AnswerEditor({
           )}
           {doubts !== null && (
             <div role="status" className="bg-muted rounded-md p-3 text-sm">
-              <p>请核对识别结果，必要时在公式框内修改，再提交作答。</p>
+              <p>请核对识别结果，必要时修改，再提交作答。</p>
               {doubts.length > 0 && (
                 <ul className="mt-1 list-disc pl-5">
                   {doubts.map((doubt, index) => (
@@ -351,6 +352,10 @@ function AnswerEditor({
               )}
             </div>
           )}
+        </>
+      ) : null}
+      {!acceptsText ? (
+        <>
           <MathInput
             value={answer}
             onChange={setAnswer}
@@ -367,7 +372,7 @@ function AnswerEditor({
         <textarea
           aria-label="回复"
           className="bg-background min-h-24 w-full rounded-md border p-3"
-          placeholder="输入回复"
+          placeholder={itemId ? '输入公式或说明卡在哪一步' : '输入回复'}
           value={answer}
           disabled={busy}
           onChange={(event) => setAnswer(event.target.value)}

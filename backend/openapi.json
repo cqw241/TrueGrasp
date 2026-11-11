@@ -2077,6 +2077,11 @@
             "type": "integer",
             "title": "Turn",
             "default": 0
+          },
+          "accepts_text": {
+            "type": "boolean",
+            "title": "Accepts Text",
+            "default": false
           }
         },
         "type": "object",
