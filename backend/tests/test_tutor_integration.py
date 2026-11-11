@@ -99,6 +99,78 @@ class CombinedModel(Model):
         return await super().generate(messages, output, tools)
 
 
+@pytest.mark.parametrize("quoted_error", ["d(sin(u)^2)/du = sin(u)", "学生没有写过的步骤", ""])
+async def test_partial_attempt_enters_diagnosis_only_for_an_observed_error(
+    setup, tmp_path, quoted_error
+):
+    engine, knowledge, _ = setup
+    attempt = "我先算外层：d(sin(u)^2)/du = sin(u)，令 u=8x。"
+
+    class PartialAttemptModel(CombinedModel):
+        async def generate(self, messages, output, tools=None):
+            if output is QuestionDraft:
+                return QuestionDraft(
+                    knowledge_point_id=POINT,
+                    spec={"operation": "derivative", "expr": "sin(8*x)**2", "variables": ["x"]},
+                    answer="16*sin(8*x)*cos(8*x)",
+                )
+            if output is QuestionInterpretation:
+                return QuestionInterpretation(
+                    spec={"operation": "derivative", "expr": "sin(8*x)**2", "variables": ["x"]}
+                )
+            if output is AttemptReview:
+                return AttemptReview.model_validate(
+                    {
+                        "final_answer": "",
+                        "observation": "外层平方求导时遗漏系数与三角函数因子",
+                        "first_error_step": quoted_error,
+                    }
+                )
+            if output is Guidance:
+                return Guidance(text="请写出你使用的求导公式。")
+            if output is HintReview:
+                return HintReview(safe=True)
+            return await super().generate(messages, output, tools)
+
+    model = PartialAttemptModel()
+    app = create_app(
+        engine=engine,
+        checkpoint_path=str(tmp_path / "partial.db"),
+        orchestration_dependencies={
+            "tutor": create_tutor(llm=model, knowledge=knowledge, engine=engine),
+            "planner": create_planner(engine=engine, llm=PlanningModel(), knowledge=knowledge),
+            "verifier": create_verifier(llm=model, knowledge=knowledge),
+            "questions": StudentQuestions(model, knowledge),
+        },
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        created = await client.post(
+            "/api/students/A/questions",
+            json={"content": "求 sin^2(8x) 的导数", "attempt": attempt},
+        )
+        assert created.status_code == 202
+        task_id = created.json()["id"]
+        await app.state.orchestrator.wait_idle()
+        view = await client.get(f"/api/tasks/{task_id}/diagnosis")
+        if quoted_error in ("", "学生没有写过的步骤"):
+            assert view.status_code == 404
+            return
+        assert view.status_code == 200
+        assert len(view.json()["hypotheses"]) >= 2
+        target = (await client.get(f"/api/tasks/{task_id}/answer-target")).json()
+        assert target["item_id"] and not target["item_id"].startswith("student-question.")
+        messages = (await client.get(f"/api/tasks/{task_id}/messages")).json()
+        assert messages[-1]["hint_level"] is None
+        evidence_id = view.json()["error_evidence"]["id"]
+        evidence = (await client.get(f"/api/evidence/{evidence_id}")).json()
+        assert evidence["student_answer"] == attempt
+        assert evidence["judged_by"] == "model" and evidence["is_correct"] is None
+        assert quoted_error in evidence["reason"]
+
+
 @pytest.mark.parametrize("initial", ["", "cos(x)", "不会用链式法则", "会外层，卡在内层求导"])
 async def test_student_question_diagnosis_hints_and_independent_followup(
     setup, tmp_path, monkeypatch, initial

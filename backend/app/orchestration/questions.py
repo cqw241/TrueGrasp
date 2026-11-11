@@ -169,13 +169,20 @@ async def question_turn(runtime, state) -> dict:
             _record_attempt(runtime, state, item, attempt, correct=True)
             return _reply(history, "你的结果通过了核验。接下来可以做一道同类新题。", finished=True)
         checkpoint = {"question_attempt": attempt, "question_observation": observation}
-        if (check is False or review.stuck_step) and not state.get("question_diagnosed"):
+        if (check is False or review.stuck_step or review.first_error_step) and not state.get(
+            "question_diagnosed"
+        ):
             evidence_id = _record_attempt(
                 runtime,
                 state,
                 item,
                 review.final_answer if check is False else attempt,
                 correct=False if check is False else None,
+                observation=(
+                    f"中间步骤待诊断：{review.first_error_step}；{observation}"
+                    if review.first_error_step
+                    else ""
+                ),
             )
             return {
                 **checkpoint,
@@ -205,7 +212,7 @@ async def question_turn(runtime, state) -> dict:
     }
 
 
-def _record_attempt(runtime, state, item, answer, *, correct):
+def _record_attempt(runtime, state, item, answer, *, correct, observation=""):
     with Session(runtime.engine) as session:
         task = runtime._task(session, state["task_id"])
         suffix = {True: "correct_attempt", False: "first_attempt", None: "stuck_attempt"}[correct]
@@ -221,7 +228,8 @@ def _record_attempt(runtime, state, item, answer, *, correct):
             student_answer=answer,
             is_correct=correct,
             judged_by=JudgedBy.MODEL if correct is None else JudgedBy.TOOL,
-            reason={
+            reason=observation
+            or {
                 True: "主动提问的作答通过核验",
                 False: "主动提问的首次错答与核验结果不等价",
                 None: "学生指出具体卡点，启动诊断",
