@@ -183,8 +183,21 @@ class SympyMathTools:
         candidate_groups = sum(bool(group.misconception_ids) for group in groups)
         return Distinctness(ok=candidate_groups >= 2, groups=groups)
 
-    def fingerprint(self, spec: ItemSpec) -> str:
+    def fingerprint(self, spec: ItemSpec, *, preserve_symbols: bool = False) -> str:
         canonical = spec.model_dump(mode="json")
+        if preserve_symbols:
+            # Compare two transcriptions of the same question without renaming its symbols.
+            canonical["variables"] = (
+                sorted(spec.variables) if spec.operation == Operation.EXPRESSION else spec.variables
+            )
+            canonical["expr"] = sp.srepr(sp.simplify(parse_expr(spec.expr)))
+            for bound in canonical["bounds"]:
+                for key in ("lower", "upper"):
+                    bound[key] = sp.srepr(sp.simplify(parse_expr(bound[key])))
+            if spec.limit_point not in (None, "oo", "-oo"):
+                canonical["limit_point"] = sp.srepr(sp.simplify(parse_expr(spec.limit_point)))
+            encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+            return hashlib.sha256(encoded.encode()).hexdigest()
         # Preserve variable roles (including repeated derivative variables), not spelling.
         variables = [] if spec.bounds or spec.operation == Operation.EXPRESSION else spec.variables
         names = list(dict.fromkeys([*(bound.var for bound in spec.bounds), *variables]))

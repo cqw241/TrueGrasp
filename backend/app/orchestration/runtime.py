@@ -462,10 +462,10 @@ class Orchestrator:
                 key, lambda: self.submit_message(task_id, body, expected_turn=expected_turn)
             )
 
-    async def get_messages(self, task_id: int) -> list[ChatTurn]:
+    async def get_messages(self, task_id: int, *, student_view: bool = False) -> list[ChatTurn]:
         with Session(self.engine) as session:
             task = self._task(session, task_id)
-            hide_answers = task.type == TaskType.QUESTION
+            hide_answers = student_view or task.type == TaskType.QUESTION
         snapshot = await self.graph.aget_state(self._config(f"task:{task_id}"))
         # SQLModel 的 table 模型作为嵌套字段时走构造路径；显式验证以还原枚举和值对象。
         return [
@@ -473,7 +473,14 @@ class Orchestrator:
                 role=message["role"],
                 content=message["content"],
                 item=Item.model_validate(
-                    {**message["item"], "answer": "", "predictions": [], "spec": None, "rubric": []}
+                    {
+                        **message["item"],
+                        "answer": "",
+                        "predictions": [],
+                        "spec": None,
+                        "rubric": [],
+                        "fingerprint": None,
+                    }
                     if hide_answers
                     else message["item"]
                 )
@@ -847,6 +854,10 @@ class Orchestrator:
 
     def accept_input(self, state: RunState) -> dict:
         message = MessageCreate.model_validate(state["incoming_message"])
+        if state["phase"] in ("question", "question_diagnosis"):
+            with Session(self.engine) as session:
+                self._queue_task(session, state)
+                session.commit()
         return {
             "messages": [
                 *state["messages"],

@@ -91,7 +91,6 @@ async def question_turn(runtime, state) -> dict:
     history = state["messages"]
     incoming = state.get("incoming_message")
     with Session(runtime.engine) as session:
-        task = runtime._task(session, task_id)
         initial = session.get(NodeReceipt, f"question:{task_id}").result
         item = session.get(Item, initial["item"])
         confirmed_ids = state.get("tutor_turn", {}).get("confirmed_misconception_ids", [])
@@ -103,7 +102,7 @@ async def question_turn(runtime, state) -> dict:
         attempt = initial["attempt"]
         history.append(ChatTurn(role="user", content=attempt).model_dump(mode="json"))
     else:
-        attempt = incoming["content"] if incoming else state["question_attempt"]
+        attempt = incoming["content"] if incoming else state.get("question_attempt", "")
 
     level = state.get("question_hint", 0)
     # Leaving the T09 probe loop resumes work on the student's original problem.
@@ -118,41 +117,24 @@ async def question_turn(runtime, state) -> dict:
                 review.final_answer, item.answer, item.spec.answer_mode, item.spec.variables
             ).equivalent
         if check is True:
+            _record_attempt(runtime, state, item, attempt, correct=True)
             return _reply(history, "你的结果通过了核验。接下来可以做一道同类新题。", finished=True)
-        if level == 0 and not state.get("question_attempt"):
-            checkpoint = {"question_attempt": attempt, "question_observation": observation}
-            if check is False:
-                with Session(runtime.engine) as session:
-                    task = runtime._task(session, task_id)
-                    key = f"question:{task_id}:first_attempt"
-                    if session.get(NodeReceipt, key) is None:
-                        evidence = Evidence(
-                            student_id=task.student_id,
-                            knowledge_point_id=task.knowledge_point_id,
-                            task_id=task.id,
-                            item_id=item.id,
-                            kind=EvidenceKind.PRACTICE,
-                            student_answer=review.final_answer,
-                            is_correct=False,
-                            judged_by=JudgedBy.TOOL,
-                            reason="主动提问的首次尝试与核验结果不等价",
-                            teaching_date=date.fromisoformat(state["teaching_date"]),
-                        )
-                        session.add(evidence)
-                        session.flush()
-                        task.evidence_ids = [*task.evidence_ids, evidence.id]
-                        session.add(NodeReceipt(key=key, result={"evidence_id": evidence.id}))
-                        session.commit()
-                return {
-                    **checkpoint,
-                    "phase": "question_diagnosis",
-                    "incoming_message": None,
-                    "messages": history,
-                }
+        checkpoint = {"question_attempt": attempt, "question_observation": observation}
+        if check is False and not state.get("question_diagnosed"):
+            _record_attempt(runtime, state, item, review.final_answer, correct=False)
+            return {
+                **checkpoint,
+                "question_diagnosed": True,
+                "phase": "question_diagnosis",
+                "incoming_message": None,
+                "messages": history,
+            }
+        if not state.get("question_clarified") and not state.get("question_diagnosed"):
             prompt = await runtime.questions.guide(item, attempt, observation, [], 0)
             return {
                 **checkpoint,
-                **_reply(history, prompt or "你已经用了哪个公式？请写出卡住的那一步。"),
+                "question_clarified": True,
+                **_reply(history, prompt),
             }
 
     next_level = level + 1
@@ -161,12 +143,36 @@ async def question_turn(runtime, state) -> dict:
         return _reply(
             history, f"{text}\n\n核验结果：${item.answer}$。", finished=True, solution=True
         )
-    if not text:
-        raise ValueError("辅导模型未返回提示")
     return {
         **_reply(history, text, hint=next_level),
         "question_hint": next_level,
     }
+
+
+def _record_attempt(runtime, state, item, answer, *, correct):
+    with Session(runtime.engine) as session:
+        task = runtime._task(session, state["task_id"])
+        suffix = "correct_attempt" if correct else "first_attempt"
+        key = f"question:{task.id}:{suffix}"
+        if session.get(NodeReceipt, key) is not None:
+            return
+        evidence = Evidence(
+            student_id=task.student_id,
+            knowledge_point_id=task.knowledge_point_id,
+            task_id=task.id,
+            item_id=item.id,
+            kind=EvidenceKind.PRACTICE,
+            student_answer=answer,
+            is_correct=correct,
+            judged_by=JudgedBy.TOOL,
+            reason=("主动提问的作答通过核验" if correct else "主动提问的首次错答与核验结果不等价"),
+            teaching_date=date.fromisoformat(state["teaching_date"]),
+        )
+        session.add(evidence)
+        session.flush()
+        task.evidence_ids = [*task.evidence_ids, evidence.id]
+        session.add(NodeReceipt(key=key, result={"evidence_id": evidence.id}))
+        session.commit()
 
 
 def _reply(history, content, *, hint=None, finished=False, solution=False):

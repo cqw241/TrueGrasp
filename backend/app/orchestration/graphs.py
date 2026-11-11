@@ -48,6 +48,8 @@ class RunState(TypedDict, total=False):
     followup_event_ids: list[int]
     replan_event_id: int
     question_hint: int
+    question_clarified: bool
+    question_diagnosed: bool
     question_attempt: str
     question_observation: str
 
@@ -264,7 +266,7 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
                 "request_replan": "replan",
             }[state["tutor_turn"]["outcome"]]
             if state["phase"] != "question_diagnosis"
-            or state["tutor_turn"]["outcome"] == "await_student"
+            or state["tutor_turn"]["outcome"] != "request_verification"
             else "question"
         ),
     )

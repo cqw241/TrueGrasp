@@ -81,7 +81,9 @@ async def start_task(task_id: int, request: Request) -> Accepted:
 
 @router.get("/tasks/{task_id}/messages")
 async def list_messages(task_id: int, request: Request) -> list[ChatTurn]:
-    return await request.app.state.orchestrator.get_messages(task_id)
+    return await request.app.state.orchestrator.get_messages(
+        task_id, student_view=request.state.principal.role == "student"
+    )
 
 
 @router.get("/tasks/{task_id}/answer-target")
