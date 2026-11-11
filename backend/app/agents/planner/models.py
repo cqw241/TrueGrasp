@@ -1,6 +1,7 @@
 """Planner-private model output and execution metadata; no public contract changes."""
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,6 +17,7 @@ class TaskContext(BaseModel):
     root_knowledge_point_id: str
     context_knowledge_point_id: str | None = None
     issue_misconception_id: str | None = None
+    escalation_basis: Literal["round_limit", "unmodeled"] | None = None
 
 
 class Candidate(BaseModel):

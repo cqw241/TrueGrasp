@@ -173,9 +173,9 @@ shadcn/ui 组件用 `npx shadcn@latest add <组件>` 添加到 `components/ui/`�
 | 接管辅导、交还 Agent | `POST /api/tasks/{task_id}/takeover`、`POST /api/tasks/{task_id}/handback`（返回 `TaskControl`） | T24 |
 | 待审核错因与采纳 | `GET /api/misconceptions/pending`、`POST /api/misconceptions/{misconception_id}/adopt`（`AdoptMisconception`） | T16 |
 
-T16 接通上述教师接口并沿用 T12 的契约。创建目标后持久化规划事件；转交列表同时保留待处理与已处理记录，驾驶舱人数统计待处理学生。处理转交会追加教师证据，保留历史作答和掌握状态。
+T16 接通上述教师接口并沿用 T12 的契约。创建目标后持久化规划事件；转交列表同时保留待处理与已处理记录，驾驶舱人数统计待处理学生。处理转交会追加教师证据，保留历史作答和掌握状态。关闭后，新作答可以触发规划；新的独立验证证据达到掌握标准时，账本才更新掌握状态。
 
-`GET /api/tasks/controls` 返回当前接管和已覆盖的任务。接管后暂停该学生的 Agent 会话与自动调度，交还后沿用原 checkpoint；计划改期或取消后，Agent 不会撤销同一计划的人工决定。学生相关处理分别追加账本证据，班级计划的覆盖保留独立审计记录。采纳待审核错因后，同一进程的诊断立即可检索该错因。
+`GET /api/tasks/controls` 返回当前接管和已覆盖的任务。接管后暂停该学生的 Agent 会话与自动调度，交还后沿用原 checkpoint；计划改期或取消后，Agent 不会撤销同一计划的人工决定，新的作答证据仍可触发规划。学生相关处理分别追加账本证据，班级计划的覆盖保留独立审计记录。采纳待审核错因后，同一进程的诊断立即可检索该错因；尚未提交的规划若因此失去转交依据，将重新计算。
 
 写操作成功后，前端让相关查询重新拉取；收到 SSE 的 `task_changed`、`evidence_added` 时，也会刷新任务、转交、达标率和热力图。热力图用 ECharts 按需引入，只打包进驾驶舱页面。
 

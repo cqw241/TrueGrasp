@@ -1,6 +1,7 @@
 """Read models for planner and teacher/student views."""
 
 from collections import Counter, defaultdict
+from datetime import date
 
 from sqlmodel import Session, select
 
@@ -45,6 +46,41 @@ def current_goal(session: Session, kp_id: str | None = None) -> TeachingGoal | N
     return next(
         (goal for goal in goals if kp_id is None or kp_id in goal.knowledge_point_ids), None
     )
+
+
+def has_open_escalation(session: Session, student_id: str, kp_id: str) -> bool:
+    return (
+        session.exec(
+            select(Task.id).where(
+                Task.student_id == student_id,
+                Task.knowledge_point_id == kp_id,
+                Task.type == TaskType.ESCALATION,
+                Task.status.in_((TaskStatus.PENDING, TaskStatus.ACTIVE)),
+            )
+        ).first()
+        is not None
+    )
+
+
+def last_escalation_closure(
+    session: Session, student_id: str, kp_id: str
+) -> tuple[date, int] | None:
+    # A teacher's resolution/cancellation is the last control record for a
+    # closed escalation. Adoption records are associated with a misconception.
+    row = session.exec(
+        select(Evidence.teaching_date, Evidence.id)
+        .join(Task, Task.id == Evidence.task_id)
+        .where(
+            Evidence.student_id == student_id,
+            Evidence.knowledge_point_id == kp_id,
+            Evidence.kind == EvidenceKind.TEACHER,
+            Evidence.matched_misconception_id == None,  # noqa: E711
+            Task.type == TaskType.ESCALATION,
+            Task.status.in_((TaskStatus.DONE, TaskStatus.CANCELLED)),
+        )
+        .order_by(Evidence.teaching_date.desc(), Evidence.id.desc())
+    ).first()
+    return (row[0], row[1]) if row else None
 
 
 def class_overview(session: Session) -> ClassOverview:

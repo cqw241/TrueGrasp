@@ -51,7 +51,7 @@ from app.contracts.events import (
 from app.contracts.knowledge import KnowledgeGraph
 from app.contracts.llm import ChatMessage
 from app.contracts.values import SLIP
-from app.ledger.service import append_evidence, escalate, start_tutoring
+from app.ledger.service import append_evidence, escalate, escalation_is_eligible, start_tutoring
 from app.orchestration.bus import EventBus
 from app.orchestration.graphs import RunState, build_graph
 from app.orchestration.inputs import build_verifier_input
@@ -560,10 +560,10 @@ class Orchestrator:
         with Session(self.engine) as session:
             event = session.get(Event, state["event_id"])
             if event.processed:
-                return {"plan": PlannerOutput().model_dump(mode="json")}
+                return {"plan": PlannerOutput().model_dump(mode="json"), "plan_stale": False}
             inp = PlannerInput(event_id=event.id, teaching_date=event.teaching_date)
         result = await self.planner.plan(inp)
-        return {"plan": result.model_dump(mode="json")}
+        return {"plan": result.model_dump(mode="json"), "plan_stale": False}
 
     async def save_plan(self, state: RunState) -> dict:
         # 取消与该任务正在执行的一轮串行，避免完成节点覆盖已取消状态。
@@ -673,10 +673,34 @@ class Orchestrator:
                         break
                 if duplicate:
                     continue
+                if (
+                    task.type == TaskType.ESCALATION
+                    and context is not None
+                    and not escalation_is_eligible(
+                        session, task, basis=context.get("escalation_basis")
+                    )
+                ):
+                    refreshes = state.get("plan_refreshes", 0)
+                    if refreshes >= 3:
+                        raise ValueError("规划多次重算后仍缺少转交依据")
+                    # The model awaited outside the transaction. A teacher may
+                    # have adopted the misconception or changed the round limit.
+                    # Closing this session rolls back the whole stale plan.
+                    return {
+                        "plan_stale": True,
+                        "plan_refreshes": refreshes + 1,
+                    }
                 session.add(task)
                 session.flush()
                 if context:
-                    session.add(PlanningTaskContext(task_id=task.id, **context))
+                    session.add(
+                        PlanningTaskContext(
+                            task_id=task.id,
+                            root_knowledge_point_id=context["root_knowledge_point_id"],
+                            context_knowledge_point_id=context["context_knowledge_point_id"],
+                            issue_misconception_id=context["issue_misconception_id"],
+                        )
+                    )
                 created.append(task)
             event.processed = True
             session.flush()

@@ -146,6 +146,27 @@ def test_only_independent_evidence_can_certify(session):
     assert state(session) is None
 
 
+def test_open_and_resolved_escalation_do_not_pool_old_passes(session):
+    transfer = Task(
+        type=TaskType.ESCALATION, student_id="A", knowledge_point_id="kp", created_on=TODAY, round=2
+    )
+    session.add(transfer)
+    session.flush()
+    escalate(session, transfer, TODAY)
+    initial(session)
+    start_tutoring(session, session.get(Task, 1), TODAY)
+    evidence(session, correct=False, kind=EvidenceKind.HOMEWORK)
+    assert state(session) == MasteryState.ESCALATED
+
+    evidence(session, kind=EvidenceKind.TEACHER, correct=None, task_id=transfer.id)
+    transfer.status = "done"
+    evidence(session, Dimension.NEAR_TRANSFER)
+    evidence(session, Dimension.CORRECTNESS)
+    assert state(session) == MasteryState.ESCALATED
+    evidence(session, Dimension.DISTRACTOR)
+    assert state(session) == MasteryState.INITIAL
+
+
 def test_students_and_verification_sessions_cannot_pool_passes(session):
     evidence(session, Dimension.CORRECTNESS)
     evidence(session, Dimension.DISTRACTOR, student="B")

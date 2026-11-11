@@ -1,5 +1,6 @@
 """Real tutor, real verifier and ledger across the public orchestration seam."""
 
+import asyncio
 import json
 from datetime import timedelta
 
@@ -27,13 +28,14 @@ from app.clock.storage import DueNotification
 from app.config import Settings
 from app.contracts.agents import PlannerOutput
 from app.contracts.api import MessageCreate
-from app.contracts.entities import Event, Evidence, Mastery, Misconception, Task
+from app.contracts.entities import Event, Evidence, Mastery, Misconception, Task, TeachingGoal
 from app.contracts.enums import ContentSource, EvidenceKind, MasteryState, TaskType
-from app.contracts.events import HomeworkImported, make_event
+from app.contracts.events import HomeworkImported, TaskDue, make_event
 from app.db import make_engine
+from app.ledger.service import append_evidence, escalate
 from app.main import create_app
 from app.orchestration import EventBus, Orchestrator
-from app.orchestration.storage import PendingWork
+from app.orchestration.storage import PendingWork, queue_work
 from tests.test_planner import PlanningModel
 from tests.test_tutor import FORMULA, MISS, POINT, TODAY, Model, Publisher, input_for
 from tests.test_tutor import setup as setup
@@ -65,7 +67,10 @@ class CombinedModel(Model):
                     r"-4x\cos(x^2)\sin(x^2)",
                     [
                         {"misconception_id": m["id"], "answer": r"-2\cos(x^2)\sin(x^2)"}
-                        for m in payload["input"]["confirmed_misconceptions"]
+                        for m in (
+                            payload["input"]["confirmed_misconceptions"]
+                            or [m for m in payload["possible_distractors"] if m["id"] == MISS]
+                        )
                     ],
                 ),
                 "near_transfer": (
@@ -424,6 +429,225 @@ async def test_teacher_adoption_reaches_diagnosis_and_override_blocks_replan(set
                 select(Evidence).where(Evidence.kind == EvidenceKind.TEACHER)
             ).all()
             assert len(records) == 3 and all(row.is_correct is None for row in records)
+
+        with Session(engine) as session:
+            later = today + timedelta(days=3)
+            evidence = append_evidence(
+                session,
+                Evidence(
+                    student_id="A",
+                    knowledge_point_id=POINT,
+                    kind=EvidenceKind.HOMEWORK,
+                    judged_by="tool",
+                    is_correct=False,
+                    student_answer="另一次作业的错答",
+                    teaching_date=later,
+                ),
+            )
+            event = make_event(
+                HomeworkImported(knowledge_point_ids=[POINT], evidence_ids=[evidence.id]), later
+            )
+            session.add(event)
+            session.commit()
+            later_event, later_evidence = event.id, evidence.id
+        await runtime.handle_event(later_event, dispatch=False)
+        with Session(engine) as session:
+            tasks = session.exec(
+                select(Task).where(Task.type == TaskType.TUTORING).order_by(Task.id)
+            ).all()
+            assert [(t.status, t.evidence_ids) for t in tasks] == [
+                ("cancelled", [task.error_evidence_id]),
+                ("pending", [later_evidence]),
+            ]
+
+
+async def test_teacher_adoption_refreshes_inflight_escalation(setup, tmp_path):
+    engine, knowledge, task = setup
+    unknown = "unmodeled.inflight"
+    with Session(engine) as session:
+        session.add(
+            TeachingGoal(
+                knowledge_point_ids=[POINT], created_on=TODAY, deadline=TODAY, max_rounds=3
+            )
+        )
+        session.add(
+            Misconception(
+                id=unknown,
+                knowledge_point_id=POINT,
+                family="chain",
+                description="未审核",
+                source=ContentSource.UNMODELED,
+            )
+        )
+        session.flush()
+        old_task = session.get(Task, task.task_id)
+        old_task.status = "cancelled"
+        old_task.reason = "重规划：未建模错因无法判定"
+        evidence = append_evidence(
+            session,
+            Evidence(
+                student_id="A",
+                task_id=old_task.id,
+                knowledge_point_id=POINT,
+                kind=EvidenceKind.DIAGNOSIS,
+                matched_misconception_id=unknown,
+                judged_by="model",
+                teaching_date=TODAY,
+            ),
+        )
+        old_task.evidence_ids = [*old_task.evidence_ids, evidence.id]
+        old_task.misconception_ids = [unknown]
+        event = make_event(TaskDue(task_id=old_task.id), TODAY, "A")
+        session.add(event)
+        session.flush()
+        event_id = event.id
+        queue_work(session, f"event:{event_id}", {"dispatch": False})
+        session.commit()
+
+    started, release = asyncio.Event(), asyncio.Event()
+
+    class PausedPlanningModel(PlanningModel):
+        async def generate(self, *args):
+            result = await super().generate(*args)
+            if len(self.contexts) == 1:
+                assert self.contexts[-1]["candidates"][0]["task"]["type"] == "escalation"
+                started.set()
+                await release.wait()
+            return result
+
+    model = PausedPlanningModel()
+    planner = create_planner(engine=engine, knowledge=knowledge, llm=model)
+    app = create_app(
+        engine=engine,
+        checkpoint_path=str(tmp_path / "adopt-race.db"),
+        orchestration_dependencies={"planner": planner, "knowledge": knowledge},
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await asyncio.wait_for(started.wait(), timeout=5)
+        try:
+            adopted = await client.post(
+                f"/api/misconceptions/{unknown}/adopt", json={"description": "已审核"}
+            )
+            assert adopted.status_code == 200
+        finally:
+            release.set()
+        await app.state.orchestrator.wait_idle()
+
+    async with app.router.lifespan_context(app):
+        await app.state.orchestrator.wait_idle()
+    assert [context["candidates"][0]["task"]["type"] for context in model.contexts] == [
+        "escalation",
+        "tutoring",
+    ]
+    with Session(engine) as session:
+        assert session.get(Event, event_id).processed
+        assert not session.get(PendingWork, f"event:{event_id}").pending
+        assert not session.exec(select(Task).where(Task.type == TaskType.ESCALATION)).all()
+        task = session.exec(select(Task).where(Task.status == "pending")).one()
+        assert task.type == TaskType.TUTORING and unknown in task.misconception_ids
+
+
+async def test_escalation_closure_allows_only_fresh_independent_mastery(
+    setup, tmp_path, monkeypatch
+):
+    engine, knowledge, original = setup
+    monkeypatch.setenv("TEACHING_CLOCK_INITIAL_DATE", TODAY.isoformat())
+    model = CombinedModel()
+    planner = create_planner(engine=engine, knowledge=knowledge, llm=PlanningModel())
+    app = create_app(
+        engine=engine,
+        checkpoint_path=str(tmp_path / "closure.db"),
+        orchestration_dependencies={
+            "planner": planner,
+            "verifier": create_verifier(llm=model, knowledge=knowledge),
+        },
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        runtime = app.state.orchestrator
+        with Session(engine) as session:
+            session.get(Task, original.task_id).status = "done"
+            session.add(
+                unknown := Misconception(
+                    id="unmodeled.closure",
+                    knowledge_point_id=POINT,
+                    family="chain",
+                    description="未知错因",
+                    source=ContentSource.UNMODELED,
+                )
+            )
+            session.flush()
+            evidence = append_evidence(
+                session,
+                Evidence(
+                    student_id="A",
+                    knowledge_point_id=POINT,
+                    kind=EvidenceKind.DIAGNOSIS,
+                    matched_misconception_id=unknown.id,
+                    judged_by="model",
+                    teaching_date=TODAY,
+                ),
+            )
+            session.add(
+                transfer := Task(
+                    type=TaskType.ESCALATION,
+                    student_id="A",
+                    knowledge_point_id=POINT,
+                    misconception_ids=[unknown.id],
+                    evidence_ids=[evidence.id],
+                    created_on=TODAY,
+                )
+            )
+            session.flush()
+            escalate(session, transfer, TODAY)
+            transfer_id = transfer.id
+            session.commit()
+
+        response = await client.post(
+            f"/api/escalations/{transfer_id}/resolve", json={"note": "完成线下讲解"}
+        )
+        assert response.status_code == 200
+        await runtime.wait_idle()
+        with Session(engine) as session:
+            assert session.get(Mastery, ("A", POINT)).state == MasteryState.ESCALATED
+            homework = append_evidence(
+                session,
+                Evidence(
+                    student_id="A",
+                    knowledge_point_id=POINT,
+                    kind=EvidenceKind.HOMEWORK,
+                    judged_by="tool",
+                    is_correct=True,
+                    teaching_date=TODAY,
+                ),
+            )
+            event = make_event(
+                HomeworkImported(knowledge_point_ids=[POINT], evidence_ids=[homework.id]), TODAY
+            )
+            session.add(event)
+            session.commit()
+            event_id = event.id
+        await runtime.handle_event(event_id, dispatch=False)
+        with Session(engine) as session:
+            verification = session.exec(
+                select(Task).where(Task.type == TaskType.VERIFICATION)
+            ).one()
+            task_id = verification.id
+        await runtime.start_task(task_id)
+        for _ in range(3):
+            item = (await runtime.get_messages(task_id))[-1].item
+            await runtime.submit_message(
+                task_id, MessageCreate(content=item.answer, answering_item_id=item.id)
+            )
+        await runtime.wait_idle()
+        with Session(engine) as session:
+            assert session.get(Mastery, ("A", POINT)).state == MasteryState.INITIAL
+            assert session.exec(select(Task).where(Task.type == TaskType.RETEST)).one()
 
 
 @pytest.mark.parametrize(

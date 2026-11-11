@@ -96,9 +96,13 @@ def matches_teacher_override(session: Session, old: Task, planned, context: dict
         old.round,
     ) != (planned.type, planned.student_id, planned.knowledge_point_id, planned.round):
         return False
-    if old.reason.startswith(QUESTION_FOLLOWUP) or planned.reason.startswith(QUESTION_FOLLOWUP):
-        return bool(set(old.evidence_ids).intersection(planned.evidence_ids))
-    if old.type not in (TaskType.CLASS_REVIEW, TaskType.PRECHECK) or context is None:
+    if old.type not in (TaskType.CLASS_REVIEW, TaskType.PRECHECK):
+        if old.reason.startswith(QUESTION_FOLLOWUP) != planned.reason.startswith(QUESTION_FOLLOWUP):
+            return False
+        # The override covers the evidence behind this task. A new observation can
+        # justify new work, even when the student, point and round are unchanged.
+        return set(planned.evidence_ids) <= set(old.evidence_ids)
+    if context is None:
         return True
     prior = session.get(PlanningTaskContext, old.id)
     if prior is None:

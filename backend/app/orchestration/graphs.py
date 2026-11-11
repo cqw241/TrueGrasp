@@ -31,6 +31,8 @@ class RunState(TypedDict, total=False):
     task_id: int
     teaching_date: str
     plan: dict[str, Any]
+    plan_refreshes: int
+    plan_stale: bool
     task_ids: list[int]
     phase: str
     messages: list[dict[str, Any]]
@@ -239,7 +241,9 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
         START, lambda state: "plan" if state["kind"] == "event" else "activate"
     )
     graph.add_edge("plan", "save_plan")
-    graph.add_edge("save_plan", END)
+    graph.add_conditional_edges(
+        "save_plan", lambda state: "plan" if state.get("plan_stale") else END
+    )
     graph.add_conditional_edges(
         "activate",
         lambda state: {

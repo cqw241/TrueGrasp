@@ -43,7 +43,13 @@ from app.contracts.events import (
 from app.contracts.knowledge import KnowledgeGraph
 from app.contracts.llm import ChatMessage, LLMClient
 from app.contracts.values import SLIP
-from app.ledger.queries import RANK, confirmed_hypotheses, current_goal
+from app.ledger.queries import (
+    RANK,
+    confirmed_hypotheses,
+    current_goal,
+    has_open_escalation,
+    last_escalation_closure,
+)
 from app.orchestration.storage import (
     BACKTRACK_REASON_PREFIX,
     QUESTION_FOLLOWUP,
@@ -181,12 +187,21 @@ class TeachingPlanner:
             context = session.get(PlanningTaskContext, task.id)
             return context.root_knowledge_point_id if context else task.knowledge_point_id
 
-        def add(task: PlannedTask, *, root=None, context=None, issue=None, backtrack=False):
+        def add(
+            task: PlannedTask,
+            *,
+            root=None,
+            context=None,
+            issue=None,
+            backtrack=False,
+            escalation_basis=None,
+        ):
             root = root or task.knowledge_point_id
             metadata = TaskContext(
                 root_knowledge_point_id=root,
                 context_knowledge_point_id=context,
                 issue_misconception_id=issue,
+                escalation_basis=escalation_basis,
             )
             for old in tasks:
                 if (
@@ -292,7 +307,10 @@ class TeachingPlanner:
                 and root != previous.knowledge_point_id
             )
             state = session.get(Mastery, (evidence.student_id, root))
-            if state and state.state == MasteryState.ESCALATED:
+            if has_open_escalation(session, evidence.student_id, root):
+                return
+            closed_at = last_escalation_closure(session, evidence.student_id, root)
+            if closed_at and (evidence.teaching_date, evidence.id) <= closed_at:
                 return
             # Already running work owns its diagnosis/verification until the whole round ends.
             if any(
@@ -399,7 +417,8 @@ class TeachingPlanner:
                             round=previous.round if limited else round_number,
                             reason="达到教师设定轮次仍未通过" if limited else "未建模错因无法判定",
                             due_date=event.teaching_date,
-                        )
+                        ),
+                        escalation_basis="round_limit" if limited else "unmodeled",
                     )
                     return
                 if (
