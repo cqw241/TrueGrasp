@@ -20,9 +20,10 @@ from app.contracts.enums import (
 from app.contracts.events import EvidenceAdded
 from app.llm.client import LLMOutputError
 from app.orchestration.storage import ItemExposure, NodeReceipt, queue_work, record_exposure
+from app.verify.tools import SympyMathTools
 
 
-def _reject_open_verification(session, student_id, stem, fingerprint=None):
+def _reject_open_verification(session, student_id, stem, question=None):
     answered = (
         select(Evidence.id)
         .where(
@@ -44,12 +45,21 @@ def _reject_open_verification(session, student_id, stem, fingerprint=None):
         )
     )
     compact_stem = "".join(stem.split())
-    if any(
-        (fingerprint is not None and item.fingerprint == fingerprint)
-        or "".join(item.stem.split()) == compact_stem
-        for item in items
-    ):
-        raise HTTPException(409, "这是一道尚未作答的独立验证题，请先完成作答")
+    tools = SympyMathTools()
+    for item in items:
+        if "".join(item.stem.split()) == compact_stem or (
+            question is not None
+            and (
+                item.fingerprint == question.fingerprint
+                or (
+                    item.spec is not None
+                    and tools.same_revealed_answer(
+                        question.answer, question.spec, item.answer, item.spec
+                    )
+                )
+            )
+        ):
+            raise HTTPException(409, "这会给出一道尚未作答的独立验证题的结果，请先完成作答")
 
 
 async def create_question(runtime, student_id: str, body: QuestionCreate) -> Task:
@@ -92,7 +102,7 @@ async def create_question(runtime, student_id: str, body: QuestionCreate) -> Tas
         session.flush()
         # The flush holds SQLite's writer lock. No verification can claim this
         # fingerprint between the recheck and the new question's exposure.
-        _reject_open_verification(session, student_id, content, item.fingerprint)
+        _reject_open_verification(session, student_id, content, item)
         evidence = Evidence(
             student_id=student_id,
             task_id=task.id,

@@ -106,9 +106,13 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
     engine, knowledge, _ = setup
     guidance = []
     domain_problem = "求 sqrt(x)*sqrt(x) 在 x 趋向 0- 时的极限"
+    unchanged_domain_problem = "求实数范围内 sqrt(x)*sqrt(x) 在 x 趋向 0- 时的极限"
     derivative_at_hole = "求 f(x)=(x^2-1)/(x-1) 在 x=1 处的导数"
+    derivative_in_notation = "若 f(x)=(x^2-1)/(x-1)，求 f′(1)"
     paraphrased_followup = "换成 t：求 sin(2t) 的三次方的导数"
+    rewritten_followup = "求 (3sin(2t)-sin(6t))/4 对 t 的导数"
     followup_spec = {"operation": "derivative", "expr": "sin(2*t)**3", "variables": ["t"]}
+    rewritten_spec = {**followup_spec, "expr": "(3*sin(2*t)-sin(6*t))/4"}
     limit = {"operation": "limit", "variables": ["x"], "limit_point": "0", "limit_direction": "-"}
 
     class ModelForQuestion(CombinedModel):
@@ -118,7 +122,7 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
         async def generate(self, messages, output, tools=None):
             payload = json.loads(messages[-1].content)
             if output is QuestionDraft:
-                if payload["problem"] == derivative_at_hole:
+                if payload["problem"] in (derivative_at_hole, derivative_in_notation):
                     return QuestionDraft(
                         knowledge_point_id=POINT,
                         spec={
@@ -134,9 +138,21 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
                         spec=followup_spec,
                         answer="6*sin(2*t)**2*cos(2*t)",
                     )
+                if payload["problem"] == rewritten_followup:
+                    return QuestionDraft(
+                        knowledge_point_id=POINT,
+                        spec=rewritten_spec,
+                        answer="3*cos(2*t)/2-3*cos(6*t)/2",
+                    )
                 if payload["problem"] == domain_problem:
                     return QuestionDraft(
                         knowledge_point_id=POINT, spec={**limit, "expr": "x"}, answer="0"
+                    )
+                if payload["problem"] == unchanged_domain_problem:
+                    return QuestionDraft(
+                        knowledge_point_id=POINT,
+                        spec={**limit, "expr": "sqrt(x)*sqrt(x)"},
+                        answer="0",
                     )
                 return QuestionDraft(
                     knowledge_point_id=POINT,
@@ -147,7 +163,9 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
                 assert set(payload) == {"problem"}
                 if payload["problem"] == paraphrased_followup:
                     return QuestionInterpretation(spec=followup_spec)
-                if payload["problem"] == domain_problem:
+                if payload["problem"] == rewritten_followup:
+                    return QuestionInterpretation(spec=rewritten_spec)
+                if payload["problem"] in (domain_problem, unchanged_domain_problem):
                     return QuestionInterpretation(spec={**limit, "expr": "sqrt(x)*sqrt(x)"})
                 n = 4 if "4x" in payload["problem"] else 8
                 return QuestionInterpretation(
@@ -226,6 +244,10 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
         assert (await client.post(url, json={"content": "求 sin(4x) 的导数"})).status_code == 422
         assert (await client.post(url, json={"content": domain_problem})).status_code == 422
         assert (await client.post(url, json={"content": derivative_at_hole})).status_code == 422
+        assert (
+            await client.post(url, json={"content": unchanged_domain_problem})
+        ).status_code == 422
+        assert (await client.post(url, json={"content": derivative_in_notation})).status_code == 422
         with Session(engine) as session:
             assert not session.exec(select(Task).where(Task.type == TaskType.QUESTION)).all()
         response = await client.post(url, json={"content": "求 sin(8x) 的导数", "attempt": initial})
@@ -338,7 +360,7 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
         assert shown["id"] == followup.item.id and shown["answer"] == ""
         assert shown["spec"] is None and shown["fingerprint"] is None
         assert not shown["predictions"] and not shown["rubric"]
-        for copied in (followup.item.stem, paraphrased_followup):
+        for copied in (followup.item.stem, paraphrased_followup, rewritten_followup):
             assert (await client.post(url, json={"content": copied})).status_code == 409
         with Session(engine) as session:
             assert (

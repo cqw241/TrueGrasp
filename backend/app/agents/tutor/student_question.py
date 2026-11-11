@@ -16,7 +16,8 @@ MATH_ERRORS = (ValueError, SyntaxError, TypeError, ArithmeticError, NotImplement
 # ItemSpec can represent a derivative as a function, but has no point of evaluation.
 DERIVATIVE_POINT = re.compile(
     r"(?:在|当|\bat\b)\s*(?:点\s*)?(?:\$+|\\\()?\s*[A-Za-z][A-Za-z0-9_{}]*\s*[=＝]"
-    r"|(?:\\bigg?)?\|\s*_\{\s*[A-Za-z][A-Za-z0-9_{}]*\s*[=＝]",
+    r"|(?:\\bigg?)?\|\s*_\{\s*[A-Za-z][A-Za-z0-9_{}]*\s*[=＝]"
+    r"|[A-Za-z][A-Za-z0-9_{}]*\s*(?:['′″]+|\^\{?\\prime\}?)\s*(?:\\left)?\(\s*[-+]?\s*\d",
     re.IGNORECASE,
 )
 SAFE_HINTS = {
