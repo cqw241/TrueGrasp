@@ -560,6 +560,7 @@ class Orchestrator:
             prompt=prompt,
             stem=stem,
             turn=len(messages),
+            accepts_text=snapshot.values.get("phase") == "question",
         )
 
     async def _run_task(self, key: str, inp: RunState | Command | None) -> None:

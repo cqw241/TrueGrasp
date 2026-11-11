@@ -229,6 +229,7 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
         if initial == "会外层，卡在内层求导":
             target = await runtime.get_answer_target(task_id)
             assert target.item_id and not target.item_id.startswith("student-question.")
+            assert not target.accepts_text
             with Session(engine) as session:
                 receipt = session.get(NodeReceipt, f"question:{task_id}:stuck_attempt")
                 recorded = session.get(Evidence, receipt.result["evidence_id"])
@@ -245,7 +246,7 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
 
             app.state.photo_llm = Vision()
             target = await runtime.get_answer_target(task_id)
-            assert target.stem == "求 sin(8x) 的导数"
+            assert target.stem == "求 sin(8x) 的导数" and target.accepts_text
             png = BytesIO()
             Image.new("RGB", (4, 4), "white").save(png, format="PNG")
             photo = await client.post(
