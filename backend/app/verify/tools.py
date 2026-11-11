@@ -1,5 +1,6 @@
 """Deterministic math checks. An inconclusive check is never a negative verdict."""
 
+import ast
 import contextlib
 import hashlib
 import json
@@ -13,7 +14,7 @@ from sympy.calculus.util import continuous_domain
 from app.contracts.enums import EquivalenceMode, Operation
 from app.contracts.values import SLIP, ItemSpec, LaTeX, Prediction
 from app.contracts.verify import AnswerGroup, Distinctness, Equivalence, ItemCheck
-from app.verify.parsing import parse_answer, parse_expr, symbol
+from app.verify.parsing import expression_syntax, parse_answer, parse_expr, symbol
 
 
 def _real_value(expr: sp.Expr) -> float | None:
@@ -186,16 +187,17 @@ class SympyMathTools:
     def fingerprint(self, spec: ItemSpec, *, preserve_symbols: bool = False) -> str:
         canonical = spec.model_dump(mode="json")
         if preserve_symbols:
-            # Compare two transcriptions of the same question without renaming its symbols.
+            # Keep the original operations: simplifying sqrt(x)*sqrt(x) to x
+            # or cancelling x/x would lose conditions on the original domain.
             canonical["variables"] = (
                 sorted(spec.variables) if spec.operation == Operation.EXPRESSION else spec.variables
             )
-            canonical["expr"] = sp.srepr(sp.simplify(parse_expr(spec.expr)))
+            canonical["expr"] = ast.dump(expression_syntax(spec.expr))
             for bound in canonical["bounds"]:
                 for key in ("lower", "upper"):
-                    bound[key] = sp.srepr(sp.simplify(parse_expr(bound[key])))
+                    bound[key] = ast.dump(expression_syntax(bound[key]))
             if spec.limit_point not in (None, "oo", "-oo"):
-                canonical["limit_point"] = sp.srepr(sp.simplify(parse_expr(spec.limit_point)))
+                canonical["limit_point"] = ast.dump(expression_syntax(spec.limit_point))
             encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
             return hashlib.sha256(encoded.encode()).hexdigest()
         # Preserve variable roles (including repeated derivative variables), not spelling.

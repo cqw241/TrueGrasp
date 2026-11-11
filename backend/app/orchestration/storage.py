@@ -6,6 +6,7 @@
 from typing import Any
 
 from sqlalchemy import JSON, Column, Engine
+from sqlalchemy.dialects.sqlite import insert
 from sqlmodel import Field, Session, SQLModel
 
 from app.contracts.entities import Item
@@ -13,6 +14,10 @@ from app.contracts.enums import ItemPurpose
 
 # Persisted in Task.reason; keep this marker stable for existing backtrack tasks.
 BACKTRACK_REASON_PREFIX = "先修回溯："
+
+
+class VerificationExposureConflict(ValueError):
+    """Another task already showed this verification item or its equivalent."""
 
 
 class NodeReceipt(SQLModel, table=True):
@@ -76,17 +81,17 @@ def queue_work(
 def record_exposure(session: Session, student_id: str, task_id: int, item: Item) -> None:
     if item.fingerprint is None:
         return
-    exposure = session.get(ItemExposure, (student_id, item.fingerprint))
-    if exposure is None:
-        session.add(
-            ItemExposure(
-                student_id=student_id,
-                task_id=task_id,
-                item_id=item.id,
-                fingerprint=item.fingerprint,
-            )
+    result = session.execute(
+        insert(ItemExposure)
+        .values(
+            student_id=student_id,
+            task_id=task_id,
+            item_id=item.id,
+            fingerprint=item.fingerprint,
         )
-    elif item.purpose == ItemPurpose.VERIFICATION and (
-        exposure.task_id != task_id or exposure.item_id != item.id
-    ):
-        raise ValueError("验证题的指纹与该学生已展示的题目重复")
+        .on_conflict_do_nothing(index_elements=["student_id", "fingerprint"])
+    )
+    if result.rowcount == 0 and item.purpose == ItemPurpose.VERIFICATION:
+        exposure = session.get(ItemExposure, (student_id, item.fingerprint))
+        if exposure.task_id != task_id or exposure.item_id != item.id:
+            raise VerificationExposureConflict("验证题的指纹与该学生已展示的题目重复")
