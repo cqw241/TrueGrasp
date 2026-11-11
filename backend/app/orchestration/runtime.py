@@ -498,11 +498,11 @@ class Orchestrator:
             task = self._check_task(
                 task_id, recovering=self._recovering_terminal(task_id, snapshot)
             )
-            if snapshot.interrupts and not self._pending_question_reply(key):
-                return
             today = self._task_date(task, snapshot)
             if task.due_date is not None and task.due_date > today:
                 raise OrchestrationError(409, "任务尚未到期")
+            if snapshot.interrupts and not self._pending_question_reply(key):
+                return
             self._spawn(key, lambda: self.start_task(task_id))
 
     async def enqueue_message(
