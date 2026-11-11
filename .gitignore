@@ -17,3 +17,7 @@ backend/data/
 
 # 独立任务工作区
 .worktrees/
+
+# 计划与浏览器调试产物
+.planning/
+.playwright-cli/
