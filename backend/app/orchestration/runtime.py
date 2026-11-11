@@ -823,6 +823,9 @@ class Orchestrator:
     async def activate(self, state: RunState) -> dict:
         with Session(self.engine) as session:
             task = self._task(session, state["task_id"])
+            if task.status == TaskStatus.CANCELLED:
+                # A goal update can cancel queued work after start was accepted.
+                return {"phase": "cancelled_before_start"}
             task.status = TaskStatus.ACTIVE
             start_tutoring(session, task, date.fromisoformat(state["teaching_date"]))
             self._queue_task(session, state)

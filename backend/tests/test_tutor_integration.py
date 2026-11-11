@@ -31,7 +31,7 @@ from app.config import Settings
 from app.contracts.agents import PlannerOutput
 from app.contracts.api import MessageCreate, QuestionCreate
 from app.contracts.entities import Event, Evidence, Mastery, Misconception, Task, TeachingGoal
-from app.contracts.enums import ContentSource, EvidenceKind, MasteryState, TaskType
+from app.contracts.enums import ContentSource, EvidenceKind, MasteryState, TaskStatus, TaskType
 from app.contracts.events import AnswerSubmitted, HomeworkImported, TaskDue, make_event
 from app.db import make_engine
 from app.ledger.service import append_evidence, escalate
@@ -40,6 +40,7 @@ from app.main import create_app
 from app.orchestration import EventBus, Orchestrator
 from app.orchestration.questions import create_question
 from app.orchestration.storage import NodeReceipt, PendingWork, queue_work
+from app.teacher_collaboration import set_takeover
 from app.verify.tools import SympyMathTools
 from tests.test_planner import PlanningModel
 from tests.test_tutor import FORMULA, MISS, POINT, TODAY, Model, Publisher, input_for
@@ -345,7 +346,7 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
             )
 
 
-@pytest.mark.parametrize("fault_at", ["before_checkpoint", "after_checkpoint"])
+@pytest.mark.parametrize("fault_at", ["before_checkpoint", "after_checkpoint", "teacher_handback"])
 async def test_accepted_question_reply_recovers_once_without_manual_restart(
     setup, tmp_path, fault_at
 ):
@@ -387,7 +388,7 @@ async def test_accepted_question_reply_recovers_once_without_manual_restart(
         original = runtime._run_task
 
         async def fail_before_checkpoint(key, inp):
-            if inp is not None and fault_at == "before_checkpoint":
+            if inp is not None and fault_at in ("before_checkpoint", "teacher_handback"):
                 raise RuntimeError("crash before resume")
             await original(key, inp)
 
@@ -402,9 +403,13 @@ async def test_accepted_question_reply_recovers_once_without_manual_restart(
             await runtime.wait_idle()
         with Session(engine) as session:
             assert session.get(PendingWork, f"task:{task.id}").pending
+        if fault_at == "teacher_handback":
+            await set_takeover(runtime, task.id, taken_over=True)
 
     questions.fail_review = False
     async with Orchestrator.open(engine, checkpoint, EventBus(), **dependencies) as runtime:
+        if fault_at == "teacher_handback":
+            await set_takeover(runtime, task.id, taken_over=False)
         await runtime.wait_idle()
         assert (await runtime.get_answer_target(task.id)).phase == "waiting"
         messages = await runtime.get_messages(task.id)
@@ -641,8 +646,8 @@ async def test_teacher_postpones_an_active_probe_without_losing_it(setup, tmp_pa
         ] == reply["content"]
 
 
-@pytest.mark.parametrize("dispatch", [False, True])
-async def test_lowered_round_limit_invalidates_an_inflight_retry(setup, tmp_path, dispatch):
+@pytest.mark.parametrize("stage", ["planned", "dispatched", "queued"])
+async def test_lowered_round_limit_invalidates_a_retry(setup, tmp_path, stage):
     engine, knowledge, task = setup
     proposed, release = asyncio.Event(), asyncio.Event()
 
@@ -707,18 +712,36 @@ async def test_lowered_round_limit_invalidates_an_inflight_retry(setup, tmp_path
             session.add(event)
             session.commit()
             event_id = event.id
-        pending_plan = asyncio.create_task(runtime.handle_event(event_id, dispatch=dispatch))
-        try:
-            await asyncio.wait_for(proposed.wait(), timeout=5)
-            await set_limit(1)
-        finally:
+        if stage == "queued":
             release.set()
-            await pending_plan
+            await runtime.handle_event(event_id, dispatch=False)
+            with Session(engine) as session:
+                retry = session.exec(select(Task).where(Task.round == 2)).one()
+                assert retry.status == TaskStatus.PENDING
+                retry_id = retry.id
+            await set_limit(1)
+            assert (await client.post(f"/api/tasks/{retry_id}/start")).status_code == 409
+        else:
+            pending_plan = asyncio.create_task(
+                runtime.handle_event(event_id, dispatch=stage == "dispatched")
+            )
+            try:
+                await asyncio.wait_for(proposed.wait(), timeout=5)
+                await set_limit(1)
+            finally:
+                release.set()
+                await pending_plan
         await runtime.wait_idle()
         assert len((await client.get("/api/escalations")).json()) == 1
         with Session(engine) as session:
             assert session.get(Event, event_id).processed
-            assert not session.exec(select(Task).where(Task.round > 1)).all()
+            retries = session.exec(select(Task).where(Task.round > 1)).all()
+            if stage == "queued":
+                assert [(retry.id, retry.status) for retry in retries] == [
+                    (retry_id, TaskStatus.CANCELLED)
+                ]
+            else:
+                assert not retries
 
 
 async def test_teacher_adoption_refreshes_inflight_escalation(setup, tmp_path):

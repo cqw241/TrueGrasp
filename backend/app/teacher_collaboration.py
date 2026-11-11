@@ -24,6 +24,7 @@ from app.orchestration.runtime import INTERACTIVE_TYPES, Orchestrator
 from app.orchestration.storage import (
     ClassTaskOverride,
     PendingWork,
+    PlanningTaskContext,
     TeacherTaskControl,
     queue_work,
     teacher_has_student,
@@ -43,11 +44,12 @@ def _queue_instruction(session, payload, today, student_id=None) -> None:
     queue_work(session, f"event:{event.id}", {"dispatch": True})
 
 
-def set_goal(runtime: Orchestrator, body: GoalCreate) -> TeachingGoal:
+async def set_goal(runtime: Orchestrator, body: GoalCreate) -> TeachingGoal:
     point_ids = list(dict.fromkeys(body.knowledge_point_ids))
     if not point_ids or body.target_state not in RANK:
         raise HTTPException(422, "请选择知识点及初步掌握、巩固或融会贯通目标")
     today = _date(runtime)
+    cancelled = []
     with Session(runtime.engine, expire_on_commit=False) as session:
         existing = set(
             session.exec(select(KnowledgePoint.id).where(KnowledgePoint.id.in_(point_ids)))
@@ -61,8 +63,32 @@ def set_goal(runtime: Orchestrator, body: GoalCreate) -> TeachingGoal:
         )
         session.add(goal)
         session.flush()
+        # A newly saved round limit applies before any student can open queued retries.
+        for task, context in session.exec(
+            select(Task, PlanningTaskContext)
+            .outerjoin(PlanningTaskContext, PlanningTaskContext.task_id == Task.id)
+            .where(
+                Task.status == TaskStatus.PENDING,
+                Task.type.in_((TaskType.TUTORING, TaskType.VERIFICATION)),
+                Task.round > goal.max_rounds,
+            )
+        ):
+            root = context.root_knowledge_point_id if context else task.knowledge_point_id
+            if root not in point_ids or (
+                task.type == TaskType.VERIFICATION and root == task.knowledge_point_id
+            ):
+                continue
+            task.status = TaskStatus.CANCELLED
+            task.reason += f"\n教师目标已更新：轮次上限为 {goal.max_rounds}。"
+            if work := session.get(PendingWork, f"task:{task.id}"):
+                work.pending = False
+            if control := session.get(TeacherTaskControl, task.id):
+                control.taken_over = False
+            cancelled.append(task)
         _queue_instruction(session, TeacherInstruction(action="set_goal", ref_id=goal.id), today)
         session.commit()
+    for task in cancelled:
+        await runtime._publish_task(task)
     runtime.recover_pending()
     return goal
 
@@ -245,7 +271,9 @@ async def set_takeover(
                 session, task, today, f"{action}：{note.strip()}" if note.strip() else action
             )
             if not taken_over and task.status == TaskStatus.ACTIVE:
-                queue_work(session, key, {"teaching_date": today.isoformat()}, reactivate=True)
+                work = session.get(PendingWork, key)
+                if work is None or not work.pending:
+                    queue_work(session, key, {"teaching_date": today.isoformat()}, reactivate=True)
             session.commit()
         await _publish_evidence(runtime, evidence)
         for affected in student_tasks:

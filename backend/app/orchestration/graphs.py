@@ -254,6 +254,7 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
             "tutoring": "tutor",
             "question": "question",
             "verifying": "prepare_verification",
+            "cancelled_before_start": END,
         }[state["phase"]],
     )
     graph.add_conditional_edges(

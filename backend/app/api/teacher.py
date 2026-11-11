@@ -66,7 +66,7 @@ def list_goals(request: Request) -> list[TeachingGoal]:
 
 @router.post("/goals")
 async def create_goal(body: GoalCreate, request: Request) -> TeachingGoal:
-    return collaboration.set_goal(request.app.state.orchestrator, body)
+    return await collaboration.set_goal(request.app.state.orchestrator, body)
 
 
 @router.post("/homework")
