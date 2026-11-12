@@ -55,7 +55,7 @@ journalctl -u truegrasp -n 60 --no-pager
 
 公网校验必须正常验证证书，不使用 `curl -k` 或关闭 TLS 校验。验证登录、Secure/HttpOnly/SameSite Cookie、学生权限、深链接刷新、静态资源、SSE 和真实模型业务；仅健康接口 200 不能证明完整教学链路通过。
 
-续期每六小时检查一次，剩余不足 72 小时时通过 TLS-ALPN-01 短暂停止当前网关，安装新证书后恢复。trap 和 `ExecStopPost` 均负责恢复，只操作 `truegrasp-gateway`。当前证书尚有余量时，运行续期服务只检查和跳过签发；这不等于重新签发验收。
+续期每六小时检查一次，剩余不足 72 小时时通过 TLS-ALPN-01 短暂停止当前网关，安装新证书后恢复。Nginx worker 最多等待 5 秒退出，systemd 最多等待 15 秒，避免 SSE 长连接一直拖住停服。trap 和 `ExecStopPost` 均负责恢复，只操作 `truegrasp-gateway`。当前证书尚有余量时，运行续期服务只检查和跳过签发；这不等于重新签发验收。
 
 升级前停止应用，再一起备份业务库及其 WAL、checkpoint 和认证库。切换 current 到新发布，启动并验证；失败时切回旧发布。账号库与业务库分离，教学快照恢复不能覆盖账号库。
 
