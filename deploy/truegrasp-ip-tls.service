@@ -1,0 +1,12 @@
+[Unit]
+Description=Renew TrueGrasp public IP TLS certificate
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/opt/truegrasp/tools/renew-ip-tls.sh
+ExecStopPost=/opt/truegrasp/tools/renew-ip-tls.sh --restore-gateway
+TimeoutStartSec=180
+TimeoutStopSec=90
