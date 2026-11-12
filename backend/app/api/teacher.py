@@ -7,8 +7,8 @@ from openai import OpenAIError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from app import teacher_collaboration as collaboration
 from app.agents.planner.queries import common_issues
-from app.api.stub import not_implemented
 from app.clock.service import ClockError
 from app.config import get_settings
 from app.contracts.api import (
@@ -28,11 +28,12 @@ from app.contracts.api import (
     TaskOverride,
 )
 from app.contracts.entities import Misconception, Task, TeachingGoal
-from app.contracts.enums import TaskStatus, TaskType
+from app.contracts.enums import ContentSource, TaskStatus, TaskType
 from app.ingest import HomeworkImporter, IngestError, parse_csv
 from app.ingest.service import MAX_CSV_BYTES
 from app.ledger import queries
 from app.llm.client import LLMOutputError, OpenAICompatClient
+from app.orchestration.storage import TeacherTaskControl
 
 router = APIRouter(tags=["teacher"])
 
@@ -58,13 +59,14 @@ async def enter_lecture(body: EnterLecture, request: Request) -> ClockState:
 
 
 @router.get("/goals")
-def list_goals() -> list[TeachingGoal]:
-    not_implemented("T16")
+def list_goals(request: Request) -> list[TeachingGoal]:
+    with Session(request.app.state.orchestrator.engine) as session:
+        return list(session.exec(select(TeachingGoal).order_by(TeachingGoal.id.desc())))
 
 
 @router.post("/goals")
-def create_goal(body: GoalCreate) -> TeachingGoal:
-    not_implemented("T16")
+async def create_goal(body: GoalCreate, request: Request) -> TeachingGoal:
+    return await collaboration.set_goal(request.app.state.orchestrator, body)
 
 
 @router.post("/homework")
@@ -137,47 +139,76 @@ def list_tasks(
 
 
 @router.get("/tasks/controls")
-def list_task_controls() -> list[TaskControl]:
+def list_task_controls(request: Request) -> list[TaskControl]:
     """教师接管或覆盖过的任务。"""
-    not_implemented("T24")
+    with Session(request.app.state.orchestrator.engine) as session:
+        return [
+            TaskControl.model_validate(row, from_attributes=True)
+            for row in session.exec(
+                select(TeacherTaskControl)
+                .where(TeacherTaskControl.taken_over | TeacherTaskControl.overridden)
+                .order_by(TeacherTaskControl.task_id)
+            )
+        ]
 
 
 @router.patch("/tasks/{task_id}")
-def override_task(task_id: int, body: TaskOverride) -> Task:
+async def override_task(task_id: int, body: TaskOverride, request: Request) -> Task:
     """教师修改或覆盖计划，优先于 Agent 计划。"""
-    not_implemented("T16")
+    task = await collaboration.override_task(request.app.state.orchestrator, task_id, body)
+    if body.due_date is not None and not body.cancel:
+        await request.app.state.clock.scan()
+    return task
 
 
 @router.post("/tasks/{task_id}/takeover")
-def take_over_task(task_id: int, body: TakeoverRequest) -> TaskControl:
+async def take_over_task(task_id: int, body: TakeoverRequest, request: Request) -> TaskControl:
     """教师接管辅导，暂停对应的辅导会话。"""
-    not_implemented("T24")
+    return await collaboration.set_takeover(
+        request.app.state.orchestrator, task_id, taken_over=True, note=body.note
+    )
 
 
 @router.post("/tasks/{task_id}/handback")
-def hand_back_task(task_id: int) -> TaskControl:
+async def hand_back_task(task_id: int, request: Request) -> TaskControl:
     """交还 Agent，会话从暂停处恢复。"""
-    not_implemented("T24")
+    return await collaboration.set_takeover(
+        request.app.state.orchestrator, task_id, taken_over=False
+    )
 
 
 @router.get("/misconceptions/pending")
-def list_pending_misconceptions() -> list[Misconception]:
+def list_pending_misconceptions(request: Request) -> list[Misconception]:
     """辅导中标记的未建模错因，待教师审核。"""
-    not_implemented("T16")
+    with Session(request.app.state.orchestrator.engine) as session:
+        return list(
+            session.exec(
+                select(Misconception)
+                .where(Misconception.source == ContentSource.UNMODELED)
+                .order_by(Misconception.id)
+            )
+        )
 
 
 @router.post("/misconceptions/{misconception_id}/adopt")
-def adopt_misconception(misconception_id: str, body: AdoptMisconception) -> Misconception:
+async def adopt_misconception(
+    misconception_id: str, body: AdoptMisconception, request: Request
+) -> Misconception:
     """采纳待审核错因，进入错因库，后续诊断可以检索到。"""
-    not_implemented("T16")
+    return await collaboration.adopt_misconception(
+        request.app.state.orchestrator, request.app.state.knowledge, misconception_id, body
+    )
 
 
 @router.get("/escalations")
-def list_escalations() -> list[Escalation]:
-    not_implemented("T16")
+def list_escalations(request: Request) -> list[Escalation]:
+    with Session(request.app.state.orchestrator.engine) as session:
+        return collaboration.list_escalations(session)
 
 
 @router.post("/escalations/{task_id}/resolve")
-def resolve_escalation(task_id: int, body: ResolveEscalation) -> Task:
+async def resolve_escalation(task_id: int, body: ResolveEscalation, request: Request) -> Task:
     """教师处理转交，记为一条单独的证据，不覆盖历史。"""
-    not_implemented("T16")
+    return await collaboration.resolve_escalation(
+        request.app.state.orchestrator, task_id, body.note
+    )

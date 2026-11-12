@@ -43,9 +43,21 @@ from app.contracts.events import (
 from app.contracts.knowledge import KnowledgeGraph
 from app.contracts.llm import ChatMessage, LLMClient
 from app.contracts.values import SLIP
-from app.ledger.queries import RANK, confirmed_hypotheses, current_goal
-from app.orchestration.questions import QUESTION_FOLLOWUP
-from app.orchestration.storage import BACKTRACK_REASON_PREFIX, PlanningTaskContext
+from app.ledger.queries import (
+    RANK,
+    confirmed_hypotheses,
+    current_goal,
+    goal_revision,
+    has_open_escalation,
+    last_escalation_closure,
+)
+from app.orchestration.storage import (
+    BACKTRACK_REASON_PREFIX,
+    QUESTION_FOLLOWUP,
+    PlanningTaskContext,
+    TeacherTaskControl,
+    matches_teacher_override,
+)
 
 PROMPT = """你是高校高等数学教学规划 Agent。依据教师目标和可追溯证据安排教学。
 候选已经由程序按目标差距、先修阻塞、截止日期、复发风险排序。保留该优先级，
@@ -87,9 +99,12 @@ class TeachingPlanner:
                 raise InvalidPlanError("规划事件不存在或教学日期不一致")
             if event.processed:
                 return PlanningResult()
+            revision = goal_revision(session)
             candidates, cancelled, facts = self._discover(session, event)
         if not candidates:
-            return PlanningResult(cancel_task_ids=sorted(cancelled), summary="无新增教学任务")
+            return PlanningResult(
+                cancel_task_ids=sorted(cancelled), summary="无新增教学任务", goal_revision=revision
+            )
         candidates.sort(
             key=lambda c: (
                 -c.goal_gap,
@@ -130,7 +145,9 @@ class TeachingPlanner:
                 f"{group['students']} 人同因线索，其中 {group['confirmed']} 人已确认"
             )
         result = PlanningResult(
-            cancel_task_ids=sorted(cancelled), summary="；".join([*counts, decisions.summary])
+            cancel_task_ids=sorted(cancelled),
+            summary="；".join([*counts, decisions.summary]),
+            goal_revision=revision,
         )
         for candidate in candidates:
             decision = by_id[candidate.id]
@@ -171,19 +188,35 @@ class TeachingPlanner:
         candidates: list[Candidate] = []
         cancelled: set[int] = set()
         facts: dict = {}
+        controls = {row.task_id: row for row in session.exec(select(TeacherTaskControl))}
 
         def root_point(task):
             context = session.get(PlanningTaskContext, task.id)
             return context.root_knowledge_point_id if context else task.knowledge_point_id
 
-        def add(task: PlannedTask, *, root=None, context=None, issue=None, backtrack=False):
+        def add(
+            task: PlannedTask,
+            *,
+            root=None,
+            context=None,
+            issue=None,
+            backtrack=False,
+            escalation_basis=None,
+        ):
             root = root or task.knowledge_point_id
             metadata = TaskContext(
                 root_knowledge_point_id=root,
                 context_knowledge_point_id=context,
                 issue_misconception_id=issue,
+                escalation_basis=escalation_basis,
             )
             for old in tasks:
+                if (
+                    (control := controls.get(old.id))
+                    and control.overridden
+                    and (matches_teacher_override(session, old, task, metadata.model_dump()))
+                ):
+                    return
                 if old.id in cancelled:
                     continue
                 old_context = session.get(PlanningTaskContext, old.id)
@@ -209,7 +242,9 @@ class TeachingPlanner:
                         and old.misconception_ids == task.misconception_ids
                     ):
                         return
-                    if old.status == TaskStatus.PENDING:
+                    if old.status == TaskStatus.PENDING and not (
+                        control and (control.overridden or control.taken_over)
+                    ):
                         cancelled.add(old.id)
                 elif old.status in OPEN or (
                     old.status == TaskStatus.DONE
@@ -279,7 +314,10 @@ class TeachingPlanner:
                 and root != previous.knowledge_point_id
             )
             state = session.get(Mastery, (evidence.student_id, root))
-            if state and state.state == MasteryState.ESCALATED:
+            if has_open_escalation(session, evidence.student_id, root):
+                return
+            closed_at = last_escalation_closure(session, evidence.student_id, root)
+            if closed_at and (evidence.teaching_date, evidence.id) <= closed_at:
                 return
             # Already running work owns its diagnosis/verification until the whole round ends.
             if any(
@@ -386,7 +424,8 @@ class TeachingPlanner:
                             round=previous.round if limited else round_number,
                             reason="达到教师设定轮次仍未通过" if limited else "未建模错因无法判定",
                             due_date=event.teaching_date,
-                        )
+                        ),
+                        escalation_basis="round_limit" if limited else "unmodeled",
                     )
                     return
                 if (
@@ -493,7 +532,8 @@ class TeachingPlanner:
                 row = session.exec(
                     select(Evidence)
                     .where(
-                        (Evidence.task_id == previous.id) | Evidence.id.in_(previous.evidence_ids)
+                        (Evidence.task_id == previous.id) | Evidence.id.in_(previous.evidence_ids),
+                        Evidence.kind != EvidenceKind.TEACHER,
                     )
                     .order_by(Evidence.teaching_date.desc(), Evidence.id.desc())
                 ).first()
@@ -508,7 +548,10 @@ class TeachingPlanner:
                 kp_ids.update(goal.knowledge_point_ids)
                 rows = session.exec(
                     select(Evidence)
-                    .where(Evidence.knowledge_point_id.in_(kp_ids))
+                    .where(
+                        Evidence.knowledge_point_id.in_(kp_ids),
+                        Evidence.kind != EvidenceKind.TEACHER,
+                    )
                     .order_by(Evidence.teaching_date, Evidence.id)
                 ).all()
                 for row in {(e.student_id, e.knowledge_point_id): e for e in rows}.values():
@@ -566,7 +609,11 @@ class TeachingPlanner:
                 issue=cause,
             )
         for task in tasks:
-            if task.type == TaskType.CLASS_REVIEW and task.status == TaskStatus.PENDING:
+            if (
+                task.type == TaskType.CLASS_REVIEW
+                and task.status == TaskStatus.PENDING
+                and not ((control := controls.get(task.id)) and control.overridden)
+            ):
                 context = session.get(PlanningTaskContext, task.id)
                 if (
                     context

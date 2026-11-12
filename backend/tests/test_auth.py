@@ -17,7 +17,7 @@ from sqlmodel import Session
 from app.api.stream import events, visible
 from app.auth import COOKIE, Principal
 from app.config import get_settings
-from app.contracts.entities import Evidence, KnowledgePoint, Student, Task
+from app.contracts.entities import Evidence, KnowledgePoint, Mastery, Student, Task
 from app.contracts.enums import EvidenceKind, JudgedBy, TaskType
 from app.contracts.events import EvidenceAdded, MessageDone, TokenDelta
 from app.db import init_db, make_engine
@@ -163,6 +163,66 @@ def test_demo_api_uses_teacher_session(app_client, monkeypatch):
     with pytest.raises(demo.DemoError, match="教师账号"):
         api.login("alice", "alice-pass")
     assert client.get("/api/auth/me").status_code == 401
+
+
+def test_teacher_goals_and_escalation_keep_the_original_evidence(app_client, monkeypatch):
+    client, _, engine = app_client
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2]))
+    demo = importlib.import_module("demo.scripts.online")
+    with Session(engine) as session:
+        old = session.get(Evidence, 1).model_dump(mode="json")
+        session.add(
+            Mastery(
+                student_id="A",
+                knowledge_point_id="kp",
+                state="escalated",
+                updated_on=date(2026, 9, 7),
+                evidence_ids=[1],
+            )
+        )
+        task = Task(
+            type=TaskType.ESCALATION,
+            student_id="A",
+            knowledge_point_id="kp",
+            evidence_ids=[1],
+            reason="请单独检查换元过程",
+            created_on=date(2026, 9, 7),
+        )
+        session.add(task)
+        session.commit()
+        task_id = task.id
+    assert login(client, "alice", "alice-pass").status_code == 200
+    goal = {"knowledge_point_ids": ["kp"], "deadline": "2026-09-10"}
+    assert client.post("/api/goals", json=goal).status_code == 403
+    assert client.get("/api/escalations").status_code == 403
+    assert client.post("/api/tasks/1/takeover", json={}).status_code == 403
+
+    demo.DemoAPI(client, 20).login("teacher", "teacher-pass")
+    assert (
+        client.post("/api/goals", json={**goal, "knowledge_point_ids": ["missing"]}).status_code
+        == 422
+    )
+    created = client.post("/api/goals", json=goal)
+    assert created.status_code == 200
+    assert client.get("/api/goals").json() == [created.json()]
+    assert client.get("/api/class/overview").json()["escalated"] == 1
+    escalation = client.get("/api/escalations").json()[0]
+    assert escalation["student_name"] == "A"
+    assert escalation["suggestion"] == "请单独检查换元过程"
+    assert escalation["evidence"] == [old]
+
+    url = f"/api/escalations/{task_id}/resolve"
+    assert client.post(url, json={"note": " "}).status_code == 422
+    assert client.post(url, json={"note": "已面谈，安排课后答疑"}).json()["status"] == "done"
+    assert client.post(url, json={"note": "重复处理"}).status_code == 409
+    resolved = client.get("/api/escalations").json()[0]
+    assert resolved["evidence"][0] == old
+    assert len(resolved["evidence"]) == 2
+    assert resolved["evidence"][1]["kind"] == "teacher"
+    assert "已面谈" in resolved["evidence"][1]["reason"]
+    assert client.get("/api/class/overview").json()["escalated"] == 0
+    with Session(engine) as session:
+        assert session.get(Mastery, ("A", "kp")).state == "escalated"
 
 
 def test_demo_cli_password_stdin_and_logout(monkeypatch, capsys):

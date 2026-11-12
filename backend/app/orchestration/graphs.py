@@ -14,8 +14,8 @@ from app.contracts.entities import Item, Task
 from app.contracts.enums import Dimension, ItemPurpose, ItemSource, TaskType
 from app.orchestration.context import current_teaching_date
 from app.orchestration.inputs import used_fingerprints
-from app.orchestration.questions import QUESTION_FOLLOWUP, question_turn
-from app.orchestration.storage import ItemExposure, VerificationExposureConflict
+from app.orchestration.questions import question_turn
+from app.orchestration.storage import QUESTION_FOLLOWUP, ItemExposure, VerificationExposureConflict
 from app.verify.tools import SympyMathTools
 
 if TYPE_CHECKING:
@@ -31,6 +31,8 @@ class RunState(TypedDict, total=False):
     task_id: int
     teaching_date: str
     plan: dict[str, Any]
+    plan_refreshes: int
+    plan_stale: bool
     task_ids: list[int]
     phase: str
     messages: list[dict[str, Any]]
@@ -243,13 +245,16 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
         START, lambda state: "plan" if state["kind"] == "event" else "activate"
     )
     graph.add_edge("plan", "save_plan")
-    graph.add_edge("save_plan", END)
+    graph.add_conditional_edges(
+        "save_plan", lambda state: "plan" if state.get("plan_stale") else END
+    )
     graph.add_conditional_edges(
         "activate",
         lambda state: {
             "tutoring": "tutor",
             "question": "question",
             "verifying": "prepare_verification",
+            "cancelled_before_start": END,
         }[state["phase"]],
     )
     graph.add_conditional_edges(

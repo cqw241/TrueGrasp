@@ -22,8 +22,6 @@ from app.llm.client import LLMOutputError
 from app.orchestration.storage import ItemExposure, NodeReceipt, queue_work, record_exposure
 from app.verify.tools import SympyMathTools
 
-QUESTION_FOLLOWUP = "主动提问后的同类题："
-
 
 def _reject_open_verification(session, student_id, stem, question=None):
     answered = (
