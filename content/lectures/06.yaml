@@ -31,9 +31,9 @@ misconceptions:
   triggers:
   - 定积分的元素法
   examples:
-  - question: 由 $y=2x$、x 轴和 x=1 围成的平面区域绕 x 轴旋转，求所得体积。
-    wrong: \pi
-    correct: \frac{4\pi}{3}
+  - question: '由 $y=2x$、x 轴和 x=1 围成的平面区域绕 x 轴旋转，求所得体积。'
+    wrong: '\pi'
+    correct: '\frac{4\pi}{3}'
   strategies:
   - c3.integral
   recurs_in:
@@ -45,9 +45,9 @@ misconceptions:
   triggers:
   - 定积分的几何应用
   examples:
-  - question: 求曲线 $y=2x$ 与 $y=x^2$ 所围区域的面积。
-    wrong: -\frac{4}{3}
-    correct: \frac{4}{3}
+  - question: '求曲线 $y=2x$ 与 $y=x^2$ 所围区域的面积。'
+    wrong: '-\frac{4}{3}'
+    correct: '\frac{4}{3}'
   strategies:
   - c3.integral
   recurs_in:
@@ -59,7 +59,7 @@ misconceptions:
   triggers:
   - 定积分在物理上的应用
   examples:
-  - question: 弹簧遵循 F(x)=4x（N，x 以 m 计），从自然长拉伸到 3 m，求外力做功（J）。
+  - question: '弹簧遵循 F(x)=4x（N，x 以 m 计），从自然长拉伸到 3 m，求外力做功（J）。'
     wrong: '36'
     correct: '18'
   strategies:
@@ -71,8 +71,8 @@ items:
   knowledge_point: calc.ch6.s1
   purpose: verification
   dimension: correctness
-  stem: 由 $y=2x$、x 轴和 x=1 围成的平面区域绕 x 轴旋转，求所得体积。
-  answer: \frac{4\pi}{3}
+  stem: '由 $y=2x$、x 轴和 x=1 围成的平面区域绕 x 轴旋转，求所得体积。'
+  answer: '\frac{4\pi}{3}'
   spec:
     operation: definite_integral
     expr: pi*(2*x)**2
@@ -84,8 +84,8 @@ items:
   knowledge_point: calc.ch6.s2
   purpose: verification
   dimension: correctness
-  stem: 求曲线 $y=2x$ 与 $y=x^2$ 所围区域的面积。
-  answer: \frac{4}{3}
+  stem: '求曲线 $y=2x$ 与 $y=x^2$ 所围区域的面积。'
+  answer: '\frac{4}{3}'
   spec:
     operation: definite_integral
     expr: 2*x-x**2
@@ -97,7 +97,7 @@ items:
   knowledge_point: calc.ch6.s3
   purpose: verification
   dimension: correctness
-  stem: 弹簧遵循 F(x)=4x（N，x 以 m 计），从自然长拉伸到 3 m，求外力做功（J）。
+  stem: '弹簧遵循 F(x)=4x（N，x 以 m 计），从自然长拉伸到 3 m，求外力做功（J）。'
   answer: '18'
   spec:
     operation: definite_integral

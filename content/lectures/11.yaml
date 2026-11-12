@@ -59,9 +59,9 @@ misconceptions:
   triggers:
   - 对弧长的曲线积分
   examples:
-  - question: C 为从 (0,0) 到 (3,4) 的线段，求 $\int_C(x+y)\,ds$。
-    wrong: \frac{7}{2}
-    correct: \frac{35}{2}
+  - question: 'C 为从 (0,0) 到 (3,4) 的线段，求 $\int_C(x+y)\,ds$。'
+    wrong: '\frac{7}{2}'
+    correct: '\frac{35}{2}'
   strategies:
   - c3.orientation
   recurs_in:
@@ -73,7 +73,7 @@ misconceptions:
   triggers:
   - 对坐标的曲线积分
   examples:
-  - question: C 为单位圆上半圆，从 (1,0) 沿上半圆到 (−1,0)，求 $\int_C dx$。
+  - question: 'C 为单位圆上半圆，从 (1,0) 沿上半圆到 (−1,0)，求 $\int_C dx$。'
     wrong: '2'
     correct: '-2'
   strategies:
@@ -88,7 +88,7 @@ misconceptions:
   triggers:
   - 格林公式及其应用
   examples:
-  - question: C 为矩形 0≤x≤2、0≤y≤1 的逆时针边界，求 $\oint_C(-2y\,dx+3x\,dy)$。
+  - question: 'C 为矩形 0≤x≤2、0≤y≤1 的逆时针边界，求 $\oint_C(-2y\,dx+3x\,dy)$。'
     wrong: '-10'
     correct: '10'
   strategies:
@@ -102,9 +102,9 @@ misconceptions:
   triggers:
   - 对面积的曲面积分
   examples:
-  - question: S 为平面 z=2x+y 在 0≤x≤1、0≤y≤2 上方的部分，求 $\iint_S1\,dS$。
+  - question: 'S 为平面 z=2x+y 在 0≤x≤1、0≤y≤2 上方的部分，求 $\iint_S1\,dS$。'
     wrong: '2'
-    correct: 2\sqrt{6}
+    correct: '2\sqrt{6}'
   strategies:
   - c3.orientation
   recurs_in:
@@ -116,7 +116,7 @@ misconceptions:
   triggers:
   - 对坐标的曲面积分
   examples:
-  - question: S 为 z=3 上 0≤x≤2、0≤y≤1 的矩形，取向下法向，向量场 F=(0,0,2)。求通量。
+  - question: 'S 为 z=3 上 0≤x≤2、0≤y≤1 的矩形，取向下法向，向量场 F=(0,0,2)。求通量。'
     wrong: '4'
     correct: '-4'
   strategies:
@@ -131,9 +131,9 @@ misconceptions:
   triggers:
   - 高斯公式
   examples:
-  - question: S 为单位球上半球面（不含底面），法向取球外方向，F=(0,0,1)。求通量，并解释高斯公式的使用。
-    wrong: 散度为 0，所以半球面通量为 0。
-    correct: 补上 z=0 的单位圆盘，组成闭曲面。总体通量因散度为 0 而为 0；底盘外法向向下，通量为 -π，所以原半球面通量为 π。不能把开曲面直接当闭曲面。
+  - question: 'S 为单位球上半球面（不含底面），法向取球外方向，F=(0,0,1)。求通量，并解释高斯公式的使用。'
+    wrong: '散度为 0，所以半球面通量为 0。'
+    correct: '补上 $z=0$ 的单位圆盘，组成闭曲面。总体通量因散度为 $0$ 而为 $0$；底盘外法向向下，通量为 $-\pi$，所以原半球面通量为 $\pi$。不能把开曲面直接当闭曲面。'
   strategies:
   - c3.orientation
   recurs_in:
@@ -145,9 +145,9 @@ misconceptions:
   triggers:
   - 斯托克斯公式
   examples:
-  - question: C 为 z=0、x²+y²=4 的圆周，从正 z 轴看为顺时针。求 $\oint_C(-y\,dx/2+x\,dy/2)$。
-    wrong: 4\pi
-    correct: -4\pi
+  - question: 'C 为 z=0、x²+y²=4 的圆周，从正 z 轴看为顺时针。求 $\oint_C(-y\,dx/2+x\,dy/2)$。'
+    wrong: '4\pi'
+    correct: '-4\pi'
   strategies:
   - c3.orientation
   recurs_in:
@@ -170,8 +170,8 @@ items:
   knowledge_point: calc.ch11.s1
   purpose: verification
   dimension: correctness
-  stem: C 为从 (0,0) 到 (3,4) 的线段，求 $\int_C(x+y)\,ds$。
-  answer: \frac{35}{2}
+  stem: 'C 为从 (0,0) 到 (3,4) 的线段，求 $\int_C(x+y)\,ds$。'
+  answer: '\frac{35}{2}'
   spec:
     operation: definite_integral
     expr: 35*t
@@ -183,7 +183,7 @@ items:
   knowledge_point: calc.ch11.s2
   purpose: verification
   dimension: correctness
-  stem: C 为单位圆上半圆，从 (1,0) 沿上半圆到 (−1,0)，求 $\int_C dx$。
+  stem: 'C 为单位圆上半圆，从 (1,0) 沿上半圆到 (−1,0)，求 $\int_C dx$。'
   answer: '-2'
   spec:
     operation: definite_integral
@@ -196,7 +196,7 @@ items:
   knowledge_point: calc.ch11.s3
   purpose: verification
   dimension: correctness
-  stem: C 为矩形 0≤x≤2、0≤y≤1 的逆时针边界，求 $\oint_C(-2y\,dx+3x\,dy)$。
+  stem: 'C 为矩形 0≤x≤2、0≤y≤1 的逆时针边界，求 $\oint_C(-2y\,dx+3x\,dy)$。'
   answer: '10'
   spec:
     operation: double_integral
@@ -212,8 +212,8 @@ items:
   knowledge_point: calc.ch11.s4
   purpose: verification
   dimension: correctness
-  stem: S 为平面 z=2x+y 在 0≤x≤1、0≤y≤2 上方的部分，求 $\iint_S1\,dS$。
-  answer: 2\sqrt{6}
+  stem: 'S 为平面 z=2x+y 在 0≤x≤1、0≤y≤2 上方的部分，求 $\iint_S1\,dS$。'
+  answer: '2\sqrt{6}'
   spec:
     operation: double_integral
     expr: sqrt(6)
@@ -228,7 +228,7 @@ items:
   knowledge_point: calc.ch11.s5
   purpose: verification
   dimension: correctness
-  stem: S 为 z=3 上 0≤x≤2、0≤y≤1 的矩形，取向下法向，向量场 F=(0,0,2)。求通量。
+  stem: 'S 为 z=3 上 0≤x≤2、0≤y≤1 的矩形，取向下法向，向量场 F=(0,0,2)。求通量。'
   answer: '-4'
   spec:
     operation: double_integral
@@ -244,8 +244,8 @@ items:
   knowledge_point: calc.ch11.s6
   purpose: verification
   dimension: explanation
-  stem: S 为单位球上半球面（不含底面），法向取球外方向，F=(0,0,1)。求通量，并解释高斯公式的使用。
-  answer: 补上 z=0 的单位圆盘，组成闭曲面。总体通量因散度为 0 而为 0；底盘外法向向下，通量为 -π，所以原半球面通量为 π。不能把开曲面直接当闭曲面。
+  stem: 'S 为单位球上半球面（不含底面），法向取球外方向，F=(0,0,1)。求通量，并解释高斯公式的使用。'
+  answer: '补上 $z=0$ 的单位圆盘，组成闭曲面。总体通量因散度为 $0$ 而为 $0$；底盘外法向向下，通量为 $-\pi$，所以原半球面通量为 $\pi$。不能把开曲面直接当闭曲面。'
   rubric:
   - 明确原半球面未闭合。
   - 补底盘并确定其外法向向下。
@@ -254,8 +254,8 @@ items:
   knowledge_point: calc.ch11.s7
   purpose: verification
   dimension: correctness
-  stem: C 为 z=0、x²+y²=4 的圆周，从正 z 轴看为顺时针。求 $\oint_C(-y\,dx/2+x\,dy/2)$。
-  answer: -4\pi
+  stem: 'C 为 z=0、x²+y²=4 的圆周，从正 z 轴看为顺时针。求 $\oint_C(-y\,dx/2+x\,dy/2)$。'
+  answer: '-4\pi'
   spec:
     operation: definite_integral
     expr: '-2'

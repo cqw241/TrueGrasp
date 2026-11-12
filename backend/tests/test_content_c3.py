@@ -1,11 +1,16 @@
 """C3：全书目录的每一节有错因，每个知识点有可检索的验证种子题。"""
 
+import json
 from pathlib import Path
 
-from app.contracts.enums import Dimension, ItemPurpose
+import pytest
+
+from app.agents.verifier.agent import IndependentVerifier, ModelReview
+from app.contracts.enums import Dimension, ItemPurpose, JudgedBy
 from app.knowledge.content import load_dir
 from app.knowledge.graph import NxKnowledgeGraph
 from app.knowledge.skeleton import parse_toc
+from app.verify.tools import SympyMathTools
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -50,3 +55,29 @@ def test_full_book_has_diagnostic_content_and_verification_seeds():
         if point.lecture > 1:
             assert graph.prerequisites(point.id), f"{point.id} 缺少先修关系"
     assert covered_sections == set(expected_sections)
+
+
+@pytest.mark.anyio
+async def test_log_domain_error_requires_rubric_review():
+    content = load_dir(ROOT / "content" / "lectures")
+    seed = content.items["calc.ch4.s1.c3_seed1"]
+    payloads = []
+
+    class DomainReviewer:
+        async def generate(self, messages, output, tools=None):
+            assert output is ModelReview
+            payload = json.loads(messages[-1].content)
+            payloads.append(payload)
+            return ModelReview(
+                is_correct=False,
+                rubric_results=[False] * len(payload["rubric"]),
+                reason="ln(x-2) 在题设 x<2 时没有实数定义，不能只比较形式导数。",
+            )
+
+    verifier = IndependentVerifier(DomainReviewer(), SympyMathTools(), None)
+    result = await verifier.judge(seed, r"\ln(x-2)")
+    assert result.is_correct is False
+    assert result.judged_by == JudgedBy.MODEL
+    [payload] = payloads
+    assert payload["tool_is_correct"] is None
+    assert payload["rubric"] and any("定义域" in item for item in payload["rubric"])

@@ -52,7 +52,7 @@ misconceptions:
   triggers:
   - 向量及其线性运算
   examples:
-  - question: 设 $\mathbf a=(3,0,0),\mathbf b=(0,4,0)$，求 $|\mathbf a+\mathbf b|$。
+  - question: '设 $\mathbf a=(3,0,0),\mathbf b=(0,4,0)$，求 $|\mathbf a+\mathbf b|$。'
     wrong: '7'
     correct: '5'
   strategies:
@@ -67,8 +67,8 @@ misconceptions:
   triggers:
   - 数量积、向量积、混合积
   examples:
-  - question: 设 $\mathbf a=(1,0,0),\mathbf b=(0,2,0),\mathbf c=(0,0,3)$，求 $\mathbf b\cdot(\mathbf a\times\mathbf
-      c)$。
+  - question: '设 $\mathbf a=(1,0,0),\mathbf b=(0,2,0),\mathbf c=(0,0,3)$，求 $\mathbf b\cdot(\mathbf a\times\mathbf
+      c)$。'
     wrong: '6'
     correct: '-6'
   strategies:
@@ -83,7 +83,7 @@ misconceptions:
   triggers:
   - 平面及其方程
   examples:
-  - question: 平面过 (1,2,3)，法向量为 (2,−1,1)。将方程写成 2x−y+z+D=0，求 D。
+  - question: '平面过 (1,2,3)，法向量为 (2,−1,1)。将方程写成 2x−y+z+D=0，求 D。'
     wrong: '3'
     correct: '-3'
   strategies:
@@ -97,9 +97,9 @@ misconceptions:
   triggers:
   - 直线及其方程
   examples:
-  - question: 写出过 (1,0,2)、方向向量为 (2,1,−1) 的空间直线参数方程，并说明只有一个平面方程为何不足。
-    wrong: 2(x−1)+y−(z−2)=0 就是该直线。
-    correct: 参数方程为 x=1+2t，y=t，z=2−t，t∈ℝ。题中一个线性方程只表示一个平面；这里写出的错误平面还以 (2,1,−1) 为法向量，与所需直线方向不相容。
+  - question: '写出过 (1,0,2)、方向向量为 (2,1,−1) 的空间直线参数方程，并说明只有一个平面方程为何不足。'
+    wrong: '2(x−1)+y−(z−2)=0 就是该直线。'
+    correct: '参数方程为 $x=1+2t,y=t,z=2-t$，$t\in\mathbb{R}$。一个平面方程在三维空间中只能给出一个平面，不能单独确定这条直线；参数式须同时满足过点和方向条件。'
   strategies:
   - c3.geometry
   recurs_in:
@@ -112,7 +112,7 @@ misconceptions:
   triggers:
   - 曲面及其方程
   examples:
-  - question: 求球面 $(x-1)^2+(y+2)^2+(z-3)^2=16$ 的半径。
+  - question: '求球面 $(x-1)^2+(y+2)^2+(z-3)^2=16$ 的半径。'
     wrong: '16'
     correct: '4'
   strategies:
@@ -127,9 +127,9 @@ misconceptions:
   triggers:
   - 空间曲线及其方程
   examples:
-  - question: 给出交线 $x^2+y^2=4,z=x$ 的一组参数方程，并核验两个约束。
-    wrong: 只写 x²+y²=4 即可，z 可任意。
-    correct: 可取 x=2cos t，y=2sin t，z=2cos t，0≤t<2π。前两坐标满足柱面方程，第三坐标同时满足 z=x；仅写柱面方程会多出整张柱面。
+  - question: '给出交线 $x^2+y^2=4,z=x$ 的一组参数方程，并核验两个约束。'
+    wrong: '只写 x²+y²=4 即可，z 可任意。'
+    correct: '可取 $x=2\cos t,y=2\sin t,z=2\cos t$，$0\le t<2\pi$。前两坐标满足柱面方程，第三坐标同时满足 $z=x$；仅写柱面方程会多出整张柱面。'
   strategies:
   - c3.geometry
   recurs_in:
@@ -153,7 +153,7 @@ items:
   knowledge_point: calc.ch8.s1
   purpose: verification
   dimension: correctness
-  stem: 设 $\mathbf a=(3,0,0),\mathbf b=(0,4,0)$，求 $|\mathbf a+\mathbf b|$。
+  stem: '设 $\mathbf a=(3,0,0),\mathbf b=(0,4,0)$，求 $|\mathbf a+\mathbf b|$。'
   answer: '5'
   spec:
     operation: expression
@@ -162,8 +162,8 @@ items:
   knowledge_point: calc.ch8.s2
   purpose: verification
   dimension: correctness
-  stem: 设 $\mathbf a=(1,0,0),\mathbf b=(0,2,0),\mathbf c=(0,0,3)$，求 $\mathbf b\cdot(\mathbf a\times\mathbf
-    c)$。
+  stem: '设 $\mathbf a=(1,0,0),\mathbf b=(0,2,0),\mathbf c=(0,0,3)$，求 $\mathbf b\cdot(\mathbf a\times\mathbf
+    c)$。'
   answer: '-6'
   spec:
     operation: expression
@@ -172,7 +172,7 @@ items:
   knowledge_point: calc.ch8.s3
   purpose: verification
   dimension: correctness
-  stem: 平面过 (1,2,3)，法向量为 (2,−1,1)。将方程写成 2x−y+z+D=0，求 D。
+  stem: '平面过 (1,2,3)，法向量为 (2,−1,1)。将方程写成 2x−y+z+D=0，求 D。'
   answer: '-3'
   spec:
     operation: expression
@@ -181,8 +181,8 @@ items:
   knowledge_point: calc.ch8.s4
   purpose: verification
   dimension: explanation
-  stem: 写出过 (1,0,2)、方向向量为 (2,1,−1) 的空间直线参数方程，并说明只有一个平面方程为何不足。
-  answer: 参数方程为 x=1+2t，y=t，z=2−t，t∈ℝ。题中一个线性方程只表示一个平面；这里写出的错误平面还以 (2,1,−1) 为法向量，与所需直线方向不相容。
+  stem: '写出过 (1,0,2)、方向向量为 (2,1,−1) 的空间直线参数方程，并说明只有一个平面方程为何不足。'
+  answer: '参数方程为 $x=1+2t,y=t,z=2-t$，$t\in\mathbb{R}$。一个平面方程在三维空间中只能给出一个平面，不能单独确定这条直线；参数式须同时满足过点和方向条件。'
   rubric:
   - 用同一参数表达三个坐标。
   - 验证 t=0 时经过指定点。
@@ -191,7 +191,7 @@ items:
   knowledge_point: calc.ch8.s5
   purpose: verification
   dimension: correctness
-  stem: 求球面 $(x-1)^2+(y+2)^2+(z-3)^2=16$ 的半径。
+  stem: '求球面 $(x-1)^2+(y+2)^2+(z-3)^2=16$ 的半径。'
   answer: '4'
   spec:
     operation: expression
@@ -200,8 +200,8 @@ items:
   knowledge_point: calc.ch8.s6
   purpose: verification
   dimension: explanation
-  stem: 给出交线 $x^2+y^2=4,z=x$ 的一组参数方程，并核验两个约束。
-  answer: 可取 x=2cos t，y=2sin t，z=2cos t，0≤t<2π。前两坐标满足柱面方程，第三坐标同时满足 z=x；仅写柱面方程会多出整张柱面。
+  stem: '给出交线 $x^2+y^2=4,z=x$ 的一组参数方程，并核验两个约束。'
+  answer: '可取 $x=2\cos t,y=2\sin t,z=2\cos t$，$0\le t<2\pi$。前两坐标满足柱面方程，第三坐标同时满足 $z=x$；仅写柱面方程会多出整张柱面。'
   rubric:
   - 参数式同时给出 x、y、z。
   - 分别代回柱面和平面两个方程。

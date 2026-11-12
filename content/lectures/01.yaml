@@ -131,9 +131,9 @@ misconceptions:
   triggers:
   - 数列的极限
   examples:
-  - question: 数列 $a_n=(-1)^n+1/n$ 是否收敛？请说明理由。
-    wrong: 有界，所以收敛到 0。
-    correct: 不收敛。偶数子列 $a_{2k}=1+1/(2k)\to1$，奇数子列 $a_{2k-1}=-1+1/(2k-1)\to-1$；两个子列极限不同。
+  - question: '数列 $a_n=(-1)^n+1/n$ 是否收敛？请说明理由。'
+    wrong: '有界，所以收敛到 0。'
+    correct: '不收敛。偶数子列 $a_{2k}=1+1/(2k)\to1$，奇数子列 $a_{2k-1}=-1+1/(2k-1)\to-1$；两个子列极限不同。'
   strategies:
   - c3.conditions
   recurs_in:
@@ -145,9 +145,9 @@ misconceptions:
   triggers:
   - 函数的极限
   examples:
-  - question: 判断 $\lim_{x\to2}|x-2|/(x-2)$ 是否存在，并说明理由。
+  - question: '判断 $\lim_{x\to2}|x-2|/(x-2)$ 是否存在，并说明理由。'
     wrong: '1'
-    correct: 双侧极限不存在。左侧恒为 -1，右侧恒为 1；两个单侧极限不相等。
+    correct: '双侧极限不存在。左侧恒为 $-1$，右侧恒为 $1$；两个单侧极限不相等。'
   strategies:
   - c3.limit
   recurs_in:
@@ -160,7 +160,7 @@ misconceptions:
   triggers:
   - 无穷小与无穷大
   examples:
-  - question: 求 $\lim_{x\to0^+}x\cdot(1/x)$。
+  - question: '求 $\lim_{x\to0^+}x\cdot(1/x)$。'
     wrong: '0'
     correct: '1'
   strategies:
@@ -175,8 +175,8 @@ misconceptions:
   triggers:
   - 极限运算法则
   examples:
-  - question: 求 $\lim_{x\to3}(x^2-9)/(x-3)$。
-    wrong: 分母为零，所以极限不存在。
+  - question: '求 $\lim_{x\to3}(x^2-9)/(x-3)$。'
+    wrong: '分母为零，所以极限不存在。'
     correct: '6'
   strategies:
   - c3.limit
@@ -189,9 +189,9 @@ misconceptions:
   triggers:
   - 极限存在准则、两个重要极限
   examples:
-  - question: 求 $\lim_{x\to0}(1+3x)^{1/x}$（在底数为正的邻域内取极限）。
-    wrong: e
-    correct: e^3
+  - question: '求 $\lim_{x\to0}(1+3x)^{1/x}$（在底数为正的邻域内取极限）。'
+    wrong: 'e'
+    correct: 'e^3'
   strategies:
   - c3.limit
   recurs_in:
@@ -204,9 +204,9 @@ misconceptions:
   triggers:
   - 无穷小的比较
   examples:
-  - question: 求 $\lim_{x\to0}(\sin x-x)/x^3$。
+  - question: '求 $\lim_{x\to0}(\sin x-x)/x^3$。'
     wrong: '0'
-    correct: -\frac{1}{6}
+    correct: '-\frac{1}{6}'
   strategies:
   - c3.limit
   recurs_in:
@@ -218,9 +218,9 @@ misconceptions:
   triggers:
   - 函数的连续性与间断点
   examples:
-  - question: 设 $f(x)=(x^2-1)/(x-1)$（$x\ne1$），$f(1)=a$。求使 f 在 1 连续的 a，并说明理由。
-    wrong: 任意 a 均可，因为 f(1) 已定义。
-    correct: $a=2$。在去心邻域内 $f(x)=x+1$，故极限为 2；连续还要求 $f(1)$ 等于该极限。
+  - question: '设 $f(x)=(x^2-1)/(x-1)$（$x\ne1$），$f(1)=a$。求使 f 在 1 连续的 a，并说明理由。'
+    wrong: '任意 a 均可，因为 f(1) 已定义。'
+    correct: '$a=2$。在去心邻域内 $f(x)=x+1$，故极限为 $2$；连续还要求 $f(1)$ 等于该极限。'
   strategies:
   - c3.conditions
   recurs_in:
@@ -233,9 +233,9 @@ misconceptions:
   triggers:
   - 连续函数的运算与初等函数的连续性
   examples:
-  - question: 求实函数 $f(x)=\ln(x^2-1)$ 的定义域，并说明在哪些点连续。
-    wrong: 在全体实数上连续。
-    correct: 须有 $x^2-1>0$，所以定义域为 $(-\infty,-1)\cup(1,\infty)$；在此定义域内处处连续。
+  - question: '求实函数 $f(x)=\ln(x^2-1)$ 的定义域，并说明在哪些点连续。'
+    wrong: '在全体实数上连续。'
+    correct: '须有 $x^2-1>0$，所以定义域为 $(-\infty,-1)\cup(1,\infty)$；在此定义域内处处连续。'
   strategies:
   - c3.conditions
   recurs_in:
@@ -248,15 +248,14 @@ misconceptions:
   triggers:
   - 闭区间上连续函数性质
   examples:
-  - question: $f(x)=x$ 在 $(0,1)$ 上连续。它是否取得最大值和最小值？说明理由。
-    wrong: 最大值 1，最小值 0。
-    correct: 均不取得。每个 x∈(0,1) 两侧仍有区间内的点，函数值可更小也可更大；上确界为 1、下确界为 0，但端点不在定义域内。
+  - question: '$f(x)=x$ 在 $(0,1)$ 上连续。它是否取得最大值和最小值？说明理由。'
+    wrong: '最大值 1，最小值 0。'
+    correct: '均不取得。每个 $x\in(0,1)$ 两侧仍有区间内的点，函数值可更小也可更大；上确界为 $1$、下确界为 $0$，但端点不在定义域内。'
   strategies:
   - c3.conditions
   recurs_in:
   - calc.ch3.s5
   - calc.ch9.s8
-
 strategies:
 - id: input_output_mapping
   families: [混淆函数输入与输出]
@@ -304,7 +303,6 @@ strategies:
   rubric:
   - 能说明趋近变量、方向和定义域。
   - 能写出合法变形，并解释相消后首个非零项或左右极限。
-
 items:
 - id: calc.ch1.function.probe_shift
   knowledge_point: calc.ch1.function
@@ -442,8 +440,8 @@ items:
   knowledge_point: calc.ch1.s2
   purpose: verification
   dimension: explanation
-  stem: 数列 $a_n=(-1)^n+1/n$ 是否收敛？请说明理由。
-  answer: 不收敛。偶数子列 $a_{2k}=1+1/(2k)\to1$，奇数子列 $a_{2k-1}=-1+1/(2k-1)\to-1$；两个子列极限不同。
+  stem: '数列 $a_n=(-1)^n+1/n$ 是否收敛？请说明理由。'
+  answer: '不收敛。偶数子列 $a_{2k}=1+1/(2k)\to1$，奇数子列 $a_{2k-1}=-1+1/(2k-1)\to-1$；两个子列极限不同。'
   rubric:
   - 写出奇偶子列。
   - 分别求出子列极限 1 与 -1。
@@ -452,8 +450,8 @@ items:
   knowledge_point: calc.ch1.s3
   purpose: verification
   dimension: explanation
-  stem: 判断 $\lim_{x\to2}|x-2|/(x-2)$ 是否存在，并说明理由。
-  answer: 双侧极限不存在。左侧恒为 -1，右侧恒为 1；两个单侧极限不相等。
+  stem: '判断 $\lim_{x\to2}|x-2|/(x-2)$ 是否存在，并说明理由。'
+  answer: '双侧极限不存在。左侧恒为 $-1$，右侧恒为 $1$；两个单侧极限不相等。'
   rubric:
   - 在 x<2 与 x>2 分别化简绝对值。
   - 得到左极限 -1、右极限 1。
@@ -462,7 +460,7 @@ items:
   knowledge_point: calc.ch1.s4
   purpose: verification
   dimension: correctness
-  stem: 求 $\lim_{x\to0^+}x\cdot(1/x)$。
+  stem: '求 $\lim_{x\to0^+}x\cdot(1/x)$。'
   answer: '1'
   spec:
     operation: limit
@@ -475,7 +473,7 @@ items:
   knowledge_point: calc.ch1.s5
   purpose: verification
   dimension: correctness
-  stem: 求 $\lim_{x\to3}(x^2-9)/(x-3)$。
+  stem: '求 $\lim_{x\to3}(x^2-9)/(x-3)$。'
   answer: '6'
   spec:
     operation: limit
@@ -488,8 +486,8 @@ items:
   knowledge_point: calc.ch1.s6
   purpose: verification
   dimension: correctness
-  stem: 求 $\lim_{x\to0}(1+3x)^{1/x}$（在底数为正的邻域内取极限）。
-  answer: e^3
+  stem: '求 $\lim_{x\to0}(1+3x)^{1/x}$（在底数为正的邻域内取极限）。'
+  answer: 'e^3'
   spec:
     operation: limit
     expr: (1+3*x)**(1/x)
@@ -501,8 +499,8 @@ items:
   knowledge_point: calc.ch1.s7
   purpose: verification
   dimension: correctness
-  stem: 求 $\lim_{x\to0}(\sin x-x)/x^3$。
-  answer: -\frac{1}{6}
+  stem: '求 $\lim_{x\to0}(\sin x-x)/x^3$。'
+  answer: '-\frac{1}{6}'
   spec:
     operation: limit
     expr: (sin(x)-x)/x**3
@@ -514,8 +512,8 @@ items:
   knowledge_point: calc.ch1.s8
   purpose: verification
   dimension: explanation
-  stem: 设 $f(x)=(x^2-1)/(x-1)$（$x\ne1$），$f(1)=a$。求使 f 在 1 连续的 a，并说明理由。
-  answer: $a=2$。在去心邻域内 $f(x)=x+1$，故极限为 2；连续还要求 $f(1)$ 等于该极限。
+  stem: '设 $f(x)=(x^2-1)/(x-1)$（$x\ne1$），$f(1)=a$。求使 f 在 1 连续的 a，并说明理由。'
+  answer: '$a=2$。在去心邻域内 $f(x)=x+1$，故极限为 $2$；连续还要求 $f(1)$ 等于该极限。'
   rubric:
   - 只在 x≠1 时约去 x-1。
   - 求得极限 2。
@@ -524,8 +522,8 @@ items:
   knowledge_point: calc.ch1.s9
   purpose: verification
   dimension: explanation
-  stem: 求实函数 $f(x)=\ln(x^2-1)$ 的定义域，并说明在哪些点连续。
-  answer: 须有 $x^2-1>0$，所以定义域为 $(-\infty,-1)\cup(1,\infty)$；在此定义域内处处连续。
+  stem: '求实函数 $f(x)=\ln(x^2-1)$ 的定义域，并说明在哪些点连续。'
+  answer: '须有 $x^2-1>0$，所以定义域为 $(-\infty,-1)\cup(1,\infty)$；在此定义域内处处连续。'
   rubric:
   - 列出对数真数严格大于零的条件。
   - 解出两个开区间，排除 ±1。
@@ -534,8 +532,8 @@ items:
   knowledge_point: calc.ch1.s10
   purpose: verification
   dimension: explanation
-  stem: $f(x)=x$ 在 $(0,1)$ 上连续。它是否取得最大值和最小值？说明理由。
-  answer: 均不取得。每个 x∈(0,1) 两侧仍有区间内的点，函数值可更小也可更大；上确界为 1、下确界为 0，但端点不在定义域内。
+  stem: '$f(x)=x$ 在 $(0,1)$ 上连续。它是否取得最大值和最小值？说明理由。'
+  answer: '均不取得。每个 $x\in(0,1)$ 两侧仍有区间内的点，函数值可更小也可更大；上确界为 $1$、下确界为 $0$，但端点不在定义域内。'
   rubric:
   - 明确区间不包含端点。
   - 区分确界与实际取得的函数值。

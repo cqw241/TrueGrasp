@@ -62,9 +62,9 @@ misconceptions:
   triggers:
   - 不定积分的概念与性质
   examples:
-  - question: 在区间 x<2 上，求 $1/(x-2)$ 的一个实原函数。
-    wrong: \ln(x-2)
-    correct: \ln(2-x)
+  - question: '在区间 x<2 上，求 $1/(x-2)$ 的一个实原函数。'
+    wrong: '\ln(x-2)'
+    correct: '\ln(2-x)'
   strategies:
   - c3.antiderivative
   recurs_in:
@@ -77,9 +77,9 @@ misconceptions:
   triggers:
   - 分部积分法
   examples:
-  - question: 求 $\int x\cos(2x)\,dx$ 的一个原函数。
-    wrong: \frac{x\sin(2x)}{2}-\frac{\cos(2x)}{4}
-    correct: \frac{x\sin(2x)}{2}+\frac{\cos(2x)}{4}
+  - question: '求 $\int x\cos(2x)\,dx$ 的一个原函数。'
+    wrong: '\frac{x\sin(2x)}{2}-\frac{\cos(2x)}{4}'
+    correct: '\frac{x\sin(2x)}{2}+\frac{\cos(2x)}{4}'
   strategies:
   - c3.antiderivative
   recurs_in:
@@ -92,15 +92,14 @@ misconceptions:
   triggers:
   - 有理函数的积分
   examples:
-  - question: 在 x>0 上求 $\int 1/[x(x+2)]\,dx$ 的一个原函数。
-    wrong: \frac{1}{2}\ln x+\frac{1}{2}\ln(x+2)
-    correct: \frac{1}{2}\ln x-\frac{1}{2}\ln(x+2)
+  - question: '在 x>0 上求 $\int 1/[x(x+2)]\,dx$ 的一个原函数。'
+    wrong: '\frac{1}{2}\ln x+\frac{1}{2}\ln(x+2)'
+    correct: '\frac{1}{2}\ln x-\frac{1}{2}\ln(x+2)'
   strategies:
   - c3.antiderivative
   recurs_in:
   - calc.ch5.s4
   - calc.ch7.s2
-
 strategies:
 - id: differential_measure
   families: [忽略微元变换]
@@ -134,7 +133,6 @@ strategies:
   rubric:
   - 能通过求导或通分核对关键等式。
   - 能明确解的区间及积分常数的作用。
-
 items:
 - id: calc.ch4.substitution.probe_linear_exp
   knowledge_point: calc.ch4.substitution
@@ -188,20 +186,24 @@ items:
 - id: calc.ch4.s1.c3_seed1
   knowledge_point: calc.ch4.s1
   purpose: verification
-  dimension: correctness
-  stem: 在区间 x<2 上，求 $1/(x-2)$ 的一个实原函数。
-  answer: \ln(2-x)
+  dimension: explanation
+  stem: '在区间 $x<2$ 上，求 $1/(x-2)$ 的一个实原函数，并解释定义域与求导核验。'
+  answer: '\ln(2-x)'
   spec:
     operation: indefinite_integral
     expr: 1/(x-2)
     variables:
     - x
+  rubric:
+  - 说明实对数的定义域：x<2 时 2-x>0，而 x-2<0。
+  - 给出 ln(2-x)（允许加常数），并求导核验为 1/(x-2)。
+  - 区分形式导数相同与在指定区间内为实原函数；ln(x-2) 不是有效答案。
 - id: calc.ch4.s3.c3_seed1
   knowledge_point: calc.ch4.s3
   purpose: verification
   dimension: correctness
-  stem: 求 $\int x\cos(2x)\,dx$ 的一个原函数。
-  answer: \frac{x\sin(2x)}{2}+\frac{\cos(2x)}{4}
+  stem: '求 $\int x\cos(2x)\,dx$ 的一个原函数。'
+  answer: '\frac{x\sin(2x)}{2}+\frac{\cos(2x)}{4}'
   spec:
     operation: indefinite_integral
     expr: x*cos(2*x)
@@ -211,8 +213,8 @@ items:
   knowledge_point: calc.ch4.s4
   purpose: verification
   dimension: correctness
-  stem: 在 x>0 上求 $\int 1/[x(x+2)]\,dx$ 的一个原函数。
-  answer: \frac{1}{2}\ln x-\frac{1}{2}\ln(x+2)
+  stem: '在 x>0 上求 $\int 1/[x(x+2)]\,dx$ 的一个原函数。'
+  answer: '\frac{1}{2}\ln x-\frac{1}{2}\ln(x+2)'
   spec:
     operation: indefinite_integral
     expr: 1/(x*(x+2))

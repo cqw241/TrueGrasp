@@ -59,9 +59,9 @@ misconceptions:
   triggers:
   - 微分中值定理
   examples:
-  - question: $f(x)=|x|$ 在 [-1,1] 上端点相等，是否存在 ξ∈(-1,1) 使 f′(ξ)=0？说明理由。
-    wrong: 由罗尔定理，ξ=0。
-    correct: 不存在。x<0 时导数为 -1，x>0 时导数为 1，x=0 不可导。罗尔定理的开区间可导条件不成立。
+  - question: '$f(x)=|x|$ 在 [-1,1] 上端点相等，是否存在 ξ∈(-1,1) 使 f′(ξ)=0？说明理由。'
+    wrong: '由罗尔定理，ξ=0。'
+    correct: '不存在。$x<0$ 时导数为 $-1$，$x>0$ 时导数为 $1$，$x=0$ 不可导。罗尔定理的开区间可导条件不成立。'
   strategies:
   - c3.conditions
   recurs_in:
@@ -74,9 +74,9 @@ misconceptions:
   triggers:
   - 洛必达法则
   examples:
-  - question: 求 $\lim_{x\to0}(3+x)/(5+x)$。
+  - question: '求 $\lim_{x\to0}(3+x)/(5+x)$。'
     wrong: '1'
-    correct: \frac{3}{5}
+    correct: '\frac{3}{5}'
   strategies:
   - c3.conditions
   recurs_in:
@@ -88,7 +88,7 @@ misconceptions:
   triggers:
   - 泰勒公式
   examples:
-  - question: 求 $\lim_{x\to0}(e^{2x}-1-2x)/x^2$。
+  - question: '求 $\lim_{x\to0}(e^{2x}-1-2x)/x^2$。'
     wrong: '4'
     correct: '2'
   strategies:
@@ -103,9 +103,9 @@ misconceptions:
   triggers:
   - 函数的单调性与曲线的凹凸性
   examples:
-  - question: 判断 $f(x)=x^2$ 在 (-1,0) 上的单调性，并解释 f″>0 的含义。
-    wrong: f″=2>0，所以函数递增。
-    correct: $f′(x)=2x<0$，故严格递减；$f″(x)=2>0$ 表示导数递增、图像向上弯曲，不表示函数值递增。
+  - question: '判断 $f(x)=x^2$ 在 (-1,0) 上的单调性，并解释 f″>0 的含义。'
+    wrong: 'f″=2>0，所以函数递增。'
+    correct: '$f^{\prime}(x)=2x<0$，故严格递减；$f^{\prime^{\prime}}(x)=2>0$ 表示导数递增、图像向上弯曲，不表示函数值递增。'
   strategies:
   - c3.local_global
   recurs_in:
@@ -118,9 +118,9 @@ misconceptions:
   triggers:
   - 函数的极值与最值
   examples:
-  - question: 求 $f(x)=x^3$ 在 [-1,2] 上的最值，并判断 x=0 是否为极值点。
-    wrong: f′(0)=0，所以 x=0 是最小值点。
-    correct: 函数严格递增，最小值为 f(-1)=-1，最大值为 f(2)=8；0 两侧函数值一负一正，故 0 是驻点但非极值点。
+  - question: '求 $f(x)=x^3$ 在 [-1,2] 上的最值，并判断 x=0 是否为极值点。'
+    wrong: 'f′(0)=0，所以 x=0 是最小值点。'
+    correct: '函数严格递增，最小值为 $f(-1)=-1$，最大值为 $f(2)=8$；$0$ 两侧函数值一负一正，故 $0$ 是驻点但非极值点。'
   strategies:
   - c3.local_global
   recurs_in:
@@ -132,9 +132,9 @@ misconceptions:
   triggers:
   - 函数图形的描绘
   examples:
-  - question: 对 $f(x)=(x^2-4)/(x-2)$（x≠2），判断 x=2 是否为垂直渐近线，说明该处图形。
-    wrong: 分母为零，所以 x=2 是垂直渐近线。
-    correct: 不是。x≠2 时 f(x)=x+2，故 x→2 时极限为 4；图像为直线 y=x+2 去掉点 (2,4)，该点是可去间断处。
+  - question: '对 $f(x)=(x^2-4)/(x-2)$（x≠2），判断 x=2 是否为垂直渐近线，说明该处图形。'
+    wrong: '分母为零，所以 x=2 是垂直渐近线。'
+    correct: '不是。$x\ne2$ 时 $f(x)=x+2$，故 $x\to2$ 时极限为 $4$；图像为直线 $y=x+2$ 去掉点 $(2,4)$，该点是可去间断处。'
   strategies:
   - c3.local_global
   recurs_in:
@@ -146,9 +146,9 @@ misconceptions:
   triggers:
   - 曲率
   examples:
-  - question: 求曲线 $y=3x^2$ 的曲率函数，并写明所用导数。
+  - question: '求曲线 $y=3x^2$ 的曲率函数，并写明所用导数。'
     wrong: '6'
-    correct: $y′=6x,y″=6$，所以 $\kappa(x)=|y″|/(1+(y′)^2)^{3/2}=6/(1+36x^2)^{3/2}$。
+    correct: '$y^{\prime}=6x,y^{\prime^{\prime}}=6$，所以 $\kappa(x)=|y^{\prime^{\prime}}|/(1+(y^{\prime})^2)^{3/2}=6/(1+36x^2)^{3/2}$。'
   strategies:
   - c3.derivative
   recurs_in:
@@ -171,8 +171,8 @@ items:
   knowledge_point: calc.ch3.s1
   purpose: verification
   dimension: explanation
-  stem: $f(x)=|x|$ 在 [-1,1] 上端点相等，是否存在 ξ∈(-1,1) 使 f′(ξ)=0？说明理由。
-  answer: 不存在。x<0 时导数为 -1，x>0 时导数为 1，x=0 不可导。罗尔定理的开区间可导条件不成立。
+  stem: '$f(x)=|x|$ 在 [-1,1] 上端点相等，是否存在 ξ∈(-1,1) 使 f′(ξ)=0？说明理由。'
+  answer: '不存在。$x<0$ 时导数为 $-1$，$x>0$ 时导数为 $1$，$x=0$ 不可导。罗尔定理的开区间可导条件不成立。'
   rubric:
   - 检查 0 处的可导性。
   - 说明其余点的导数均不为零。
@@ -181,8 +181,8 @@ items:
   knowledge_point: calc.ch3.s2
   purpose: verification
   dimension: correctness
-  stem: 求 $\lim_{x\to0}(3+x)/(5+x)$。
-  answer: \frac{3}{5}
+  stem: '求 $\lim_{x\to0}(3+x)/(5+x)$。'
+  answer: '\frac{3}{5}'
   spec:
     operation: limit
     expr: (3+x)/(5+x)
@@ -194,7 +194,7 @@ items:
   knowledge_point: calc.ch3.s3
   purpose: verification
   dimension: correctness
-  stem: 求 $\lim_{x\to0}(e^{2x}-1-2x)/x^2$。
+  stem: '求 $\lim_{x\to0}(e^{2x}-1-2x)/x^2$。'
   answer: '2'
   spec:
     operation: limit
@@ -207,8 +207,8 @@ items:
   knowledge_point: calc.ch3.s4
   purpose: verification
   dimension: explanation
-  stem: 判断 $f(x)=x^2$ 在 (-1,0) 上的单调性，并解释 f″>0 的含义。
-  answer: $f′(x)=2x<0$，故严格递减；$f″(x)=2>0$ 表示导数递增、图像向上弯曲，不表示函数值递增。
+  stem: '判断 $f(x)=x^2$ 在 (-1,0) 上的单调性，并解释 f″>0 的含义。'
+  answer: '$f^{\prime}(x)=2x<0$，故严格递减；$f^{\prime^{\prime}}(x)=2>0$ 表示导数递增、图像向上弯曲，不表示函数值递增。'
   rubric:
   - 用一阶导数判定递减。
   - 说明二阶导数控制斜率变化。
@@ -217,8 +217,8 @@ items:
   knowledge_point: calc.ch3.s5
   purpose: verification
   dimension: explanation
-  stem: 求 $f(x)=x^3$ 在 [-1,2] 上的最值，并判断 x=0 是否为极值点。
-  answer: 函数严格递增，最小值为 f(-1)=-1，最大值为 f(2)=8；0 两侧函数值一负一正，故 0 是驻点但非极值点。
+  stem: '求 $f(x)=x^3$ 在 [-1,2] 上的最值，并判断 x=0 是否为极值点。'
+  answer: '函数严格递增，最小值为 $f(-1)=-1$，最大值为 $f(2)=8$；$0$ 两侧函数值一负一正，故 $0$ 是驻点但非极值点。'
   rubric:
   - 检查驻点 0 的两侧变化。
   - 比较闭区间端点并给出最值。
@@ -227,8 +227,8 @@ items:
   knowledge_point: calc.ch3.s6
   purpose: verification
   dimension: explanation
-  stem: 对 $f(x)=(x^2-4)/(x-2)$（x≠2），判断 x=2 是否为垂直渐近线，说明该处图形。
-  answer: 不是。x≠2 时 f(x)=x+2，故 x→2 时极限为 4；图像为直线 y=x+2 去掉点 (2,4)，该点是可去间断处。
+  stem: '对 $f(x)=(x^2-4)/(x-2)$（x≠2），判断 x=2 是否为垂直渐近线，说明该处图形。'
+  answer: '不是。$x\ne2$ 时 $f(x)=x+2$，故 $x\to2$ 时极限为 $4$；图像为直线 $y=x+2$ 去掉点 $(2,4)$，该点是可去间断处。'
   rubric:
   - 在去心邻域中约分。
   - 使用有限极限 4 排除垂直渐近线。
@@ -237,8 +237,8 @@ items:
   knowledge_point: calc.ch3.s7
   purpose: verification
   dimension: explanation
-  stem: 求曲线 $y=3x^2$ 的曲率函数，并写明所用导数。
-  answer: $y′=6x,y″=6$，所以 $\kappa(x)=|y″|/(1+(y′)^2)^{3/2}=6/(1+36x^2)^{3/2}$。
+  stem: '求曲线 $y=3x^2$ 的曲率函数，并写明所用导数。'
+  answer: '$y^{\prime}=6x,y^{\prime^{\prime}}=6$，所以 $\kappa(x)=|y^{\prime^{\prime}}|/(1+(y^{\prime})^2)^{3/2}=6/(1+36x^2)^{3/2}$。'
   rubric:
   - 分别求出 y′ 与 y″。
   - 使用包含 (1+(y′)²)^(3/2) 的曲率公式。

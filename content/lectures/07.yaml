@@ -73,9 +73,9 @@ misconceptions:
   triggers:
   - 微分方程的基本概念
   examples:
-  - question: 写出 $y″-y=0$ 的通解，代回核验，并说明自由常数的个数。
-    wrong: y=Ce^x
-    correct: $y=C_1e^x+C_2e^{-x}$。求两次导数后 y″=y，任意两实常数均成立；两解线性无关（朗斯基行列式为 -2），形成二阶齐次方程的通解。
+  - question: '写出 $y″-y=0$ 的通解，代回核验，并说明自由常数的个数。'
+    wrong: 'y=Ce^x'
+    correct: '$y=C_1e^x+C_2e^{-x}$。求两次导数后 $y^{\prime^{\prime}}=y$，任意两实常数均成立；两解线性无关（朗斯基行列式为 $-2$），形成二阶齐次方程的通解。'
   strategies:
   - c3.ode
   recurs_in:
@@ -88,9 +88,9 @@ misconceptions:
   triggers:
   - 可分离变量的微分方程
   examples:
-  - question: 求 $y′=3y$ 的所有实解，并说明除以 y 是否会漏解。
-    wrong: \ln|y|=3x+C，因此只允许 y≠0。
-    correct: 非零解分离后得到 y=Ce^{3x}（C≠0）；另有 y≡0。统一写为 y=Ce^{3x}，C 为任意实数。除以 y 的推导本身不包含零解，须单独检查并补入。
+  - question: '求 $y′=3y$ 的所有实解，并说明除以 y 是否会漏解。'
+    wrong: '\ln|y|=3x+C，因此只允许 y≠0。'
+    correct: '非零解分离后得到 $y=Ce^{3x}$（$C\ne0$）；另有 $y\equiv0$。统一写为 $y=Ce^{3x}$，$C$ 为任意实数。除以 $y$ 的推导本身不包含零解，须单独检查并补入。'
   strategies:
   - c3.ode
   recurs_in:
@@ -103,9 +103,10 @@ misconceptions:
   triggers:
   - 齐次方程
   examples:
-  - question: 在 x>0 上求 $y′=1+y/x$ 的通解，并写出 y=xu 后的导数关系。
-    wrong: y=x(Ce^x-1)
-    correct: $y′=u+xu′$，故 $u+xu′=1+u$，即 u′=1/x；u=ln x+C，所以 y=x(ln x+C)。代回有 y′=ln x+C+1=1+y/x。
+  - question: '在 x>0 上求 $y′=1+y/x$ 的通解，并写出 y=xu 后的导数关系。'
+    wrong: 'y=x(Ce^x-1)'
+    correct: '$y^{\prime}=u+xu^{\prime}$，故 $u+xu^{\prime}=1+u$，即 $u^{\prime}=1/x$；$u=\ln x+C$，所以 $y=x(\ln
+      x+C)$。代回有 $y^{\prime}=\ln x+C+1=1+y/x$。'
   strategies:
   - c3.ode
   recurs_in:
@@ -117,9 +118,9 @@ misconceptions:
   triggers:
   - 一阶线性微分方程
   examples:
-  - question: 求 $y′+2y=4$ 的通解，并用积分因子解释。
-    wrong: y=2+Ce^{2x}
-    correct: 积分因子为 e^{2x}；$(e^{2x}y)′=4e^{2x}$，积分得 e^{2x}y=2e^{2x}+C，因此 y=2+Ce^{-2x}。
+  - question: '求 $y′+2y=4$ 的通解，并用积分因子解释。'
+    wrong: 'y=2+Ce^{2x}'
+    correct: '积分因子为 $e^{2x}$；$(e^{2x}y)^{\prime}=4e^{2x}$，积分得 $e^{2x}y=2e^{2x}+C$，因此 $y=2+Ce^{-2x}$。'
   strategies:
   - c3.ode
   recurs_in:
@@ -131,9 +132,10 @@ misconceptions:
   triggers:
   - 可降阶的高阶微分方程
   examples:
-  - question: 求 $y″=6x$ 的通解。说明为什么需要保留两个独立常数。
-    wrong: y=x^3+C
-    correct: 一次积分得 y′=3x²+C₁，再积分得 y=x³+C₁x+C₂；对任意 C₁、C₂ 求两次导数均回到 6x。仅写 x³+C 会遗漏如 x³+x 的解。
+  - question: '求 $y″=6x$ 的通解。说明为什么需要保留两个独立常数。'
+    wrong: 'y=x^3+C'
+    correct: '一次积分得 $y^{\prime}=3x^2+C_1$，再积分得 $y=x^3+C_1x+C_2$；对任意 $C_1,C_2$ 求两次导数均回到 $6x$。仅写 $x^3+C$
+      会遗漏如 $x^3+x$ 的解。'
   strategies:
   - c3.ode
   recurs_in:
@@ -145,9 +147,9 @@ misconceptions:
   triggers:
   - 高阶线性微分方程
   examples:
-  - question: $y_1=1+\sin x,y_2=1+\cos x$ 均满足 y″+y=1。它们的和与差分别满足什么方程？说明理由。
-    wrong: 和与差都满足 y″+y=1。
-    correct: 由线性性，和满足 $(y_1+y_2)″+(y_1+y_2)=2$；差满足 $(y_1-y_2)″+(y_1-y_2)=0$。同一非齐次方程两解之差是齐次解，和一般不是原方程的解。
+  - question: '$y_1=1+\sin x,y_2=1+\cos x$ 均满足 y″+y=1。它们的和与差分别满足什么方程？说明理由。'
+    wrong: '和与差都满足 y″+y=1。'
+    correct: '由线性性，和满足 $(y_1+y_2)^{\prime^{\prime}}+(y_1+y_2)=2$；差满足 $(y_1-y_2)^{\prime^{\prime}}+(y_1-y_2)=0$。同一非齐次方程两解之差是齐次解，和一般不是原方程的解。'
   strategies:
   - c3.ode
   recurs_in:
@@ -159,9 +161,9 @@ misconceptions:
   triggers:
   - 常系数齐次线性微分方程
   examples:
-  - question: 求 $y″-6y′+9y=0$ 的通解，解释二重根的处理。
-    wrong: y=(C_1+C_2)e^{3x}
-    correct: 特征方程为 (r−3)²=0；通解 $y=(C_1+C_2x)e^{3x}$。e^{3x} 与 xe^{3x} 线性无关，两个同为 e^{3x} 的项不能提供两个独立解。
+  - question: '求 $y″-6y′+9y=0$ 的通解，解释二重根的处理。'
+    wrong: 'y=(C_1+C_2)e^{3x}'
+    correct: '特征方程为 $(r-3)^2=0$；通解 $y=(C_1+C_2x)e^{3x}$。$e^{3x}$ 与 $xe^{3x}$ 线性无关，两个同为 $e^{3x}$ 的项不能提供两个独立解。'
   strategies:
   - c3.ode
   recurs_in:
@@ -174,9 +176,10 @@ misconceptions:
   triggers:
   - 常系数非齐次线性微分方程
   examples:
-  - question: 求 $y″-4y=e^{2x}$ 的通解，解释特解的选取。
-    wrong: 设特解 Ae^{2x}，故无解。
-    correct: 齐次解为 C₁e^{2x}+C₂e^{-2x}。因 2 为单重特征根，取特解 Axe^{2x}；代回得到 4Ae^{2x}=e^{2x}，故 A=1/4。通解为 $C_1e^{2x}+C_2e^{-2x}+xe^{2x}/4$。
+  - question: '求 $y″-4y=e^{2x}$ 的通解，解释特解的选取。'
+    wrong: '设特解 Ae^{2x}，故无解。'
+    correct: '齐次解为 $C_1e^{2x}+C_2e^{-2x}$。因 $2$ 为单重特征根，取特解 $Axe^{2x}$；代回得到 $4Ae^{2x}=e^{2x}$，故 $A=1/4$。通解为
+      $C_1e^{2x}+C_2e^{-2x}+xe^{2x}/4$。'
   strategies:
   - c3.ode
   recurs_in:
@@ -188,9 +191,10 @@ misconceptions:
   triggers:
   - 欧拉方程
   examples:
-  - question: 在 x>0 上求 $x^2y″+xy′-y=0$ 的通解，并写出 t=ln x 下的导数关系。
-    wrong: 将方程化为 Y″+Y′−Y=0。
-    correct: 设 Y(t)=y(e^t)，则 xy′=Y′，x²y″=Y″−Y′。方程化为 Y″−Y=0，故 Y=C₁e^t+C₂e^{-t}，即 y=C₁x+C₂/x。
+  - question: '在 x>0 上求 $x^2y″+xy′-y=0$ 的通解，并写出 t=ln x 下的导数关系。'
+    wrong: '将方程化为 Y″+Y′−Y=0。'
+    correct: '设 $Y(t)=y(e^t)$，则 $xy^{\prime}=Y^{\prime}$，$x^2y^{\prime^{\prime}}=Y^{\prime^{\prime}}-Y^{\prime}$。方程化为
+      $Y^{\prime^{\prime}}-Y=0$，故 $Y=C_1e^t+C_2e^{-t}$，即 $y=C_1x+C_2/x$。'
   strategies:
   - c3.ode
   recurs_in:
@@ -213,8 +217,8 @@ items:
   knowledge_point: calc.ch7.s1
   purpose: verification
   dimension: explanation
-  stem: 写出 $y″-y=0$ 的通解，代回核验，并说明自由常数的个数。
-  answer: $y=C_1e^x+C_2e^{-x}$。求两次导数后 y″=y，任意两实常数均成立；两解线性无关（朗斯基行列式为 -2），形成二阶齐次方程的通解。
+  stem: '写出 $y″-y=0$ 的通解，代回核验，并说明自由常数的个数。'
+  answer: '$y=C_1e^x+C_2e^{-x}$。求两次导数后 $y^{\prime^{\prime}}=y$，任意两实常数均成立；两解线性无关（朗斯基行列式为 $-2$），形成二阶齐次方程的通解。'
   rubric:
   - 保留两个独立常数及 e^x、e^(-x) 两支。
   - 求导代回原方程。
@@ -223,8 +227,8 @@ items:
   knowledge_point: calc.ch7.s2
   purpose: verification
   dimension: explanation
-  stem: 求 $y′=3y$ 的所有实解，并说明除以 y 是否会漏解。
-  answer: 非零解分离后得到 y=Ce^{3x}（C≠0）；另有 y≡0。统一写为 y=Ce^{3x}，C 为任意实数。除以 y 的推导本身不包含零解，须单独检查并补入。
+  stem: '求 $y′=3y$ 的所有实解，并说明除以 y 是否会漏解。'
+  answer: '非零解分离后得到 $y=Ce^{3x}$（$C\ne0$）；另有 $y\equiv0$。统一写为 $y=Ce^{3x}$，$C$ 为任意实数。除以 $y$ 的推导本身不包含零解，须单独检查并补入。'
   rubric:
   - 对非零解正确分离并积分。
   - 单独代回检验 y≡0。
@@ -233,8 +237,9 @@ items:
   knowledge_point: calc.ch7.s3
   purpose: verification
   dimension: explanation
-  stem: 在 x>0 上求 $y′=1+y/x$ 的通解，并写出 y=xu 后的导数关系。
-  answer: $y′=u+xu′$，故 $u+xu′=1+u$，即 u′=1/x；u=ln x+C，所以 y=x(ln x+C)。代回有 y′=ln x+C+1=1+y/x。
+  stem: '在 x>0 上求 $y′=1+y/x$ 的通解，并写出 y=xu 后的导数关系。'
+  answer: '$y^{\prime}=u+xu^{\prime}$，故 $u+xu^{\prime}=1+u$，即 $u^{\prime}=1/x$；$u=\ln x+C$，所以 $y=x(\ln
+    x+C)$。代回有 $y^{\prime}=\ln x+C+1=1+y/x$。'
   rubric:
   - 正确写出 y′=u+xu′。
   - 约去 u 后得到 u′=1/x 并保留常数。
@@ -243,8 +248,8 @@ items:
   knowledge_point: calc.ch7.s4
   purpose: verification
   dimension: explanation
-  stem: 求 $y′+2y=4$ 的通解，并用积分因子解释。
-  answer: 积分因子为 e^{2x}；$(e^{2x}y)′=4e^{2x}$，积分得 e^{2x}y=2e^{2x}+C，因此 y=2+Ce^{-2x}。
+  stem: '求 $y′+2y=4$ 的通解，并用积分因子解释。'
+  answer: '积分因子为 $e^{2x}$；$(e^{2x}y)^{\prime}=4e^{2x}$，积分得 $e^{2x}y=2e^{2x}+C$，因此 $y=2+Ce^{-2x}$。'
   rubric:
   - 积分因子符号为正。
   - 用乘积导数正确组织左端。
@@ -253,8 +258,9 @@ items:
   knowledge_point: calc.ch7.s5
   purpose: verification
   dimension: explanation
-  stem: 求 $y″=6x$ 的通解。说明为什么需要保留两个独立常数。
-  answer: 一次积分得 y′=3x²+C₁，再积分得 y=x³+C₁x+C₂；对任意 C₁、C₂ 求两次导数均回到 6x。仅写 x³+C 会遗漏如 x³+x 的解。
+  stem: '求 $y″=6x$ 的通解。说明为什么需要保留两个独立常数。'
+  answer: '一次积分得 $y^{\prime}=3x^2+C_1$，再积分得 $y=x^3+C_1x+C_2$；对任意 $C_1,C_2$ 求两次导数均回到 $6x$。仅写 $x^3+C$ 会遗漏如
+    $x^3+x$ 的解。'
   rubric:
   - 两次积分分别引入独立常数。
   - 保留 C₁x 项。
@@ -263,8 +269,8 @@ items:
   knowledge_point: calc.ch7.s6
   purpose: verification
   dimension: explanation
-  stem: $y_1=1+\sin x,y_2=1+\cos x$ 均满足 y″+y=1。它们的和与差分别满足什么方程？说明理由。
-  answer: 由线性性，和满足 $(y_1+y_2)″+(y_1+y_2)=2$；差满足 $(y_1-y_2)″+(y_1-y_2)=0$。同一非齐次方程两解之差是齐次解，和一般不是原方程的解。
+  stem: '$y_1=1+\sin x,y_2=1+\cos x$ 均满足 y″+y=1。它们的和与差分别满足什么方程？说明理由。'
+  answer: '由线性性，和满足 $(y_1+y_2)^{\prime^{\prime}}+(y_1+y_2)=2$；差满足 $(y_1-y_2)^{\prime^{\prime}}+(y_1-y_2)=0$。同一非齐次方程两解之差是齐次解，和一般不是原方程的解。'
   rubric:
   - 分别处理右端 1+1 与 1−1。
   - 明确差是对应齐次方程的解。
@@ -273,8 +279,8 @@ items:
   knowledge_point: calc.ch7.s7
   purpose: verification
   dimension: explanation
-  stem: 求 $y″-6y′+9y=0$ 的通解，解释二重根的处理。
-  answer: 特征方程为 (r−3)²=0；通解 $y=(C_1+C_2x)e^{3x}$。e^{3x} 与 xe^{3x} 线性无关，两个同为 e^{3x} 的项不能提供两个独立解。
+  stem: '求 $y″-6y′+9y=0$ 的通解，解释二重根的处理。'
+  answer: '特征方程为 $(r-3)^2=0$；通解 $y=(C_1+C_2x)e^{3x}$。$e^{3x}$ 与 $xe^{3x}$ 线性无关，两个同为 $e^{3x}$ 的项不能提供两个独立解。'
   rubric:
   - 求出二重根 3。
   - 写出 xe^(3x) 对应的第二个解。
@@ -283,8 +289,9 @@ items:
   knowledge_point: calc.ch7.s8
   purpose: verification
   dimension: explanation
-  stem: 求 $y″-4y=e^{2x}$ 的通解，解释特解的选取。
-  answer: 齐次解为 C₁e^{2x}+C₂e^{-2x}。因 2 为单重特征根，取特解 Axe^{2x}；代回得到 4Ae^{2x}=e^{2x}，故 A=1/4。通解为 $C_1e^{2x}+C_2e^{-2x}+xe^{2x}/4$。
+  stem: '求 $y″-4y=e^{2x}$ 的通解，解释特解的选取。'
+  answer: '齐次解为 $C_1e^{2x}+C_2e^{-2x}$。因 $2$ 为单重特征根，取特解 $Axe^{2x}$；代回得到 $4Ae^{2x}=e^{2x}$，故 $A=1/4$。通解为
+    $C_1e^{2x}+C_2e^{-2x}+xe^{2x}/4$。'
   rubric:
   - 识别 e^(2x) 已属于齐次解。
   - 乘 x 后代回求 A=1/4。
@@ -293,8 +300,9 @@ items:
   knowledge_point: calc.ch7.s9
   purpose: verification
   dimension: explanation
-  stem: 在 x>0 上求 $x^2y″+xy′-y=0$ 的通解，并写出 t=ln x 下的导数关系。
-  answer: 设 Y(t)=y(e^t)，则 xy′=Y′，x²y″=Y″−Y′。方程化为 Y″−Y=0，故 Y=C₁e^t+C₂e^{-t}，即 y=C₁x+C₂/x。
+  stem: '在 x>0 上求 $x^2y″+xy′-y=0$ 的通解，并写出 t=ln x 下的导数关系。'
+  answer: '设 $Y(t)=y(e^t)$，则 $xy^{\prime}=Y^{\prime}$，$x^2y^{\prime^{\prime}}=Y^{\prime^{\prime}}-Y^{\prime}$。方程化为
+    $Y^{\prime^{\prime}}-Y=0$，故 $Y=C_1e^t+C_2e^{-t}$，即 $y=C_1x+C_2/x$。'
   rubric:
   - 正确写出 x²y″=Y″−Y′。
   - 化为 Y″−Y=0 并求出两支解。
