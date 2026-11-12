@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 
 from app.contracts.entities import Item, KnowledgePoint, Misconception, StrategyCard
 from app.contracts.enums import ItemSource
+from app.contracts.values import PENDING_KNOWLEDGE_POINT_ID
 
 
 class NxKnowledgeGraph:
@@ -49,13 +50,17 @@ class NxKnowledgeGraph:
         return kp_id in self._points
 
     def all_points(self) -> list[KnowledgePoint]:
-        return self._sorted(self._points)
+        return self._sorted(i for i, p in self._points.items() if i != PENDING_KNOWLEDGE_POINT_ID)
 
     def point(self, kp_id: str) -> KnowledgePoint:
         return self._points[kp_id]
 
     def lecture_points(self, lecture: int) -> list[KnowledgePoint]:
-        return self._sorted(i for i, p in self._points.items() if p.lecture == lecture)
+        return self._sorted(
+            i
+            for i, p in self._points.items()
+            if p.lecture == lecture and i != PENDING_KNOWLEDGE_POINT_ID
+        )
 
     def prerequisites(self, kp_id: str) -> list[KnowledgePoint]:
         return self._sorted(self._graph.predecessors(kp_id))

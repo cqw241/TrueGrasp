@@ -25,6 +25,7 @@ from app.contracts.enums import (
     TaskType,
     TimelineKind,
 )
+from app.contracts.values import PENDING_KNOWLEDGE_POINT_ID
 
 RANK = {MasteryState.INITIAL: 1, MasteryState.CONSOLIDATED: 2, MasteryState.INTEGRATED: 3}
 
@@ -131,9 +132,9 @@ def class_overview(session: Session) -> ClassOverview:
 
 def heatmap(session: Session) -> list[HeatCell]:
     points = session.exec(
-        select(KnowledgePoint).order_by(
-            KnowledgePoint.lecture, KnowledgePoint.section, KnowledgePoint.id
-        )
+        select(KnowledgePoint)
+        .where(KnowledgePoint.id != PENDING_KNOWLEDGE_POINT_ID)
+        .order_by(KnowledgePoint.lecture, KnowledgePoint.section, KnowledgePoint.id)
     ).all()
     rows = session.exec(select(Mastery)).all()
     hypotheses = session.exec(

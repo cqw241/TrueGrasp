@@ -25,6 +25,7 @@ export function AskQuestion({
 }) {
   const [content, setContent] = useState('')
   const [attempt, setAttempt] = useState('')
+  const [photoId, setPhotoId] = useState<string | null>(null)
   const [doubts, setDoubts] = useState<string[]>([])
   const [recognizing, setRecognizing] = useState(false)
   const [sending, setSending] = useState(false)
@@ -63,9 +64,12 @@ export function AskQuestion({
         },
       )
       if (data) {
-        // 识别结果是 LaTeX；包成行内公式，学生可以在文本框里补充文字或修改。
-        setContent(data.latex.includes('$') ? data.latex : `$${data.latex}$`)
-        setDoubts(data.doubts)
+        setPhotoId(data.photo_id)
+        // 识别结果只用于展示和核对；看不清时保留学生已写内容，允许直接提交原图。
+        if (data.latex.trim() && !content.trim()) {
+          setContent(data.latex.includes('$') ? data.latex : `$${data.latex}$`)
+        }
+        setDoubts(data.doubts ?? [])
       }
     } catch (err) {
       setError({ title: '照片识别失败', error: err })
@@ -75,7 +79,7 @@ export function AskQuestion({
   }
 
   async function submit() {
-    if (!content.trim() || busy) return
+    if ((!content.trim() && !photoId) || busy) return
     setSending(true)
     setError(null)
     try {
@@ -83,7 +87,11 @@ export function AskQuestion({
         '/api/students/{student_id}/questions',
         {
           params: { path: { student_id: studentId } },
-          body: { content: content.trim(), attempt: attempt.trim() },
+          body: {
+            content: content.trim(),
+            attempt: attempt.trim(),
+            photo_ids: photoId ? [photoId] : [],
+          },
         },
       )
       if (data) onCreated(data)
@@ -175,6 +183,23 @@ export function AskQuestion({
           disabled={busy}
           onChange={(event) => setContent(event.target.value)}
         />
+        {photoId && (
+          <p role="status" className="text-muted-foreground text-sm">
+            已收到题目图片，模型会结合原图理解。
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                setPhotoId(null)
+                setDoubts([])
+              }}
+            >
+              移除图片
+            </Button>
+          </p>
+        )}
         {doubts.length > 0 && (
           <div role="status" className="bg-muted rounded-md p-3 text-sm">
             <p>请核对识别结果，必要时修改：</p>
@@ -206,7 +231,7 @@ export function AskQuestion({
       </div>
 
       {error && <ErrorState error={error.error} title={error.title} />}
-      <Button type="submit" disabled={busy || !content.trim()}>
+      <Button type="submit" disabled={busy || (!content.trim() && !photoId)}>
         {sending ? '提交中…' : '提问'}
       </Button>
     </form>

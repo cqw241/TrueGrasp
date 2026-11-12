@@ -148,13 +148,15 @@ shadcn/ui 组件用 `npx shadcn@latest add <组件>` 添加到 `components/ui/`�
 | 位置 | 内容 |
 |---|---|
 | `components/student/task-session.tsx` | 一个任务的对话：`GET /api/tasks/{id}/messages` 的记录，加上正在生成的回复。`token` 事件逐段拼到临时气泡，`message_done` 后重新拉取对话、清掉气泡。`ChatTurn.hint_level`（1–3）和 `solution` 显示为“提示 n/3 · 层级”“完整解答” |
-| `components/math/task-answer.tsx` | 作答区：公式输入、拍照作答。识别结果 `doubts` 为空且学生还没写答案时直接提交进入诊断；有疑问时列出疑问，学生核对后再提交。T06 的 `requires_confirmation` 恒为真，所以这里只看 `doubts` |
-| `components/student/ask-question.tsx` | 主动提问：输入或拍下题目，可附上自己的尝试，提交后打开新建的 `question` 任务，提示在该任务的对话里展示 |
+| `components/math/task-answer.tsx` | 作答区：公式输入、拍照作答。识别结果 `doubts` 为空且学生还没写答案时直接提交进入诊断；有疑问时列出疑问，学生核对后再提交。T06 的 `requires_confirmation` 恒为真，所以这里只看 `doubts`。主动提问任务里同一区域可补拍题目或追问图片，原图随消息交给模型 |
+| `components/student/ask-question.tsx` | 主动提问：输入或拍下题目，可附上自己的尝试，提交后打开新建的 `question` 任务，提示在该任务的对话里展示；识别不清时仍可只提交原图 |
 | `components/student/progress.tsx` | 个人进度：各知识点掌握状态按讲分组，以及最近的学习时间线；收到本人的 `mastery_changed` 时刷新 |
 
-- `POST /api/students/{id}/questions` 接收题目与可选的尝试或卡点，核验模型解题结果后返回 `question` 任务。当前支持 `verify_item` 能核验的题型；条件不全或无法核验时返回 422，请学生补充题目。
-- 可核验的错误答案进入诊断追问；只有卡点时先追问具体步骤。三层提示通过 `hint_level` 标注，用完仍未解出时才发送 `solution`。结案触发规划 Agent 安排同类独立验证，账本记录提问，近七天同知识点的重复提问进入规划上下文。
-- `POST /api/students/{id}/question-photo` 识别题目照片，返回 `Transcription`，不创建提问。它和作答照片共用 `_transcribe_upload`（格式、大小、解码检查与视觉模型配置），只是不检查作答轮次。
+主动提问（T15，已接通）：
+
+- `POST /api/students/{id}/questions`，请求体 `QuestionCreate {content, attempt, photo_ids}`。先创建 `Task(type=question)` 和占位题目，模型理解/归类放到任务第一轮；暂时无法归类时使用 `pending.unclassified`，证明、微分方程等没有可重算 `ItemSpec` 的题目照常进入对话。图片模糊或条件缺失时直接回复具体疑问，不因结构化失败返回 422。
+- `POST /api/students/{id}/question-photo` 识别题目照片并保存原图，返回 `QuestionPhotoResult {latex, doubts, requires_confirmation, photo_id}`；识别为空也返回 200 和具体 `doubts`。`POST /api/tasks/{id}/question-photo` 为进行中的提问补图。后续消息用 `MessageCreate {content, answering_item_id, photo_ids}`，模型会读取原图。
+- 普通追问、解释上一条提示、补图或更正条件不写作答证据、不推进提示层级；只有实际尝试按 `AttemptReview.intent` 进入判分。工具能重算时优先用工具，否则按 rubric 由模型评阅并记录 `judged_by=model`；第 4 层完整解答后仍由独立验证 Agent 出新题。
 
 ## T12 教师驾驶舱
 

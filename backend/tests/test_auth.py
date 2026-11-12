@@ -111,6 +111,7 @@ def test_roles_objects_and_csrf(app_client):
     assert client.post("/api/tasks/2/start").status_code == 404
     assert client.get("/api/tasks/2/messages").status_code == 404
     assert client.post("/api/tasks/2/answer-photo?item_id=x&turn=0").status_code == 404
+    assert client.post("/api/tasks/2/question-photo").status_code == 404
     assert client.get("/api/tasks/2/diagnosis").status_code == 404
     assert client.get("/api/evidence/1").status_code == 200
     assert client.get("/api/evidence/2").status_code == 404

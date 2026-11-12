@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import random
+import unicodedata
 from itertools import permutations
 
 import sympy as sp
@@ -15,6 +16,12 @@ from app.contracts.enums import EquivalenceMode, Operation
 from app.contracts.values import SLIP, ItemSpec, LaTeX, Prediction
 from app.contracts.verify import AnswerGroup, Distinctness, Equivalence, ItemCheck
 from app.verify.parsing import expression_syntax, parse_answer, parse_expr, symbol
+
+
+def stem_fingerprint(stem: str) -> str:
+    """Stable fingerprint for items without an ItemSpec (proofs, text, mixed answers)."""
+    normalized = unicodedata.normalize("NFKC", stem).casefold()
+    return hashlib.sha256("".join(normalized.split()).encode()).hexdigest()
 
 
 def _real_value(expr: sp.Expr) -> float | None:
@@ -245,14 +252,19 @@ class SympyMathTools:
         fixed = {symbol(name): sp.Symbol(alias, real=True) for name, alias in aliases.items()}
         canonical["variables"] = [aliases[name] for name in variables]
 
-        formulas = [sp.simplify(parse_expr(spec.expr))]
+        def canonical_form(expr: sp.Expr) -> sp.Expr:
+            # Trig identities can hide an equivalent rewrite (sin^3 x vs the
+            # triple-angle difference); expand first so the fingerprint sees it.
+            return sp.simplify(sp.expand_trig(sp.simplify(expr)))
+
+        formulas = [canonical_form(parse_expr(spec.expr))]
         for bound in canonical["bounds"]:
             bound["var"] = aliases[bound["var"]]
             for key in ("lower", "upper"):
-                formulas.append(sp.simplify(parse_expr(bound[key])))
+                formulas.append(canonical_form(parse_expr(bound[key])))
         finite_limit = spec.limit_point not in (None, "oo", "-oo")
         if finite_limit:
-            formulas.append(sp.simplify(parse_expr(spec.limit_point)))
+            formulas.append(canonical_form(parse_expr(spec.limit_point)))
 
         # Unbound symbols (e.g. y in a partial derivative by x) have no declared order.
         # Try all labelings for ordinary exercises; cap the work for oversized model output.

@@ -50,7 +50,7 @@ from app.contracts.events import (
 )
 from app.contracts.knowledge import KnowledgeGraph
 from app.contracts.llm import ChatMessage
-from app.contracts.values import SLIP
+from app.contracts.values import PENDING_KNOWLEDGE_POINT_ID, SLIP
 from app.ledger.queries import goal_revision
 from app.ledger.service import append_evidence, escalate, escalation_is_eligible, start_tutoring
 from app.orchestration.bus import EventBus
@@ -64,6 +64,7 @@ from app.orchestration.storage import (
     TeacherTaskControl,
     init_storage,
     matches_teacher_override,
+    question_photo_urls,
     queue_work,
     record_exposure,
     teacher_has_student,
@@ -446,8 +447,17 @@ class Orchestrator:
         teaching_date: date | None = None,
     ):
         task = self._check_task(task_id)
-        if task.type == TaskType.QUESTION and not body.content.strip():
-            raise OrchestrationError(422, "请写下你的尝试或卡点")
+        if task.type == TaskType.QUESTION and not body.content.strip() and not body.photo_ids:
+            raise OrchestrationError(422, "请写下你的尝试、卡点或补充题目图片")
+        if task.type != TaskType.QUESTION and body.photo_ids:
+            raise OrchestrationError(422, "只有主动提问支持图片回复")
+        if body.photo_ids:
+            with Session(self.engine) as session:
+                try:
+                    question_photo_urls(session, task.student_id, body.photo_ids, task_id=task_id)
+                except ValueError as exc:
+                    raise OrchestrationError(422, str(exc)) from exc
+                session.commit()
         snapshot = await self.graph.aget_state(self._config(f"task:{task_id}"))
         if task.due_date is not None and task.due_date > (
             teaching_date or self._task_date(task, snapshot)
@@ -590,7 +600,7 @@ class Orchestrator:
             prompt=prompt,
             stem=stem,
             turn=len(messages),
-            accepts_text=snapshot.values.get("phase") == "question",
+            accepts_text=task.type == TaskType.QUESTION,
         )
 
     async def _run_task(self, key: str, inp: RunState | Command | None) -> None:
@@ -859,9 +869,9 @@ class Orchestrator:
                 student_id=task.student_id,
                 knowledge_point_id=task.knowledge_point_id,
                 error_evidence_id=error.id if error else None,
-                allowed_backtrack_ids=[
-                    point.id for point in self.knowledge.ancestors(task.knowledge_point_id)
-                ],
+                allowed_backtrack_ids=[]
+                if task.knowledge_point_id == PENDING_KNOWLEDGE_POINT_ID
+                else [point.id for point in self.knowledge.ancestors(task.knowledge_point_id)],
                 round=task.round,
             )
         incoming = state.get("incoming_message")
@@ -886,8 +896,7 @@ class Orchestrator:
                 record_exposure(session, task.student_id, task.id, item)
                 shown = list(dict.fromkeys([*shown, item.id]))
             if turn.outcome == TutorOutcome.REQUEST_VERIFICATION:
-                if not turn.confirmed_misconception_ids:
-                    raise ValueError("申请验证时必须给出已确认错因，偶发失误使用 slip")
+                # Empty means the tutor continued with a tentative cause; verify generically.
                 task.misconception_ids = turn.confirmed_misconception_ids
             self._queue_task(session, state)
             session.commit()
@@ -970,10 +979,11 @@ class Orchestrator:
 
     def accept_input(self, state: RunState) -> dict:
         message = MessageCreate.model_validate(state["incoming_message"])
+        content = message.content or ("（补充了题目图片）" if message.photo_ids else "")
         return {
             "messages": [
                 *state["messages"],
-                ChatTurn(role="user", content=message.content).model_dump(mode="json"),
+                ChatTurn(role="user", content=content).model_dump(mode="json"),
             ]
         }
 
@@ -1047,7 +1057,11 @@ class Orchestrator:
             task = self._task(session, state["task_id"])
             task.status = TaskStatus.DONE
             result = {"awaiting_item_id": None, "incoming_message": None}
-            if task.type == TaskType.QUESTION:
+            if (
+                task.type == TaskType.QUESTION
+                and task.evidence_ids
+                and task.knowledge_point_id != PENDING_KNOWLEDGE_POINT_ID
+            ):
                 event = make_event(
                     AnswerSubmitted(task_id=task.id, evidence_id=task.evidence_ids[0]),
                     date.fromisoformat(state["teaching_date"]),

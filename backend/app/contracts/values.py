@@ -17,6 +17,10 @@ SymPyExpr = Annotated[str, Field(description="SymPy 语法表达式，如 sin(3*
 SLIP = "slip"
 """“偶发失误”假设的错因 ID。它不在错因库中，预测答案就是正确答案。"""
 
+PENDING_KNOWLEDGE_POINT_ID = "pending.unclassified"
+"""学生提问暂时无法归类时使用；不是课程知识点，不计入内容统计和教学目标。"""
+PENDING_KNOWLEDGE_POINT_NAME = "待归类（待教师确认）"
+
 
 class Bound(BaseModel):
     var: str

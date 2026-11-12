@@ -1284,7 +1284,7 @@
             }
           },
           "422": {
-            "description": "参数无效、图片无法解码或未识别到内容",
+            "description": "参数无效或图片无法解码",
             "content": {
               "application/json": {
                 "schema": {
@@ -1352,7 +1352,7 @@
           "student"
         ],
         "summary": "Transcribe Question Photo",
-        "description": "识别学生要提问的题目照片，返回草稿供学生校对，不创建提问。",
+        "description": "识别学生要提问的题目照片，保存原图并返回草稿，不创建提问。",
         "operationId": "transcribe_question_photo_api_students__student_id__question_photo_post",
         "security": [
           {
@@ -1376,7 +1376,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Transcription"
+                  "$ref": "#/components/schemas/QuestionPhotoResult"
                 }
               }
             }
@@ -1412,7 +1412,145 @@
             }
           },
           "422": {
-            "description": "参数无效、图片无法解码或未识别到内容",
+            "description": "参数无效或图片无法解码",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/HTTPValidationError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PhotoUploadError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "模型识别失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "图片识别服务未配置",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/question-photo": {
+      "post": {
+        "tags": [
+          "student"
+        ],
+        "summary": "Transcribe Task Question Photo",
+        "description": "为主动提问补充题目图片；原图保存到当前任务，随下一条消息交给模型。",
+        "operationId": "transcribe_task_question_photo_api_tasks__task_id__question_photo_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionPhotoResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "任务不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "任务不是进行中的主动提问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "照片超过大小限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "不支持该图片类型",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploadError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参数无效或图片无法解码",
             "content": {
               "application/json": {
                 "schema": {
@@ -3145,7 +3283,8 @@
         "properties": {
           "content": {
             "type": "string",
-            "title": "Content"
+            "title": "Content",
+            "default": ""
           },
           "answering_item_id": {
             "anyOf": [
@@ -3157,12 +3296,17 @@
               }
             ],
             "title": "Answering Item Id"
+          },
+          "photo_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Photo Ids"
           }
         },
         "type": "object",
-        "required": [
-          "content"
-        ],
         "title": "MessageCreate"
       },
       "MessageDone": {
@@ -3396,21 +3540,57 @@
         "properties": {
           "content": {
             "type": "string",
-            "minLength": 1,
-            "title": "Content"
+            "title": "Content",
+            "default": ""
           },
           "attempt": {
             "type": "string",
             "title": "Attempt",
             "default": ""
+          },
+          "photo_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Photo Ids"
+          }
+        },
+        "type": "object",
+        "title": "QuestionCreate",
+        "description": "学生主动提问：题目文字/LaTeX 或题图，可附上自己的尝试或卡住的位置。"
+      },
+      "QuestionPhotoResult": {
+        "properties": {
+          "latex": {
+            "type": "string",
+            "title": "Latex"
+          },
+          "doubts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Doubts"
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "title": "Requires Confirmation",
+            "default": true
+          },
+          "photo_id": {
+            "type": "string",
+            "title": "Photo Id"
           }
         },
         "type": "object",
         "required": [
-          "content"
+          "latex",
+          "photo_id"
         ],
-        "title": "QuestionCreate",
-        "description": "学生主动提问：题目（文字或 LaTeX），可附上自己的尝试或卡住的位置。"
+        "title": "QuestionPhotoResult",
+        "description": "题目照片识别结果；原图已保存，可随提问或追问再次交给模型查看。"
       },
       "ResolveEscalation": {
         "properties": {

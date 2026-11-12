@@ -502,9 +502,29 @@ export interface paths {
     put?: never
     /**
      * Transcribe Question Photo
-     * @description 识别学生要提问的题目照片，返回草稿供学生校对，不创建提问。
+     * @description 识别学生要提问的题目照片，保存原图并返回草稿，不创建提问。
      */
     post: operations['transcribe_question_photo_api_students__student_id__question_photo_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/tasks/{task_id}/question-photo': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Transcribe Task Question Photo
+     * @description 为主动提问补充题目图片；原图保存到当前任务，随下一条消息交给模型。
+     */
+    post: operations['transcribe_task_question_photo_api_tasks__task_id__question_photo_post']
     delete?: never
     options?: never
     head?: never
@@ -1189,10 +1209,15 @@ export interface components {
       | 'escalated'
     /** MessageCreate */
     MessageCreate: {
-      /** Content */
+      /**
+       * Content
+       * @default
+       */
       content: string
       /** Answering Item Id */
       answering_item_id?: string | null
+      /** Photo Ids */
+      photo_ids?: string[]
     }
     /**
      * MessageDone
@@ -1302,16 +1327,38 @@ export interface components {
     }
     /**
      * QuestionCreate
-     * @description 学生主动提问：题目（文字或 LaTeX），可附上自己的尝试或卡住的位置。
+     * @description 学生主动提问：题目文字/LaTeX 或题图，可附上自己的尝试或卡住的位置。
      */
     QuestionCreate: {
-      /** Content */
+      /**
+       * Content
+       * @default
+       */
       content: string
       /**
        * Attempt
        * @default
        */
       attempt: string
+      /** Photo Ids */
+      photo_ids?: string[]
+    }
+    /**
+     * QuestionPhotoResult
+     * @description 题目照片识别结果；原图已保存，可随提问或追问再次交给模型查看。
+     */
+    QuestionPhotoResult: {
+      /** Latex */
+      latex: string
+      /** Doubts */
+      doubts?: string[]
+      /**
+       * Requires Confirmation
+       * @default true
+       */
+      requires_confirmation: boolean
+      /** Photo Id */
+      photo_id: string
     }
     /** ResolveEscalation */
     ResolveEscalation: {
@@ -1615,6 +1662,7 @@ export type PhotoUploadError = components['schemas']['PhotoUploadError']
 export type Prediction = components['schemas']['Prediction']
 export type ProbeRecord = components['schemas']['ProbeRecord']
 export type QuestionCreate = components['schemas']['QuestionCreate']
+export type QuestionPhotoResult = components['schemas']['QuestionPhotoResult']
 export type ResolveEscalation = components['schemas']['ResolveEscalation']
 export type Student = components['schemas']['Student']
 export type TakeoverRequest = components['schemas']['TakeoverRequest']
@@ -2468,7 +2516,7 @@ export interface operations {
           'application/json': components['schemas']['PhotoUploadError']
         }
       }
-      /** @description 参数无效、图片无法解码或未识别到内容 */
+      /** @description 参数无效或图片无法解码 */
       422: {
         headers: {
           [name: string]: unknown
@@ -2522,7 +2570,7 @@ export interface operations {
           [name: string]: unknown
         }
         content: {
-          'application/json': components['schemas']['Transcription']
+          'application/json': components['schemas']['QuestionPhotoResult']
         }
       }
       /** @description 学生不存在 */
@@ -2552,7 +2600,100 @@ export interface operations {
           'application/json': components['schemas']['PhotoUploadError']
         }
       }
-      /** @description 参数无效、图片无法解码或未识别到内容 */
+      /** @description 参数无效或图片无法解码 */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json':
+            | components['schemas']['HTTPValidationError']
+            | components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 模型识别失败 */
+      502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 图片识别服务未配置 */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+    }
+  }
+  transcribe_task_question_photo_api_tasks__task_id__question_photo_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        task_id: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'image/jpeg': string
+        'image/png': string
+        'image/webp': string
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['QuestionPhotoResult']
+        }
+      }
+      /** @description 任务不存在 */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 任务不是进行中的主动提问 */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 照片超过大小限制 */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 不支持该图片类型 */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PhotoUploadError']
+        }
+      }
+      /** @description 参数无效或图片无法解码 */
       422: {
         headers: {
           [name: string]: unknown

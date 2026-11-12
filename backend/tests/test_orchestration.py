@@ -36,7 +36,7 @@ from app.contracts.values import Prediction
 from app.db import init_db, make_engine
 from app.main import create_app
 from app.orchestration import EventBus, OrchestrationError, Orchestrator, build_verifier_input
-from app.orchestration.storage import PendingWork
+from app.orchestration.storage import ItemExposure, PendingWork
 
 TODAY = date(2026, 9, 7)
 pytestmark = pytest.mark.anyio
@@ -229,6 +229,7 @@ def dependencies(business):
         "tutor": StubTutor(),
         "verifier": SpyVerifier(),
         "knowledge": StubKnowledge(),
+        "questions": None,
     }
 
 
@@ -669,11 +670,114 @@ async def test_question_photo_and_unconfigured_question_service(business, tmp_pa
         assert (await client.post(path, headers=headers, content=photo[:8])).status_code == 422
         result = await client.post(path, headers=headers, content=photo)
         assert result.json()["latex"] == r"\int x\,dx"
+        assert result.json()["photo_id"]
         response = await client.post("/api/students/A/questions", json={"content": "x"})
         assert response.status_code == 501
         assert (
             await client.post("/api/students/A/questions", json={"content": ""})
         ).status_code == 422
+
+
+async def test_question_photo_allows_empty_latex(business, tmp_path):
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.llm.vision import Transcription
+
+    class Vision:
+        async def generate(self, messages, output, tools=None):
+            return Transcription(latex="", doubts=["右上角看不清"])
+
+    app = create_app(
+        engine=business,
+        checkpoint_path=str(tmp_path / "question-empty.db"),
+        orchestration_dependencies={
+            "planner": None,
+            "tutor": None,
+            "verifier": None,
+            "questions": None,
+        },
+    )
+    app.state.photo_llm = Vision()
+    buffer = BytesIO()
+    Image.new("RGB", (2, 2)).save(buffer, "PNG")
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        result = await client.post(
+            "/api/students/A/question-photo",
+            headers={"Content-Type": "image/png"},
+            content=buffer.getvalue(),
+        )
+        assert result.status_code == 200
+        assert result.json()["latex"] == ""
+        assert result.json()["doubts"] == ["右上角看不清"]
+        assert result.json()["photo_id"]
+
+
+async def test_different_questions_with_same_answer_are_not_blocked(business):
+    from fastapi import HTTPException
+
+    from app.contracts.values import ItemSpec
+    from app.orchestration.questions import _reject_open_verification
+
+    with Session(business) as session:
+        task = Task(
+            type=TaskType.VERIFICATION,
+            student_id="A",
+            knowledge_point_id="kp",
+            created_on=TODAY,
+        )
+        session.add(task)
+        session.flush()
+        protected = Item(
+            id="protected-open",
+            knowledge_point_id="kp",
+            purpose=ItemPurpose.VERIFICATION,
+            source=ItemSource.SEED,
+            stem="求 lim sin(x)/x",
+            spec=ItemSpec(operation="limit", expr="sin(x)/x", variables=["x"], limit_point="0"),
+            answer="1",
+            fingerprint="fp-protected",
+        )
+        asked = Item(
+            id="asked-integral",
+            knowledge_point_id="kp",
+            purpose=ItemPurpose.PRACTICE,
+            source=ItemSource.GENERATED,
+            stem="求 ∫_0^1 2x dx",
+            spec=ItemSpec(
+                operation="definite_integral",
+                expr="2*x",
+                bounds=[{"var": "x", "lower": "0", "upper": "1"}],
+            ),
+            answer="1",
+            fingerprint="fp-asked",
+        )
+        session.add_all([protected, asked])
+        session.flush()
+        session.add(
+            ItemExposure(
+                student_id="A",
+                fingerprint="fp-protected",
+                task_id=task.id,
+                item_id=protected.id,
+            )
+        )
+        session.commit()
+        # Same answer, different operation: allowed.
+        _reject_open_verification(session, "A", asked.stem, asked)
+        with pytest.raises(HTTPException):
+            _reject_open_verification(session, "A", protected.stem)
+        copy = asked.model_copy(
+            update={"id": "asked-copy", "stem": "换一种写法", "fingerprint": "fp-protected"}
+        )
+        session.add(copy)
+        session.flush()
+        with pytest.raises(HTTPException):
+            _reject_open_verification(session, "A", copy.stem, copy)
 
 
 async def test_existing_verification_works_and_resumes_without_planner(business, tmp_path):
@@ -721,7 +825,16 @@ async def test_existing_verification_works_and_resumes_without_planner(business,
 
 
 async def test_unconfigured_agents_and_sse_http(business, tmp_path):
-    app = create_app(engine=business, checkpoint_path=str(tmp_path / "checkpoint.db"))
+    app = create_app(
+        engine=business,
+        checkpoint_path=str(tmp_path / "checkpoint.db"),
+        orchestration_dependencies={
+            "planner": None,
+            "tutor": None,
+            "verifier": None,
+            "questions": None,
+        },
+    )
     with Session(business) as session:
         session.add(
             Task(type=TaskType.TUTORING, student_id="A", knowledge_point_id="kp", created_on=TODAY)

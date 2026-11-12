@@ -119,8 +119,9 @@ function AnswerEditor({
   onRefresh: () => Promise<void>
 }) {
   const { item_id: itemId, turn = 0 } = target
-  const acceptsText = target.accepts_text || !itemId
+  const acceptsText = target.accepts_text
   const [answer, setAnswer] = useState('')
+  const [photoIds, setPhotoIds] = useState<string[]>([])
   const [preview, setPreview] = useState('')
   const [doubts, setDoubts] = useState<string[] | null>(null)
   const [replacement, setReplacement] = useState<{
@@ -170,33 +171,51 @@ function AnswerEditor({
     // （技术文档第 8 节第 5 条）。T06 的 requires_confirmation 恒为真，这里只看 doubts。
     let direct: string | null = null
     try {
-      const { data } = await fetchClient.POST(
-        '/api/tasks/{task_id}/answer-photo',
-        {
-          params: {
-            path: { task_id: taskId },
-            query: { item_id: itemId, turn },
+      if (acceptsText) {
+        // 主动提问的追问：保存原图，模型会结合图片和文字继续交流，不当作公式作答。
+        const { data } = await fetchClient.POST(
+          '/api/tasks/{task_id}/question-photo',
+          {
+            params: { path: { task_id: taskId } },
+            headers: { 'Content-Type': file.type },
+            signal: controller.signal,
+            body: '',
+            bodySerializer: () => file,
           },
-          headers: { 'Content-Type': file.type },
-          signal: controller.signal,
-          body: '',
-          bodySerializer: () => file,
-        },
-      )
-      if (!controller.signal.aborted && data) {
-        if (answer.trim()) {
-          setReplacement({ latex: data.latex, doubts: data.doubts })
-        } else if (data.doubts.length === 0) {
-          setAnswer(data.latex)
-          direct = data.latex
-        } else {
-          setAnswer(data.latex)
-          setDoubts(data.doubts)
+        )
+        if (!controller.signal.aborted && data) {
+          setPhotoIds([data.photo_id])
+          setDoubts(data.doubts ?? [])
+        }
+      } else {
+        const { data } = await fetchClient.POST(
+          '/api/tasks/{task_id}/answer-photo',
+          {
+            params: {
+              path: { task_id: taskId },
+              query: { item_id: itemId, turn },
+            },
+            headers: { 'Content-Type': file.type },
+            signal: controller.signal,
+            body: '',
+            bodySerializer: () => file,
+          },
+        )
+        if (!controller.signal.aborted && data) {
+          if (answer.trim()) {
+            setReplacement({ latex: data.latex, doubts: data.doubts })
+          } else if (data.doubts.length === 0) {
+            setAnswer(data.latex)
+            direct = data.latex
+          } else {
+            setAnswer(data.latex)
+            setDoubts(data.doubts)
+          }
         }
       }
     } catch (error) {
       if (!controller.signal.aborted) {
-        if (error instanceof ApiError && error.status === 409) {
+        if (error instanceof ApiError && error.status === 409 && !acceptsText) {
           setPhotoExpired(true)
           await onRefresh()
         } else {
@@ -218,11 +237,19 @@ function AnswerEditor({
     setPreview('')
     setUploadError(null)
     setReplacement(null)
+    setPhotoIds([])
   }
 
   async function submit(latex = answer) {
     const content = latex.trim()
-    if (!content || disabled || upload.current || submission.current) return
+    if (
+      (!content && photoIds.length === 0) ||
+      disabled ||
+      upload.current ||
+      submission.current
+    ) {
+      return
+    }
     submission.current = true
     setSending(true)
     setSendError(null)
@@ -232,6 +259,7 @@ function AnswerEditor({
         body: {
           content,
           answering_item_id: itemId ?? null,
+          photo_ids: photoIds,
         },
       })
       await onRefresh()
@@ -379,7 +407,10 @@ function AnswerEditor({
         />
       )}
       {sendError && <ErrorState error={sendError} title="作答未提交" />}
-      <Button type="submit" disabled={busy || !answer.trim()}>
+      <Button
+        type="submit"
+        disabled={busy || (!answer.trim() && !photoIds.length)}
+      >
         {sending ? '提交中…' : doubts !== null ? '确认并提交' : '提交'}
       </Button>
     </form>

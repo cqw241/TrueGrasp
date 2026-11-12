@@ -69,6 +69,7 @@ def test_t14_uses_actual_waiting_id_and_rejects_other_question(plan):
     assert plan.answer_for(a.key, item).model_dump() == {
         "content": a.student_answer,
         "answering_item_id": "real.generated.item.123",
+        "photo_ids": [],
     }
     item.spec.expr = "sin(31*x)**3"
     with pytest.raises(ValueError, match="operator input required"):
@@ -129,7 +130,7 @@ def test_cli_batches_and_csv_raw_inputs(plan, capsys, monkeypatch):
     assert cli.main(["batch", "precheck_ch9"]) == 0
     batch = json.loads(capsys.readouterr().out)
     assert len(batch) == 37
-    assert set(batch[0]["message"]) == {"content", "answering_item_id"}
+    assert set(batch[0]["message"]) == {"content", "answering_item_id", "photo_ids"}
     assert cli.main(["homework-csv"]) == 0
     import csv
     import io

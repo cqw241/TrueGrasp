@@ -3,8 +3,9 @@
 与对应业务变更使用同一事务；不属于 T02 的实体或对外契约。
 """
 
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import JSON, Column, Engine
 from sqlalchemy.dialects.sqlite import insert
@@ -68,6 +69,19 @@ class TeacherTaskControl(SQLModel, table=True):
     note: str = ""
 
 
+class QuestionPhoto(SQLModel, table=True):
+    """原始题目图片，只供该学生及其题目会话的模型调用读取。"""
+
+    __tablename__ = "question_photo"
+
+    id: str = Field(primary_key=True)
+    student_id: str = Field(foreign_key="student.id", index=True)
+    task_id: int | None = Field(default=None, foreign_key="task.id", index=True)
+    data_url: str
+    created_on: date
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class ClassTaskOverride(SQLModel, table=True):
     """Append-only record for a class task, which has no student for an Evidence row."""
 
@@ -127,6 +141,7 @@ def init_storage(engine: Engine) -> None:
             PlanningTaskContext.__table__,
             TeacherTaskControl.__table__,
             ClassTaskOverride.__table__,
+            QuestionPhoto.__table__,
         ],
     )
 
@@ -159,3 +174,82 @@ def record_exposure(session: Session, student_id: str, task_id: int, item: Item)
         exposure = session.get(ItemExposure, (student_id, item.fingerprint))
         if exposure.task_id != task_id or exposure.item_id != item.id:
             raise VerificationExposureConflict("验证题的指纹与该学生已展示的题目重复")
+
+
+def create_question_photo(
+    session: Session,
+    student_id: str,
+    data_url: str,
+    *,
+    task_id: int | None = None,
+    created_on: date | None = None,
+) -> QuestionPhoto:
+    photo = QuestionPhoto(
+        id=uuid4().hex,
+        student_id=student_id,
+        task_id=task_id,
+        data_url=data_url,
+        created_on=created_on or date.today(),
+    )
+    session.add(photo)
+    session.flush()
+    return photo
+
+
+def bind_question_photos(
+    session: Session, student_id: str, task_id: int, photo_ids: list[str]
+) -> list[QuestionPhoto]:
+    """Attach unbound photos to a task, rejecting missing or foreign photos."""
+    photos = []
+    for photo_id in dict.fromkeys(photo_ids):
+        photo = session.get(QuestionPhoto, photo_id)
+        if photo is None or photo.student_id != student_id:
+            raise ValueError("题目图片不存在或不属于当前学生")
+        if photo.task_id not in (None, task_id):
+            raise ValueError("题目图片已用于其他提问")
+        photo.task_id = task_id
+        session.add(photo)
+        photos.append(photo)
+    session.flush()
+    return photos
+
+
+def question_photo_urls(
+    session: Session,
+    student_id: str,
+    photo_ids: list[str],
+    *,
+    task_id: int | None = None,
+) -> list[str]:
+    urls = []
+    for photo_id in dict.fromkeys(photo_ids):
+        photo = session.get(QuestionPhoto, photo_id)
+        if photo is None or photo.student_id != student_id:
+            raise ValueError("题目图片不存在或不属于当前学生")
+        if photo.task_id not in (None, task_id):
+            raise ValueError("题目图片不属于当前题目")
+        if task_id is not None and photo.task_id is None:
+            photo.task_id = task_id
+            session.add(photo)
+        urls.append(photo.data_url)
+    return urls
+
+
+def task_question_photo_urls(
+    session: Session, student_id: str, task_id: int, *, limit: int = 4
+) -> list[str]:
+    rows = list(
+        session.exec(
+            select(QuestionPhoto)
+            .where(
+                QuestionPhoto.student_id == student_id,
+                QuestionPhoto.task_id == task_id,
+            )
+            .order_by(QuestionPhoto.created_at, QuestionPhoto.id)
+        )
+    )
+    if len(rows) > limit:
+        # Always keep the original problem photo, then the most recent supplements.
+        kept = rows[:1] + (rows[-(limit - 1) :] if limit > 1 else [])
+        rows = kept
+    return [row.data_url for row in rows]
