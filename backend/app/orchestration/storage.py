@@ -3,17 +3,19 @@
 与对应业务变更使用同一事务；不属于 T02 的实体或对外契约。
 """
 
+from datetime import date
 from typing import Any
 
 from sqlalchemy import JSON, Column, Engine
 from sqlalchemy.dialects.sqlite import insert
-from sqlmodel import Field, Session, SQLModel
+from sqlmodel import Field, Session, SQLModel, select
 
-from app.contracts.entities import Item
-from app.contracts.enums import ItemPurpose
+from app.contracts.entities import Item, Task
+from app.contracts.enums import ItemPurpose, TaskStatus, TaskType
 
 # Persisted in Task.reason; keep this marker stable for existing backtrack tasks.
 BACKTRACK_REASON_PREFIX = "先修回溯："
+QUESTION_FOLLOWUP = "主动提问后的同类题："
 
 
 class VerificationExposureConflict(ValueError):
@@ -55,6 +57,66 @@ class PlanningTaskContext(SQLModel, table=True):
     issue_misconception_id: str | None = None
 
 
+class TeacherTaskControl(SQLModel, table=True):
+    """Durable teacher control separate from the student's conversation checkpoint."""
+
+    __tablename__ = "teacher_task_control"
+
+    task_id: int = Field(primary_key=True, foreign_key="task.id")
+    taken_over: bool = False
+    overridden: bool = False
+    note: str = ""
+
+
+class ClassTaskOverride(SQLModel, table=True):
+    """Append-only record for a class task, which has no student for an Evidence row."""
+
+    __tablename__ = "class_task_override"
+
+    id: int | None = Field(default=None, primary_key=True)
+    task_id: int = Field(foreign_key="task.id", index=True)
+    note: str
+    action: str
+    teaching_date: date
+
+
+def teacher_has_student(session: Session, student_id: str | None) -> bool:
+    if student_id is None:
+        return False
+    return (
+        session.exec(
+            select(TeacherTaskControl.task_id)
+            .join(Task, TeacherTaskControl.task_id == Task.id)
+            .where(Task.student_id == student_id, TeacherTaskControl.taken_over)
+        ).first()
+        is not None
+    )
+
+
+def matches_teacher_override(session: Session, old: Task, planned, context: dict | None) -> bool:
+    if old.status == TaskStatus.DONE or (
+        old.type,
+        old.student_id,
+        old.knowledge_point_id,
+        old.round,
+    ) != (planned.type, planned.student_id, planned.knowledge_point_id, planned.round):
+        return False
+    if old.type not in (TaskType.CLASS_REVIEW, TaskType.PRECHECK):
+        if old.reason.startswith(QUESTION_FOLLOWUP) != planned.reason.startswith(QUESTION_FOLLOWUP):
+            return False
+        # The override covers the evidence behind this task. A new observation can
+        # justify new work, even when the student, point and round are unchanged.
+        return set(planned.evidence_ids) <= set(old.evidence_ids)
+    if context is None:
+        return True
+    prior = session.get(PlanningTaskContext, old.id)
+    if prior is None:
+        return True
+    if old.type == TaskType.CLASS_REVIEW:
+        return prior.issue_misconception_id == context["issue_misconception_id"]
+    return prior.context_knowledge_point_id in (None, context["context_knowledge_point_id"])
+
+
 def init_storage(engine: Engine) -> None:
     SQLModel.metadata.create_all(
         engine,
@@ -63,6 +125,8 @@ def init_storage(engine: Engine) -> None:
             PendingWork.__table__,
             ItemExposure.__table__,
             PlanningTaskContext.__table__,
+            TeacherTaskControl.__table__,
+            ClassTaskOverride.__table__,
         ],
     )
 

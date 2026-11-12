@@ -15,7 +15,7 @@ from app.contracts.enums import (
     TaskType,
 )
 from app.contracts.values import SLIP
-from app.ledger.queries import current_goal
+from app.ledger.queries import current_goal, has_open_escalation, last_escalation_closure
 
 
 def protect_evidence(engine: Engine) -> None:
@@ -62,7 +62,9 @@ def _set_state(
 
 
 def start_tutoring(session: Session, task: Task, teaching_date: date) -> None:
-    if task.type == TaskType.TUTORING:
+    if task.type == TaskType.TUTORING and not has_open_escalation(
+        session, task.student_id, task.knowledge_point_id
+    ):
         _set_state(
             session,
             task.student_id,
@@ -73,11 +75,13 @@ def start_tutoring(session: Session, task: Task, teaching_date: date) -> None:
         )
 
 
-def escalate(session: Session, task: Task, teaching_date: date) -> None:
-    """Only an actual persisted escalation decision can enter this state."""
+def escalation_is_eligible(session: Session, task: Task, *, basis: str | None = None) -> bool:
     if task.type != TaskType.ESCALATION or task.student_id is None:
-        raise ValueError("An escalation task for a student is required")
+        return False
     goal = current_goal(session, task.knowledge_point_id)
+    round_limit = goal is not None and task.round >= goal.max_rounds
+    if basis == "round_limit":
+        return round_limit
     unknown_ids = {
         m.id
         for m in session.exec(
@@ -92,7 +96,14 @@ def escalate(session: Session, task: Task, teaching_date: date) -> None:
         and e.knowledge_point_id == task.knowledge_point_id
         for eid in task.evidence_ids
     )
-    if not unmodeled and (goal is None or task.round < goal.max_rounds):
+    return unmodeled if basis == "unmodeled" else unmodeled or round_limit
+
+
+def escalate(session: Session, task: Task, teaching_date: date) -> None:
+    """Only an actual persisted escalation decision can enter this state."""
+    if task.type != TaskType.ESCALATION or task.student_id is None:
+        raise ValueError("An escalation task for a student is required")
+    if not escalation_is_eligible(session, task):
         raise ValueError("Escalation needs the goal's round limit or undecidable evidence")
     _set_state(
         session,
@@ -111,6 +122,11 @@ def append_evidence(session: Session, evidence: Evidence) -> Evidence:
     session.add(evidence)
     session.flush()
     if evidence.kind == EvidenceKind.TEACHER:
+        return evidence
+    if has_open_escalation(session, evidence.student_id, evidence.knowledge_point_id):
+        return evidence
+    closed_at = last_escalation_closure(session, evidence.student_id, evidence.knowledge_point_id)
+    if closed_at and (evidence.teaching_date, evidence.id) <= closed_at:
         return evidence
     mastery = session.get(Mastery, (evidence.student_id, evidence.knowledge_point_id))
     if mastery is not None and evidence.teaching_date < mastery.updated_on:
@@ -162,10 +178,7 @@ def append_evidence(session: Session, evidence: Evidence) -> Evidence:
         ):
             state = MasteryState.INTEGRATED
         elif (
-            (
-                mastery is None
-                or mastery.state not in (MasteryState.RELAPSED, MasteryState.ESCALATED)
-            )
+            (mastery is None or mastery.state != MasteryState.RELAPSED)
             and evidence.task_id is not None
             and evidence.dimension
             in (
@@ -210,6 +223,8 @@ def append_evidence(session: Session, evidence: Evidence) -> Evidence:
                 ),
                 default=(date.min, 0),
             )
+            if closed_at:
+                cutoff = max(cutoff, closed_at)
             rows = sorted(
                 (
                     row

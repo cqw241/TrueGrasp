@@ -1,7 +1,9 @@
 """Read models for planner and teacher/student views."""
 
 from collections import Counter, defaultdict
+from datetime import date
 
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.contracts.api import ClassOverview, DimensionResult, HeatCell, TimelineEntry
@@ -47,6 +49,46 @@ def current_goal(session: Session, kp_id: str | None = None) -> TeachingGoal | N
     )
 
 
+def goal_revision(session: Session) -> int:
+    """Teacher goals are append-only; their latest id versions planning policy."""
+    return session.exec(select(func.max(TeachingGoal.id))).one() or 0
+
+
+def has_open_escalation(session: Session, student_id: str, kp_id: str) -> bool:
+    return (
+        session.exec(
+            select(Task.id).where(
+                Task.student_id == student_id,
+                Task.knowledge_point_id == kp_id,
+                Task.type == TaskType.ESCALATION,
+                Task.status.in_((TaskStatus.PENDING, TaskStatus.ACTIVE)),
+            )
+        ).first()
+        is not None
+    )
+
+
+def last_escalation_closure(
+    session: Session, student_id: str, kp_id: str
+) -> tuple[date, int] | None:
+    # A teacher's resolution/cancellation is the last control record for a
+    # closed escalation. Adoption records are associated with a misconception.
+    row = session.exec(
+        select(Evidence.teaching_date, Evidence.id)
+        .join(Task, Task.id == Evidence.task_id)
+        .where(
+            Evidence.student_id == student_id,
+            Evidence.knowledge_point_id == kp_id,
+            Evidence.kind == EvidenceKind.TEACHER,
+            Evidence.matched_misconception_id == None,  # noqa: E711
+            Task.type == TaskType.ESCALATION,
+            Task.status.in_((TaskStatus.DONE, TaskStatus.CANCELLED)),
+        )
+        .order_by(Evidence.teaching_date.desc(), Evidence.id.desc())
+    ).first()
+    return (row[0], row[1]) if row else None
+
+
 def class_overview(session: Session) -> ClassOverview:
     students = session.exec(select(Student)).all()
     goal = current_goal(session)
@@ -68,7 +110,16 @@ def class_overview(session: Session) -> ClassOverview:
             )
         ):
             goal_met += 1
-    escalated = len({row.student_id for row in rows if row.state == MasteryState.ESCALATED})
+    escalated = len(
+        set(
+            session.exec(
+                select(Task.student_id).where(
+                    Task.type == TaskType.ESCALATION,
+                    Task.status.in_((TaskStatus.PENDING, TaskStatus.ACTIVE)),
+                )
+            )
+        )
+    )
     return ClassOverview(
         students=len(students),
         goal_met=goal_met,

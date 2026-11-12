@@ -51,18 +51,22 @@ from app.contracts.events import (
 from app.contracts.knowledge import KnowledgeGraph
 from app.contracts.llm import ChatMessage
 from app.contracts.values import SLIP
-from app.ledger.service import append_evidence, escalate, start_tutoring
+from app.ledger.queries import goal_revision
+from app.ledger.service import append_evidence, escalate, escalation_is_eligible, start_tutoring
 from app.orchestration.bus import EventBus
 from app.orchestration.graphs import RunState, build_graph
 from app.orchestration.inputs import build_verifier_input
-from app.orchestration.questions import QUESTION_FOLLOWUP
 from app.orchestration.storage import (
+    QUESTION_FOLLOWUP,
     NodeReceipt,
     PendingWork,
     PlanningTaskContext,
+    TeacherTaskControl,
     init_storage,
+    matches_teacher_override,
     queue_work,
     record_exposure,
+    teacher_has_student,
 )
 
 logger = logging.getLogger(__name__)
@@ -163,6 +167,8 @@ class Orchestrator:
                 raise OrchestrationError(409, f"任务已结束：{task.status}")
             if task.type not in INTERACTIVE_TYPES or task.student_id is None:
                 raise OrchestrationError(409, "该任务不接受学生交互")
+            if teacher_has_student(session, task.student_id):
+                raise OrchestrationError(409, "教师接管中，辅导暂时暂停")
             if task.type in (TaskType.TUTORING, TaskType.QUESTION):
                 self._require("planner", "tutor", "verifier", "knowledge")
                 if task.type == TaskType.QUESTION:
@@ -249,6 +255,7 @@ class Orchestrator:
         """只恢复事务中已登记的工作；缺少真实 Agent 时保留待办，不生成模拟结果。"""
         if self._closed:
             return
+        today = self.teaching_date() if self.teaching_date else None
         with Session(self.engine) as session:
             work_items = session.exec(select(PendingWork).where(PendingWork.pending)).all()
             for work in work_items:
@@ -259,6 +266,15 @@ class Orchestrator:
                     continue
                 if kind == "task":
                     task = self._task(session, int(target))
+                    if (
+                        task.status in (TaskStatus.PENDING, TaskStatus.ACTIVE)
+                        and task.due_date is not None
+                        and today is not None
+                        and task.due_date > today
+                    ):
+                        continue
+                    if teacher_has_student(session, task.student_id):
+                        continue
                     if self.verifier is None or (
                         task.type in (TaskType.TUTORING, TaskType.QUESTION)
                         and (self.planner is None or self.tutor is None or self.knowledge is None)
@@ -284,6 +300,11 @@ class Orchestrator:
                 )
         except OrchestrationError:
             # 直接调用和后台恢复可能先后处理同一工作；已经确认的工作不再重开任务。
+            if kind == "task":
+                with Session(self.engine) as session:
+                    task = self._task(session, int(target))
+                    if teacher_has_student(session, task.student_id):
+                        return
             if self._pending(key):
                 raise
 
@@ -364,6 +385,10 @@ class Orchestrator:
             if recovering:
                 await self._run_task(key, None)
                 return
+            today = self._task_date(task, snapshot)
+            teaching_date = teaching_date or today
+            if task.due_date is not None and task.due_date > max(today, teaching_date):
+                raise OrchestrationError(409, "任务尚未到期")
             if snapshot.interrupts:
                 reply = self._pending_question_reply(key)
                 if reply and reply["turn"] == len(snapshot.values["messages"]):
@@ -371,16 +396,6 @@ class Orchestrator:
                 else:
                     self._acknowledge(key)
                 return
-            if teaching_date is None:
-                teaching_date = (
-                    self.teaching_date()
-                    if self.teaching_date
-                    else date.fromisoformat(snapshot.values["teaching_date"])
-                    if snapshot.values
-                    else task.created_on
-                )
-            if task.due_date is not None and task.due_date > teaching_date:
-                raise OrchestrationError(409, "任务尚未到期")
             with Session(self.engine) as session:
                 context = session.get(PlanningTaskContext, task_id)
                 if (
@@ -416,13 +431,28 @@ class Orchestrator:
             )
             await self._run_task(key, None if snapshot.next else initial)
 
+    def _task_date(self, task: Task, snapshot) -> date:
+        if self.teaching_date:
+            return self.teaching_date()
+        value = snapshot.values.get("teaching_date")
+        return date.fromisoformat(value) if value else task.created_on
+
     async def _validate_message(
-        self, task_id: int, body: MessageCreate, *, expected_turn: int | None = None
+        self,
+        task_id: int,
+        body: MessageCreate,
+        *,
+        expected_turn: int | None = None,
+        teaching_date: date | None = None,
     ):
         task = self._check_task(task_id)
         if task.type == TaskType.QUESTION and not body.content.strip():
             raise OrchestrationError(422, "请写下你的尝试或卡点")
         snapshot = await self.graph.aget_state(self._config(f"task:{task_id}"))
+        if task.due_date is not None and task.due_date > (
+            teaching_date or self._task_date(task, snapshot)
+        ):
+            raise OrchestrationError(409, "任务尚未到期")
         if not snapshot.interrupts:
             raise OrchestrationError(409, "任务当前没有等待学生回复")
         if body.answering_item_id != snapshot.values.get("awaiting_item_id"):
@@ -441,7 +471,9 @@ class Orchestrator:
     ) -> None:
         key = f"task:{task_id}"
         async with self._lock(key):
-            snapshot = await self._validate_message(task_id, body, expected_turn=expected_turn)
+            snapshot = await self._validate_message(
+                task_id, body, expected_turn=expected_turn, teaching_date=teaching_date
+            )
             if snapshot.values["phase"] in ("question", "question_diagnosis"):
                 payload = self._persist_question_reply(key, snapshot, body, teaching_date)
                 await self._run_task(key, self._reply_command(payload))
@@ -466,17 +498,11 @@ class Orchestrator:
             task = self._check_task(
                 task_id, recovering=self._recovering_terminal(task_id, snapshot)
             )
-            if snapshot.interrupts and not self._pending_question_reply(key):
-                return
-            today = (
-                self.teaching_date()
-                if self.teaching_date
-                else date.fromisoformat(snapshot.values["teaching_date"])
-                if snapshot.values
-                else task.created_on
-            )
+            today = self._task_date(task, snapshot)
             if task.due_date is not None and task.due_date > today:
                 raise OrchestrationError(409, "任务尚未到期")
+            if snapshot.interrupts and not self._pending_question_reply(key):
+                return
             self._spawn(key, lambda: self.start_task(task_id))
 
     async def enqueue_message(
@@ -537,6 +563,10 @@ class Orchestrator:
             task = self._task(session, task_id)
             if task.status in (TaskStatus.DONE, TaskStatus.CANCELLED):
                 return AnswerTarget(phase="closed")
+            if teacher_has_student(session, task.student_id):
+                return AnswerTarget(phase="idle", prompt="教师接管中，辅导暂时暂停。")
+            if task.due_date is not None and task.due_date > self._task_date(task, snapshot):
+                return AnswerTarget(phase="idle", prompt=f"任务将在 {task.due_date} 开放。")
             item = session.get(Item, item_id) if item_id is not None else None
             stem = item.stem if item else ""
         messages = snapshot.values.get("messages", [])
@@ -583,10 +613,10 @@ class Orchestrator:
         with Session(self.engine) as session:
             event = session.get(Event, state["event_id"])
             if event.processed:
-                return {"plan": PlannerOutput().model_dump(mode="json")}
+                return {"plan": PlannerOutput().model_dump(mode="json"), "plan_stale": False}
             inp = PlannerInput(event_id=event.id, teaching_date=event.teaching_date)
         result = await self.planner.plan(inp)
-        return {"plan": result.model_dump(mode="json")}
+        return {"plan": result.model_dump(mode="json"), "plan_stale": False}
 
     async def save_plan(self, state: RunState) -> dict:
         # 取消与该任务正在执行的一轮串行，避免完成节点覆盖已取消状态。
@@ -594,6 +624,13 @@ class Orchestrator:
             for task_id in sorted(set(state["plan"]["cancel_task_ids"])):
                 await stack.enter_async_context(self._lock(f"task:{task_id}"))
             return await self._save_plan(state)
+
+    @staticmethod
+    def _refresh_plan(state: RunState) -> dict:
+        refreshes = state.get("plan_refreshes", 0)
+        if refreshes >= 3:
+            raise ValueError("教学依据持续变化，规划多次重算后仍未能提交")
+        return {"plan_stale": True, "plan_refreshes": refreshes + 1}
 
     async def _save_plan(self, state: RunState) -> dict:
         plan = PlannerOutput.model_validate(state["plan"])
@@ -605,8 +642,17 @@ class Orchestrator:
             event = session.get(Event, state["event_id"])
             if event.processed:
                 return {"task_ids": state.get("task_ids", [])}
+            revision = state["plan"].get("goal_revision")
+            if revision is not None and revision != goal_revision(session):
+                # Reconsider every decision, including retries that a newly
+                # lowered round limit turns into escalations.
+                return self._refresh_plan(state)
             for task_id in plan.cancel_task_ids:
                 task = self._task(session, task_id)
+                if (control := session.get(TeacherTaskControl, task_id)) and (
+                    control.overridden or control.taken_over
+                ):
+                    continue
                 if "contexts" in state["plan"] and task.status != TaskStatus.PENDING:
                     # A student may start pending work while the planner awaits the model.
                     continue
@@ -616,6 +662,13 @@ class Orchestrator:
                     if work := session.get(PendingWork, f"task:{task_id}"):
                         work.pending = False
             created = []
+            overridden = list(
+                session.exec(
+                    select(Task)
+                    .join(TeacherTaskControl, TeacherTaskControl.task_id == Task.id)
+                    .where(TeacherTaskControl.overridden)
+                )
+            )
             contexts = state["plan"].get("contexts", [])
             if contexts and len(contexts) != len(plan.tasks):
                 raise ValueError("任务执行上下文数量与规划任务不一致")
@@ -626,6 +679,8 @@ class Orchestrator:
                     raise ValueError("任务轮次必须大于 0")
                 task = Task(**planned.model_dump(), created_on=event.teaching_date)
                 context = contexts[index] if contexts else None
+                if any(matches_teacher_override(session, old, task, context) for old in overridden):
+                    continue
                 question_followup = planned.reason.startswith(QUESTION_FOLLOWUP)
                 if context and planned.student_id is not None and not question_followup:
                     active = session.exec(
@@ -684,10 +739,28 @@ class Orchestrator:
                         break
                 if duplicate:
                     continue
+                if (
+                    task.type == TaskType.ESCALATION
+                    and context is not None
+                    and not escalation_is_eligible(
+                        session, task, basis=context.get("escalation_basis")
+                    )
+                ):
+                    # The model awaited outside the transaction. A teacher may
+                    # have adopted the misconception or changed the round limit.
+                    # Closing this session rolls back the whole stale plan.
+                    return self._refresh_plan(state)
                 session.add(task)
                 session.flush()
                 if context:
-                    session.add(PlanningTaskContext(task_id=task.id, **context))
+                    session.add(
+                        PlanningTaskContext(
+                            task_id=task.id,
+                            root_knowledge_point_id=context["root_knowledge_point_id"],
+                            context_knowledge_point_id=context["context_knowledge_point_id"],
+                            issue_misconception_id=context["issue_misconception_id"],
+                        )
+                    )
                 created.append(task)
             event.processed = True
             session.flush()
@@ -750,6 +823,9 @@ class Orchestrator:
     async def activate(self, state: RunState) -> dict:
         with Session(self.engine) as session:
             task = self._task(session, state["task_id"])
+            if task.status == TaskStatus.CANCELLED:
+                # A goal update can cancel queued work after start was accepted.
+                return {"phase": "cancelled_before_start"}
             task.status = TaskStatus.ACTIVE
             start_tutoring(session, task, date.fromisoformat(state["teaching_date"]))
             self._queue_task(session, state)

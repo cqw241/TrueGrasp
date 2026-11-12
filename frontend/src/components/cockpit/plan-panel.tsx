@@ -47,6 +47,7 @@ const ALL = 'all'
 const OPEN: TaskStatus[] = ['pending', 'active']
 // 转交和课上讲解另有面板，计划列表默认只看面向学生的教学任务。
 const PLAN_TYPES: TaskType[] = [
+  'question',
   'tutoring',
   'verification',
   'retest',
@@ -85,7 +86,8 @@ export function PlanPanel() {
       <CardHeader>
         <CardTitle>干预计划</CardTitle>
         <CardDescription>
-          规划 Agent 安排的辅导、验证、复测和预检；教师的修改优先于 Agent 计划
+          学生主动提问，以及规划 Agent
+          安排的辅导、验证、复测和预检；教师的修改优先于 Agent 计划
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -250,7 +252,7 @@ function TaskActions({
         <Button size="sm" variant="outline" onClick={() => onEdit(task)}>
           修改
         </Button>
-        {task.type === 'tutoring' &&
+        {(task.type === 'tutoring' || task.type === 'question') &&
           (control?.taken_over ? (
             <Button
               size="sm"
