@@ -17,6 +17,7 @@ from app.contracts.entities import (
 )
 from app.contracts.enums import ContentSource, EvidenceKind, JudgedBy, TaskStatus, TaskType
 from app.contracts.events import EvidenceAdded, TeacherInstruction, make_event
+from app.contracts.values import PENDING_KNOWLEDGE_POINT_ID
 from app.knowledge.graph import NxKnowledgeGraph
 from app.ledger.queries import RANK
 from app.ledger.service import append_evidence
@@ -46,7 +47,7 @@ def _queue_instruction(session, payload, today, student_id=None) -> None:
 
 async def set_goal(runtime: Orchestrator, body: GoalCreate) -> TeachingGoal:
     point_ids = list(dict.fromkeys(body.knowledge_point_ids))
-    if not point_ids or body.target_state not in RANK:
+    if not point_ids or body.target_state not in RANK or PENDING_KNOWLEDGE_POINT_ID in point_ids:
         raise HTTPException(422, "请选择知识点及初步掌握、巩固或融会贯通目标")
     today = _date(runtime)
     cancelled = []

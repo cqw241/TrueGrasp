@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 
 from app.contracts.entities import Evidence, Item, KnowledgePoint, Misconception, StrategyCard
 from app.contracts.enums import ContentSource, ItemSource
+from app.contracts.values import PENDING_KNOWLEDGE_POINT_ID
 from app.knowledge.content import Content, Issue
 from app.orchestration.storage import ItemExposure, init_storage
 
@@ -66,6 +67,8 @@ def ingest(session: Session, content: Content) -> list[Issue]:
     ]
     for entity, query, current in stale_queries:
         for stale in sorted(set(session.exec(query)) - set(current)):
+            if entity is KnowledgePoint and stale == PENDING_KNOWLEDGE_POINT_ID:
+                continue  # Runtime sentinel, not authored content.
             notices.append(
                 Issue("", stale, f"{entity.__tablename__} 已不在内容文件中，未删除", "notice")
             )

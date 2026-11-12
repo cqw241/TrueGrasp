@@ -23,6 +23,8 @@ from app.contracts.enums import (
     ContentSource,
     EvidenceKind,
     HypothesisStatus,
+    ItemPurpose,
+    ItemSource,
     JudgedBy,
     MasteryState,
     TutorOutcome,
@@ -346,16 +348,27 @@ async def test_unmodeled_is_recorded_for_teacher(setup):
 
     class UnknownModel(Model):
         async def generate(self, messages, output, tools=None):
-            assert output is CandidateSelection
-            return CandidateSelection(
-                unmodeled_description="学生把指数当乘法",
-                unmodeled_family="未知结构",
-                reason="库内不匹配",
-            )
+            if output is CandidateSelection:
+                return CandidateSelection(
+                    unmodeled_description="学生把指数当乘法",
+                    unmodeled_family="未知结构",
+                    reason="库内不匹配",
+                )
+            return await super().generate(messages, output, tools)
 
     tutor = create_tutor(llm=UnknownModel(), knowledge=knowledge, engine=engine)
     turn = await tutor.turn(input_for(task), Publisher())
-    assert turn.outcome == TutorOutcome.REQUEST_REPLAN
+    assert turn.outcome == TutorOutcome.AWAIT_STUDENT
+    assert turn.awaiting_item_id
+    with Session(engine) as session:
+        stored = session.get(Task, task.task_id)
+        assert stored.status != "cancelled"
+    practice = None
+    with Session(engine) as session:
+        practice = session.get(Item, turn.awaiting_item_id)
+    turn = await tutor.turn(input_for(task, practice.answer, practice.id), Publisher())
+    assert turn.outcome == TutorOutcome.REQUEST_VERIFICATION
+    assert turn.confirmed_misconception_ids == []
     with Session(engine) as session:
         unknown = session.exec(
             select(Misconception).where(Misconception.source == ContentSource.UNMODELED)
@@ -392,6 +405,82 @@ async def test_unmodeled_is_recorded_for_teacher(setup):
             MasteryState.ESCALATED
         )
         assert diagnosis(session, task.task_id).hypotheses[0].unmodeled
+
+
+async def test_ordinary_message_does_not_consume_probe(setup):
+    engine, knowledge, task = setup
+
+    class ChattyModel(Model):
+        async def generate(self, messages, output, tools=None):
+            if output is AnswerReview:
+                return AnswerReview(intent="concept_question", is_correct=None, reason="问概念")
+            return await super().generate(messages, output, tools)
+
+    tutor = create_tutor(llm=ChattyModel(), knowledge=knowledge, engine=engine)
+    opening = await tutor.turn(input_for(task), Publisher())
+    reply = await tutor.turn(
+        input_for(task, "为什么这里要乘 3？", opening.awaiting_item_id), Publisher()
+    )
+    assert reply.outcome == TutorOutcome.AWAIT_STUDENT
+    assert reply.awaiting_item_id == opening.awaiting_item_id
+    with Session(engine) as session:
+        assert not session.exec(
+            select(Evidence).where(Evidence.kind == EvidenceKind.DIAGNOSIS)
+        ).all()
+        state = TeachingState.model_validate(session.get(TutorSession, task.task_id).state)
+        assert state.probe_count == 0
+
+
+async def test_spec_null_practice_is_accepted_and_model_judged(setup):
+    engine, knowledge, task = setup
+
+    class TextModel(Model):
+        async def generate(self, messages, output, tools=None):
+            payload = json.loads(messages[-1].content)
+            if output is QuestionDraft and not payload.get("active_ids"):
+                return QuestionDraft(
+                    stem="请说明下一步的求导依据",
+                    spec=None,
+                    answer="先对外层求导，再乘内层导数",
+                    rubric=["说明外层求导", "乘内层导数"],
+                )
+            if output is AnswerReview:
+                return AnswerReview(intent="answer", is_correct=True, reason="要点齐全")
+            return await super().generate(messages, output, tools)
+
+    tutor = create_tutor(llm=TextModel(), knowledge=knowledge, engine=engine)
+    opening = await tutor.turn(input_for(task), Publisher())
+    turn = await tutor.turn(input_for(task, "cos(3*x)", opening.awaiting_item_id), Publisher())
+    assert turn.outcome == TutorOutcome.AWAIT_STUDENT
+    with Session(engine) as session:
+        item = session.get(Item, turn.awaiting_item_id)
+        assert item.purpose == ItemPurpose.PRACTICE
+        assert item.spec is None and item.rubric
+    reply = await tutor.turn(input_for(task, "先对外层求导，再乘内层导数", item.id), Publisher())
+    assert reply.outcome == TutorOutcome.REQUEST_VERIFICATION
+    with Session(engine) as session:
+        evidence = session.exec(
+            select(Evidence).where(Evidence.item_id == item.id).order_by(Evidence.id.desc())
+        ).first()
+        assert evidence.is_correct is True and evidence.judged_by == JudgedBy.MODEL
+
+
+async def test_spec_null_probe_is_rejected(setup):
+    engine, knowledge, task = setup
+    tutor = create_tutor(llm=Model(), knowledge=knowledge, engine=engine)
+    item = Item(
+        id="tutor.spec.null",
+        knowledge_point_id=POINT,
+        purpose=ItemPurpose.PROBE,
+        stem="请说明证明思路",
+        spec=None,
+        answer="参考证明",
+        rubric=["说明依据"],
+        source=ItemSource.GENERATED,
+    )
+    state = TeachingState(phase="diagnosis", candidate_ids=["a", SLIP])
+    failure = await tutor._gate(item, state, set(), review=False)
+    assert "spec" in failure
 
 
 async def test_three_round_budget_survives_reproposal_and_recreation(setup):

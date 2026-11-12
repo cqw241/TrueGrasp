@@ -354,6 +354,14 @@ def test_ingest_rejects_changing_answered_item(tmp_path, field, value):
     assert [i.ref for i in exc.value.issues] == ["calc.ch2.chain_multi.seed1"]
 
 
+def test_pending_knowledge_point_is_not_a_course_point(tmp_path):
+    engine = make_engine(f"sqlite:///{tmp_path / 'pending.db'}")
+    init_db(engine)
+    graph = NxKnowledgeGraph.from_engine(engine)
+    assert "pending.unclassified" not in {point.id for point in graph.all_points()}
+    assert graph.point("pending.unclassified").name.startswith("待归类")
+
+
 def test_missing_content_directory_is_an_error(tmp_path):
     from app.knowledge.content import load_dir
 

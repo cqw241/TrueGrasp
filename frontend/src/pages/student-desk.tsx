@@ -178,7 +178,9 @@ function StudentTasks({
               : task
                 ? `${taskTypeLabel[task.type]} · ${
                     points.get(task.knowledge_point_id)?.name ??
-                    task.knowledge_point_id
+                    (task.knowledge_point_id === 'pending.unclassified'
+                      ? '待归类'
+                      : task.knowledge_point_id)
                   }`
                 : '辅导'}
           </CardTitle>

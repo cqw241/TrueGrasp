@@ -30,10 +30,26 @@ def get_engine() -> Engine:
 
 
 def init_db(engine: Engine | None = None) -> None:
+    from app.contracts.entities import KnowledgePoint
+    from app.contracts.values import (
+        PENDING_KNOWLEDGE_POINT_ID,
+        PENDING_KNOWLEDGE_POINT_NAME,
+    )
     from app.ledger.service import protect_evidence
 
     business_engine = engine or get_engine()
     SQLModel.metadata.create_all(business_engine)
+    with Session(business_engine) as session:
+        if session.get(KnowledgePoint, PENDING_KNOWLEDGE_POINT_ID) is None:
+            session.add(
+                KnowledgePoint(
+                    id=PENDING_KNOWLEDGE_POINT_ID,
+                    lecture=0,
+                    section=0,
+                    name=PENDING_KNOWLEDGE_POINT_NAME,
+                )
+            )
+            session.commit()
     protect_evidence(business_engine)
 
 

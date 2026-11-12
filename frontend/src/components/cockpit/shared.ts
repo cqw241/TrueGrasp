@@ -27,6 +27,7 @@ export function usePointNames() {
   const points = api.useQuery('get', '/api/knowledge/points')
   return useMemo(() => {
     const names = new Map(points.data?.map((p) => [p.id, p.name]))
-    return (id: string) => names.get(id) ?? id
+    return (id: string) =>
+      names.get(id) ?? (id === 'pending.unclassified' ? '待归类' : id)
   }, [points.data])
 }

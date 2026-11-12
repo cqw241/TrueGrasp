@@ -509,7 +509,8 @@ class TeachingPlanner:
             row = session.get(Evidence, payload.evidence_id)
             if previous is None or row is None or row.task_id != previous.id:
                 raise InvalidPlanError("作答事件的任务与证据不匹配")
-            kp_ids.add(row.knowledge_point_id)
+            # The task may have been reclassified after the intake evidence was written.
+            kp_ids.add(previous.knowledge_point_id)
             if previous.status == TaskStatus.DONE:
                 if previous.type == TaskType.QUESTION:
                     add(

@@ -184,6 +184,7 @@ def authorize(request: Request, _cookie: Annotated[str | None, Security(cookie_s
         ("POST", "/api/tasks/{task_id}/start"),
         ("POST", "/api/tasks/{task_id}/messages"),
         ("POST", "/api/tasks/{task_id}/answer-photo"),
+        ("POST", "/api/tasks/{task_id}/question-photo"),
     }
     if (method, route) in task_routes:
         with Session(request.app.state.orchestrator.engine) as session:

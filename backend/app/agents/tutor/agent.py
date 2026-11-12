@@ -43,6 +43,7 @@ from app.llm.math_tools import math_tools
 from app.orchestration.context import current_teaching_date
 from app.orchestration.inputs import used_fingerprints
 from app.orchestration.storage import record_exposure
+from app.verify.tools import stem_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -165,9 +166,22 @@ class DiagnosticTutor:
                     ):
                         raise ValueError("作答与当前待答题目不匹配")
                     item = session.get(Item, state.awaiting_item_id)
-                    correct, matches, judged_by, reason = await self._judge(
-                        item, inp.student_message
+                    intent, correct, matches, judged_by, reason = await self._judge(
+                        item, inp.student_message, inp
                     )
+                    if intent != "answer":
+                        text = await self._discuss(inp, item, state, publish, streamed, intent)
+                        return self._commit(
+                            session,
+                            task,
+                            state,
+                            key,
+                            TutorTurn(
+                                outcome=TutorOutcome.AWAIT_STUDENT,
+                                message=text,
+                                awaiting_item_id=item.id,
+                            ),
+                        )
                     diagnostic = state.phase == "diagnosis"
                     state.awaiting_item_id = None
                     unique_match = [mid for mid, hit in matches.items() if hit is True]
@@ -241,6 +255,7 @@ class DiagnosticTutor:
                             state.candidate_ids = []
                     else:
                         if correct is True:
+                            confirmed = [state.confirmed_id] if state.confirmed_id else []
                             return self._commit(
                                 session,
                                 task,
@@ -249,7 +264,7 @@ class DiagnosticTutor:
                                 TutorTurn(
                                     outcome=TutorOutcome.REQUEST_VERIFICATION,
                                     message="这次练习已通过核验。接下来由独立验证老师用新题检查。",
-                                    confirmed_misconception_ids=[state.confirmed_id],
+                                    confirmed_misconception_ids=confirmed,
                                 ),
                             )
                         state.practice_failures += 1
@@ -314,38 +329,32 @@ class DiagnosticTutor:
                         dict.fromkeys([*task.misconception_ids, unknown.id])
                     )
                     task.evidence_ids = [*task.evidence_ids, unknown_evidence.id]
-                    return self._commit(
-                        session,
-                        task,
-                        state,
-                        key,
-                        self._replan(
-                            f"未建模错因 {unknown.id} 无法判定，请教师审核；"
-                            f"证据 {unknown_evidence.id}"
-                        ),
-                    )
-                state.candidate_ids = [*selection.misconception_ids, SLIP]
-                if len(state.candidate_ids) < 2:
-                    return self._commit(
-                        session,
-                        task,
-                        state,
-                        key,
-                        self._replan("没有可检验的候选错因，请补充内容或教师介入"),
-                    )
-                state.hypothesis_ids = []
-                for mid in state.candidate_ids:
-                    h = Hypothesis(
-                        student_id=task.student_id,
-                        task_id=task.id,
-                        error_evidence_id=error.id,
-                        misconception_id=mid,
-                    )
-                    session.add(h)
-                    session.flush()
-                    state.hypothesis_ids.append(h.id)
+                    # Recorded for teacher review; do not interrupt the current teaching.
+                modeled = [mid for mid in selection.misconception_ids if mid]
+                if not modeled:
+                    # No library cause is testable. Continue with a tentative explanation
+                    # instead of cancelling the session; the pending cause stays reviewable.
+                    state.phase = "practice"
+                    state.confirmed_id = None
+                    state.candidate_ids = []
+                    state.strategy_ids = []
+                    state.hypothesis_ids = []
+                else:
+                    state.candidate_ids = [*modeled, SLIP]
+                    state.hypothesis_ids = []
+                    for mid in state.candidate_ids:
+                        h = Hypothesis(
+                            student_id=task.student_id,
+                            task_id=task.id,
+                            error_evidence_id=error.id,
+                            misconception_id=mid,
+                        )
+                        session.add(h)
+                        session.flush()
+                        state.hypothesis_ids.append(h.id)
 
             if task.type == TaskType.QUESTION and state.phase == "practice":
+                confirmed = [state.confirmed_id] if state.confirmed_id else []
                 return self._commit(
                     session,
                     task,
@@ -353,8 +362,12 @@ class DiagnosticTutor:
                     key,
                     TutorTurn(
                         outcome=TutorOutcome.REQUEST_VERIFICATION,
-                        message="追问已定位错因，继续处理原题。",
-                        confirmed_misconception_ids=[state.confirmed_id],
+                        message=(
+                            "追问已定位错因，继续处理原题。"
+                            if state.confirmed_id
+                            else "目前还不能确定具体错因，我们先按暂定思路继续原题。"
+                        ),
+                        confirmed_misconception_ids=confirmed,
                     ),
                 )
 
@@ -491,11 +504,13 @@ class DiagnosticTutor:
             try:
                 draft = await self.llm.generate(
                     messages(
-                        "出一道区分当前候选的追问题。"
+                        "出一道区分当前候选的追问题。题干必须能由 ItemSpec 重算，"
+                        "只要求提交一个可核验答案；追问每个候选恰有一个预测，slip 预测标准答案。"
                         if probe
-                        else "按策略卡出一道小步计算练习，不给学生标准答案。"
-                        "题干只要求提交一个可核验的最终表达式，"
-                        "不要求结构分解、文字解释或同时提交多项答案；引导过程另由辅导对话提供。",
+                        else "按策略卡出一道小步练习，不给学生标准答案。"
+                        "题干可以要求表达式、步骤、文字、证明或混合作答；"
+                        "能结构化成 ItemSpec 就提供 spec，否则 spec 置空并提供 rubric；"
+                        "不要要求同时提交多项答案，引导过程另由辅导对话提供。",
                         {
                             "knowledge_point": self.knowledge.point(
                                 task.knowledge_point_id
@@ -507,10 +522,15 @@ class DiagnosticTutor:
                             ],
                             "active_ids": state.candidate_ids if probe else [],
                             "strategies": [c.model_dump(mode="json") for c in cards],
-                            "requirements": "stem/answer/predictions 用 LaTeX，spec 用 SymPy。"
-                            "追问每个候选恰有一个预测，slip 预测标准答案；练习不填预测。"
-                            "不要把指纹当成已用题意；必须输出 spec，"
-                            "answer 是 spec 运算的最终结果。",
+                            "requirements": (
+                                "stem/answer/predictions 用 LaTeX，spec 用 SymPy。"
+                                "追问每个候选恰有一个预测，slip 预测标准答案。"
+                                "必须输出 spec，answer 是 spec 运算的最终结果。"
+                                if probe
+                                else "stem/answer 用 LaTeX 或清晰文字。spec 可选："
+                                "能结构化时 answer 必须是 spec 的结果；"
+                                "spec 为空时提供 rubric 评分要点。练习不填预测。"
+                            ),
                             "used_fingerprints": sorted(used),
                             "failures": failures,
                         },
@@ -567,38 +587,46 @@ class DiagnosticTutor:
 
     async def _gate(self, item, state, used, *, review):
         if item.spec is None:
-            return "缺少可核验 spec"
-        check = self.tools.verify_item(item.spec, item.answer)
-        if check.ok is not True:
-            return "标准答案未通过独立验算：" + check.detail
-        fingerprint = self.tools.fingerprint(item.spec)
+            if state.phase == "diagnosis":
+                return "诊断追问需要可核验 spec"
+            if not item.answer.strip() or not item.rubric:
+                return "无可核验 spec 的练习需要非空答案和评分要点"
+            fingerprint = stem_fingerprint(item.stem)
+        else:
+            check = self.tools.verify_item(item.spec, item.answer)
+            if check.ok is not True:
+                return "标准答案未通过独立验算：" + check.detail
+            fingerprint = self.tools.fingerprint(item.spec)
+            if state.phase == "diagnosis":
+                ids = [p.misconception_id for p in item.predictions]
+                if len(ids) != len(set(ids)) or set(ids) != set(state.candidate_ids):
+                    return "预测必须恰好覆盖所有有效候选，不得重复或加入其他 ID"
+                slip = next((p for p in item.predictions if p.misconception_id == SLIP), None)
+                if (
+                    slip
+                    and self.tools.check_equivalent(
+                        slip.answer, item.answer, item.spec.answer_mode, item.spec.variables
+                    ).equivalent
+                    is not True
+                ):
+                    return "slip 必须预测正确答案"
+                distinct = self.tools.check_distinct(item.spec, item.answer, item.predictions)
+                active_groups = [
+                    g
+                    for g in distinct.groups
+                    if set(g.misconception_ids) & set(state.candidate_ids)
+                ]
+                if distinct.ok is not True or len(active_groups) < 2:
+                    return "追问预测没有通过工具区分度检查"
+            elif item.predictions:
+                return "练习题 predictions 必须为空列表"
         if fingerprint in used:
             return "题目指纹已用，请换结构或参数"
-        if state.phase == "diagnosis":
-            ids = [p.misconception_id for p in item.predictions]
-            if len(ids) != len(set(ids)) or set(ids) != set(state.candidate_ids):
-                return "预测必须恰好覆盖所有有效候选，不得重复或加入其他 ID"
-            slip = next((p for p in item.predictions if p.misconception_id == SLIP), None)
-            if (
-                slip
-                and self.tools.check_equivalent(
-                    slip.answer, item.answer, item.spec.answer_mode, item.spec.variables
-                ).equivalent
-                is not True
-            ):
-                return "slip 必须预测正确答案"
-            distinct = self.tools.check_distinct(item.spec, item.answer, item.predictions)
-            active_groups = [
-                g for g in distinct.groups if set(g.misconception_ids) & set(state.candidate_ids)
-            ]
-            if distinct.ok is not True or len(active_groups) < 2:
-                return "追问预测没有通过工具区分度检查"
-        elif item.predictions:
-            return "练习题 predictions 必须为空列表"
         if review:
             result = await self.llm.generate(
                 messages(
-                    "独立审题：stem 必须与 spec 运算、变量、范围一致；预测符合错因；"
+                    "独立审题：有 spec 时 stem 必须与运算、变量、范围一致；"
+                    "spec 为空时按 rubric 检查题意、答案和可评阅性。预测符合错因；"
                     "题目考查目标知识点。不能改写工具数学结果，无法确定返回 null。",
                     {
                         "item": item.model_dump(mode="json"),
@@ -619,7 +647,28 @@ class DiagnosticTutor:
         item.fingerprint = fingerprint
         return ""
 
-    async def _judge(self, item, answer):
+    async def _judge(self, item, answer, inp=None):
+        history = [{"role": m.role, "content": m.content} for m in inp.history] if inp else []
+        payload = {
+            "item": item.model_dump(mode="json"),
+            "student_answer": answer,
+            "rubric": item.rubric,
+            "history": history,
+        }
+        if item.spec is None:
+            payload["tool_results"] = None
+            review = await self.llm.generate(
+                messages(
+                    "判断学生这条消息的意图：answer 是实际作答/尝试；hint_request 请求下一层提示；"
+                    "clarify_hint 要求解释上一条提示；concept_question 问概念；"
+                    "correction 更正或补充题目条件；other 其他交流。只有 answer 才评阅。"
+                    "评阅学生原答，按 rubric 逐项判断；学生说懂了、提问或更正条件不算答对；"
+                    "无法判断返回 null。",
+                    payload,
+                ),
+                AnswerReview,
+            )
+            return review.intent, review.is_correct, review.matches, JudgedBy.MODEL, review.reason
         comparisons = {
             "correct": self.tools.check_equivalent(
                 answer, item.answer, item.spec.answer_mode, item.spec.variables
@@ -631,27 +680,61 @@ class DiagnosticTutor:
             ).equivalent
         judged_by = JudgedBy.TOOL
         reason = "逐项工具比对：" + json.dumps(comparisons, ensure_ascii=False)
-        if any(value is None for value in comparisons.values()):
-            review = await self.llm.generate(
-                messages(
-                    "评阅学生原答，逐项比对标准答案及所有预测，可命中多个预测。"
-                    "已知工具结论不可覆盖；学生说懂了或无数学作答不算答对，无法判断返回 null。",
-                    {
-                        "item": item.model_dump(mode="json"),
-                        "student_answer": answer,
-                        "tool_results": comparisons,
-                    },
-                ),
-                AnswerReview,
-            )
-            if comparisons["correct"] is None:
-                comparisons["correct"] = review.is_correct
-            for mid in comparisons.keys() - {"correct"}:
-                if comparisons[mid] is None:
-                    comparisons[mid] = review.matches.get(mid)
-            judged_by = JudgedBy.MODEL
-            reason += "；" + review.reason
-        return comparisons.pop("correct"), comparisons, judged_by, reason
+        if not any(value is None for value in comparisons.values()):
+            return "answer", comparisons.pop("correct"), comparisons, judged_by, reason
+        payload["tool_results"] = comparisons
+        review = await self.llm.generate(
+            messages(
+                "判断学生这条消息的意图：answer 是实际作答/尝试；hint_request 请求下一层提示；"
+                "clarify_hint 要求解释上一条提示；concept_question 问概念；correction 更正或补充"
+                "题目条件；other 其他交流。只有 answer 才评阅。"
+                "评阅学生原答，逐项比对标准答案及所有预测，可命中多个预测。"
+                "已知工具结论不可覆盖；学生说懂了或无数学作答不算答对，无法判断返回 null。",
+                payload,
+            ),
+            AnswerReview,
+        )
+        correct_from_tool = comparisons["correct"] is not None
+        if not correct_from_tool:
+            comparisons["correct"] = review.is_correct
+        for mid in comparisons.keys() - {"correct"}:
+            if comparisons[mid] is None:
+                comparisons[mid] = review.matches.get(mid)
+        # Match provenance follows the correctness result: tool-computed correctness stays
+        # TOOL even when a prediction match had to be filled by the model.
+        judged_by = JudgedBy.TOOL if correct_from_tool else JudgedBy.MODEL
+        reason += "；" + review.reason
+        return review.intent, comparisons.pop("correct"), comparisons, judged_by, reason
+
+    async def _discuss(self, inp, item, state, publish, streamed, intent):
+        prompt = messages(
+            "你是一对一数学辅导老师。学生这条消息不是正式作答，而是在提问、请求解释、"
+            "更正条件或补充信息。正常回应，不要评分，不要推进诊断。"
+            "不得直接给出当前题的最终答案或完整解答；可以解释概念、回看已给提示、"
+            "指出需要补充的条件或图片。",
+            {
+                "history": [m.model_dump(mode="json") for m in inp.history],
+                "latest_message": inp.student_message,
+                "intent": intent,
+                "item_stem": item.stem,
+                "rubric": item.rubric,
+                "confirmed_id": state.confirmed_id,
+                "strategies": [
+                    c.model_dump(mode="json") for c in self.knowledge.strategies(state.confirmed_id)
+                ]
+                if state.confirmed_id
+                else [],
+            },
+        )
+        parts = []
+        async for chunk in self.llm.stream(prompt):
+            parts.append(chunk)
+            streamed.append(chunk)
+            await publish.publish(TokenDelta(task_id=inp.task.task_id, text=chunk))
+        text = "".join(parts).strip()
+        if not text:
+            raise LLMOutputError("辅导模型返回空回复")
+        return text
 
     async def _teach(self, inp, state, cards, item, publish, streamed, conflict):
         prompt = messages(

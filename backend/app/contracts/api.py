@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.contracts.entities import Evidence, Item, Task
 from app.contracts.enums import (
@@ -132,15 +132,32 @@ class ChatTurn(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    content: str  # 学生的回复；作答时为 LaTeX
+    content: str = ""  # 学生的回复；作答时为 LaTeX，补图时可为空
     answering_item_id: str | None = None
+    photo_ids: list[str] = Field(default_factory=list, max_length=3)
 
 
 class QuestionCreate(BaseModel):
-    """学生主动提问：题目（文字或 LaTeX），可附上自己的尝试或卡住的位置。"""
+    """学生主动提问：题目文字/LaTeX 或题图，可附上自己的尝试或卡住的位置。"""
 
-    content: str = Field(min_length=1)
+    content: str = ""
     attempt: str = ""
+    photo_ids: list[str] = Field(default_factory=list, max_length=3)
+
+    @model_validator(mode="after")
+    def _needs_content_or_photo(self):
+        if not self.content.strip() and not self.photo_ids:
+            raise ValueError("请提供题目文字或题目图片")
+        return self
+
+
+class QuestionPhotoResult(BaseModel):
+    """题目照片识别结果；原图已保存，可随提问或追问再次交给模型查看。"""
+
+    latex: str
+    doubts: list[str] = Field(default_factory=list)
+    requires_confirmation: bool = True
+    photo_id: str
 
 
 class AnswerTarget(BaseModel):
@@ -150,6 +167,9 @@ class AnswerTarget(BaseModel):
     stem: str = ""
     turn: int = 0
     accepts_text: bool = False  # Some item-bound turns accept a description of a stuck step.
+    # Only the original-question phase treats an upload as question material. Item-bound
+    # diagnostic/practice turns still submit through answer-photo so the tutor can judge it.
+    accepts_question_photo: bool = False
 
 
 class Accepted(BaseModel):

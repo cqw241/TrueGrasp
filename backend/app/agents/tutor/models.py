@@ -20,8 +20,9 @@ class QuestionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     stem: str = Field(min_length=1)
-    spec: ItemSpec
+    spec: ItemSpec | None = None
     answer: str = Field(min_length=1)
+    rubric: list[str] = Field(default_factory=list)
     predictions: list[Prediction] = Field(default_factory=list)
 
 
@@ -35,9 +36,18 @@ class QuestionReview(BaseModel):
 class AnswerReview(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    is_correct: bool | None
+    intent: Literal[
+        "answer",
+        "hint_request",
+        "clarify_hint",
+        "concept_question",
+        "correction",
+        "other",
+    ] = "answer"
+    is_correct: bool | None = None
     matches: dict[str, bool | None] = Field(default_factory=dict)
-    reason: str
+    rubric_results: list[bool | None] = Field(default_factory=list)
+    reason: str = ""
 
 
 class TeachingState(BaseModel):

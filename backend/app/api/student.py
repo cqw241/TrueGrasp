@@ -2,6 +2,7 @@
 
 from base64 import b64encode
 from collections.abc import Awaitable, Callable
+from datetime import date
 from io import BytesIO
 from urllib.parse import urlsplit
 
@@ -14,11 +15,20 @@ from sqlmodel import Session, select
 
 from app.api.stub import not_implemented
 from app.config import get_settings
-from app.contracts.api import Accepted, AnswerTarget, ChatTurn, MessageCreate, QuestionCreate
+from app.contracts.api import (
+    Accepted,
+    AnswerTarget,
+    ChatTurn,
+    MessageCreate,
+    QuestionCreate,
+    QuestionPhotoResult,
+)
 from app.contracts.entities import Student, Task
+from app.contracts.enums import TaskStatus, TaskType
 from app.llm.client import LLMOutputError, OpenAICompatClient
-from app.llm.vision import Transcription, transcribe_answer
+from app.llm.vision import Transcription, transcribe_answer, transcribe_question
 from app.orchestration.questions import create_question
+from app.orchestration.storage import create_question_photo
 from app.verify.parsing import parse_answer
 
 router = APIRouter(tags=["student"])
@@ -95,7 +105,7 @@ PHOTO_RESPONSES: dict[int | str, dict] = {
     413: {"model": PhotoUploadError, "description": "照片超过大小限制"},
     415: {"model": PhotoUploadError, "description": "不支持该图片类型"},
     422: {
-        "description": "参数无效、图片无法解码或未识别到内容",
+        "description": "参数无效或图片无法解码",
         "content": {
             "application/json": {
                 "schema": {
@@ -125,8 +135,13 @@ async def _transcribe_upload(
     ensure_current: Callable[[], Awaitable[None]] | None = None,
     *,
     empty_detail: str,
-) -> Transcription:
-    """读取请求体中的照片并转写为 LaTeX。``ensure_current`` 在每个耗时步骤之后复查前提。"""
+    transcribe: Callable = transcribe_answer,
+    allow_empty: bool = False,
+) -> tuple[Transcription, str]:
+    """读取请求体中的照片并转写。``ensure_current`` 在每个耗时步骤之后复查前提。
+
+    返回转写结果和可直接交给视觉模型的原图 data URL，供题目会话保存。
+    """
     mime = request.headers.get("content-type", "").partition(";")[0].strip().lower()
     if mime not in PHOTO_FORMATS:
         raise HTTPException(415, "请上传 JPEG、PNG 或 WebP 图片")
@@ -148,7 +163,7 @@ async def _transcribe_upload(
     llm = getattr(request.app.state, "photo_llm", None)
     try:
         if llm is not None:
-            result = await transcribe_answer(llm, [image])
+            result = await transcribe(llm, [image])
         else:
             settings = get_settings()
             if settings.vision_llm_base_url and not (
@@ -175,13 +190,13 @@ async def _transcribe_upload(
                 }
             )
             async with OpenAICompatClient(vision) as client:
-                result = await transcribe_answer(client, [image])
+                result = await transcribe(client, [image])
     except (OpenAIError, LLMOutputError) as exc:
         raise HTTPException(502, "照片识别失败，请重试或手动输入") from exc
     await check()
-    if not result.latex.strip():
+    if not result.latex.strip() and not allow_empty:
         raise HTTPException(422, empty_detail)
-    return result
+    return result, image
 
 
 @router.post(
@@ -206,7 +221,7 @@ async def transcribe_photo(
         if target.phase != "waiting" or target.item_id != item_id or target.turn != turn:
             raise HTTPException(409, "题目已变化，请重新打开当前待答题")
 
-    result = await _transcribe_upload(
+    result, _ = await _transcribe_upload(
         request, ensure_current, empty_detail="没有识别到作答，请拍清楚答案或手动输入"
     )
     # 技术文档第 8 节第 5 条：可解析且无疑问才直接进入诊断；解析失败记为疑问，交学生确认。
@@ -220,12 +235,87 @@ async def transcribe_photo(
     responses={404: {"model": PhotoUploadError, "description": "学生不存在"}, **PHOTO_RESPONSES},
     openapi_extra=PHOTO_BODY,
 )
-async def transcribe_question_photo(student_id: str, request: Request) -> Transcription:
-    """识别学生要提问的题目照片，返回草稿供学生校对，不创建提问。"""
-    with Session(request.app.state.orchestrator.engine) as session:
+async def transcribe_question_photo(student_id: str, request: Request) -> QuestionPhotoResult:
+    """识别学生要提问的题目照片，保存原图并返回草稿，不创建提问。"""
+    engine = request.app.state.orchestrator.engine
+    with Session(engine) as session:
         if session.get(Student, student_id) is None:
             raise HTTPException(404, "学生不存在")
-    return await _transcribe_upload(request, empty_detail="没有识别到题目，请拍清楚题目或手动输入")
+    result, image = await _transcribe_upload(
+        request,
+        empty_detail="",
+        transcribe=transcribe_question,
+        allow_empty=True,
+    )
+    if not result.latex.strip() and not result.doubts:
+        result.doubts = ["没有识别到清晰的题目，请补充文字或重新拍摄"]
+    runtime = request.app.state.orchestrator
+    with Session(engine) as session:
+        photo = create_question_photo(
+            session,
+            student_id,
+            image,
+            created_on=runtime.teaching_date() if runtime.teaching_date else date.today(),
+        )
+        session.commit()
+        photo_id = photo.id
+    return QuestionPhotoResult(
+        latex=result.latex,
+        doubts=result.doubts,
+        requires_confirmation=result.requires_confirmation,
+        photo_id=photo_id,
+    )
+
+
+@router.post(
+    "/tasks/{task_id}/question-photo",
+    responses={
+        404: {"model": PhotoUploadError, "description": "任务不存在"},
+        409: {"model": PhotoUploadError, "description": "任务不是进行中的主动提问"},
+        **PHOTO_RESPONSES,
+    },
+    openapi_extra=PHOTO_BODY,
+)
+async def transcribe_task_question_photo(task_id: int, request: Request) -> QuestionPhotoResult:
+    """为主动提问补充题目图片；原图保存到当前任务，随下一条消息交给模型。"""
+    runtime = request.app.state.orchestrator
+    with Session(runtime.engine) as session:
+        task = session.get(Task, task_id)
+        if task is None or (
+            request.state.principal.role == "student"
+            and task.student_id != request.state.principal.student_id
+        ):
+            raise HTTPException(404, "任务不存在")
+        if task.type != TaskType.QUESTION or task.status not in (
+            TaskStatus.PENDING,
+            TaskStatus.ACTIVE,
+        ):
+            raise HTTPException(409, "任务不是进行中的主动提问")
+        student_id = task.student_id
+    result, image = await _transcribe_upload(
+        request,
+        empty_detail="",
+        transcribe=transcribe_question,
+        allow_empty=True,
+    )
+    if not result.latex.strip() and not result.doubts:
+        result.doubts = ["没有识别到清晰的图片，请补充文字或重新拍摄"]
+    with Session(runtime.engine) as session:
+        photo = create_question_photo(
+            session,
+            student_id,
+            image,
+            task_id=task_id,
+            created_on=runtime.teaching_date() if runtime.teaching_date else date.today(),
+        )
+        session.commit()
+        photo_id = photo.id
+    return QuestionPhotoResult(
+        latex=result.latex,
+        doubts=result.doubts,
+        requires_confirmation=result.requires_confirmation,
+        photo_id=photo_id,
+    )
 
 
 @router.post("/students/{student_id}/questions", status_code=status.HTTP_202_ACCEPTED)

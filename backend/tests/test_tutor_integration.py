@@ -171,6 +171,150 @@ async def test_partial_attempt_enters_diagnosis_only_for_an_observed_error(
         assert quoted_error in evidence["reason"]
 
 
+async def test_unstructured_question_starts_with_clarification(setup, tmp_path):
+    engine, knowledge, _ = setup
+
+    class Questions:
+        tools = SympyMathTools()
+
+        async def interpret(self, content, images=(), history=()):
+            return QuestionDraft(
+                spec=None,
+                answer="",
+                clarifications=["积分上限看不清，请补拍右上角"],
+            )
+
+        async def review(self, *args, **kwargs):
+            raise AssertionError("unstructured question must not enter review")
+
+        async def guide(self, *args, **kwargs):
+            raise AssertionError("unstructured question must not enter hints")
+
+        async def discuss(self, *args, **kwargs):
+            raise AssertionError("unstructured question must not enter discussion")
+
+    app = create_app(
+        engine=engine,
+        checkpoint_path=str(tmp_path / "unstructured.db"),
+        orchestration_dependencies={
+            "tutor": object(),
+            "verifier": object(),
+            "planner": Planner(),
+            "knowledge": knowledge,
+            "questions": Questions(),
+        },
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        created = await client.post(
+            "/api/students/A/questions",
+            json={"content": "证明：若 f 可导，则 f 连续"},
+        )
+        assert created.status_code == 202
+        task_id = created.json()["id"]
+        await app.state.orchestrator.wait_idle()
+        with Session(engine) as session:
+            task = session.get(Task, task_id)
+            assert task.knowledge_point_id == "pending.unclassified"
+        messages = (await client.get(f"/api/tasks/{task_id}/messages")).json()
+        assert "积分上限看不清" in messages[-1]["content"]
+        assert (await client.get(f"/api/tasks/{task_id}/answer-target")).json()["accepts_text"]
+
+
+async def test_question_photo_is_saved_and_used_for_interpretation(setup, tmp_path):
+    engine, knowledge, _ = setup
+
+    class Questions:
+        tools = SympyMathTools()
+        seen_images = []
+        discuss_images = []
+
+        async def interpret(self, content, images=(), history=()):
+            self.seen_images = list(images)
+            return QuestionDraft(
+                spec=None, answer="", clarifications=["图片条件已收到，请写出尝试"]
+            )
+
+        async def review(self, item, attempt, **kwargs):
+            return AttemptReview(intent="other", observation="补充图片")
+
+        async def guide(self, *args, **kwargs):
+            return "请继续。"
+
+        async def discuss(self, item, message, intent, **kwargs):
+            self.discuss_images = list(kwargs.get("images", []))
+            return "请继续补充"
+
+    class Vision:
+        async def generate(self, messages, output, tools=None):
+            assert output is Transcription
+            return Transcription(latex="求 sin(8x) 的导数", doubts=[])
+
+    questions = Questions()
+    app = create_app(
+        engine=engine,
+        checkpoint_path=str(tmp_path / "question-photo.db"),
+        orchestration_dependencies={
+            "tutor": object(),
+            "verifier": object(),
+            "planner": Planner(),
+            "knowledge": knowledge,
+            "questions": questions,
+        },
+    )
+    app.state.photo_llm = Vision()
+    buffer = BytesIO()
+    Image.new("RGB", (4, 4)).save(buffer, "PNG")
+    photo = buffer.getvalue()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        upload = await client.post(
+            "/api/students/A/question-photo",
+            headers={"Content-Type": "image/png"},
+            content=photo,
+        )
+        assert upload.status_code == 200
+        created = await client.post(
+            "/api/students/A/questions",
+            json={"content": "", "photo_ids": [upload.json()["photo_id"]]},
+        )
+        assert created.status_code == 202
+        task_id = created.json()["id"]
+        await app.state.orchestrator.wait_idle()
+        assert questions.seen_images[0].startswith("data:image/png;base64,")
+        assert "图片条件已收到" in (await runtime_messages(client, task_id))[-1]["content"]
+        target = (await client.get(f"/api/tasks/{task_id}/answer-target")).json()
+        follow = await client.post(
+            f"/api/tasks/{task_id}/question-photo",
+            headers={"Content-Type": "image/png"},
+            content=photo,
+        )
+        assert follow.status_code == 200
+        reply = await client.post(
+            f"/api/tasks/{task_id}/messages",
+            params={"expected_turn": target["turn"]},
+            json={
+                "content": "",
+                "answering_item_id": target["item_id"],
+                "photo_ids": [follow.json()["photo_id"]],
+            },
+        )
+        assert reply.status_code == 202
+        await app.state.orchestrator.wait_idle()
+        assert questions.discuss_images and all(
+            url.startswith("data:image/png;base64,") for url in questions.discuss_images
+        )
+        assert (await runtime_messages(client, task_id))[-1]["content"] == "请继续补充"
+
+
+async def runtime_messages(client, task_id):
+    return (await client.get(f"/api/tasks/{task_id}/messages")).json()
+
+
 @pytest.mark.parametrize("initial", ["", "cos(x)", "不会用链式法则", "会外层，卡在内层求导"])
 async def test_student_question_diagnosis_hints_and_independent_followup(
     setup, tmp_path, monkeypatch, initial
@@ -312,16 +456,7 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
             )
         ).status_code == 200
         url = "/api/students/A/questions"
-        assert (await client.post(url, json={"content": "bad"})).status_code == 422
-        assert (await client.post(url, json={"content": "求 sin(4x) 的导数"})).status_code == 422
-        assert (await client.post(url, json={"content": domain_problem})).status_code == 422
-        assert (await client.post(url, json={"content": derivative_at_hole})).status_code == 422
-        assert (
-            await client.post(url, json={"content": unchanged_domain_problem})
-        ).status_code == 422
-        assert (await client.post(url, json={"content": derivative_in_notation})).status_code == 422
-        with Session(engine) as session:
-            assert not session.exec(select(Task).where(Task.type == TaskType.QUESTION)).all()
+        assert (await client.post(url, json={"content": ""})).status_code == 422
         response = await client.post(url, json={"content": "求 sin(8x) 的导数", "attempt": initial})
         assert response.status_code == 202
         question = response.json()
@@ -331,9 +466,14 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
         if initial == "会外层，卡在内层求导":
             target = await runtime.get_answer_target(task_id)
             assert target.item_id and not target.item_id.startswith("student-question.")
-            assert not target.accepts_text
+            assert target.accepts_text
+            assert not target.accepts_question_photo
             with Session(engine) as session:
-                receipt = session.get(NodeReceipt, f"question:{task_id}:stuck_attempt")
+                question_receipt = session.get(NodeReceipt, f"question:{task_id}")
+                receipt = session.get(
+                    NodeReceipt,
+                    f"question:{task_id}:{question_receipt.result['item']}:0:stuck_attempt",
+                )
                 recorded = session.get(Evidence, receipt.result["evidence_id"])
                 assert recorded.is_correct is None and recorded.student_answer == initial
                 assert diagnosis(session, task_id).hypotheses
@@ -349,6 +489,7 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
             app.state.photo_llm = Vision()
             target = await runtime.get_answer_target(task_id)
             assert target.stem == "求 sin(8x) 的导数" and target.accepts_text
+            assert target.accepts_question_photo
             png = BytesIO()
             Image.new("RGB", (4, 4), "white").save(png, format="PNG")
             photo = await client.post(
@@ -414,7 +555,8 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
         assert last.solution and "8*cos(8*x)" in last.content
         assert (await runtime.get_answer_target(task_id)).phase == "closed"
         with Session(engine) as session:
-            evidence = session.get(Evidence, question["evidence_ids"][0])
+            intake = session.get(NodeReceipt, f"question:{task_id}:intake")
+            evidence = session.get(Evidence, intake.result["evidence_id"])
             assert evidence.student_answer == initial
             assert evidence.is_correct is None
             verify = session.exec(select(Task).where(Task.type == TaskType.VERIFICATION)).one()
@@ -432,12 +574,19 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
         assert shown["id"] == followup.item.id and shown["answer"] == ""
         assert shown["spec"] is None and shown["fingerprint"] is None
         assert not shown["predictions"] and not shown["rubric"]
-        for copied in (followup.item.stem, paraphrased_followup, rewritten_followup):
-            assert (await client.post(url, json={"content": copied})).status_code == 409
+        exact = await client.post(url, json={"content": followup.item.stem})
+        assert exact.status_code == 409
+        for copied in (paraphrased_followup, rewritten_followup):
+            created = await client.post(url, json={"content": copied})
+            assert created.status_code == 202
+            blocked_id = created.json()["id"]
+            await runtime.wait_idle()
+            assert "独立验证" in (await runtime.get_messages(blocked_id))[-1].content
+            assert (await runtime.get_answer_target(blocked_id)).phase == "closed"
         with Session(engine) as session:
-            assert (
-                session.exec(select(Task).where(Task.type == TaskType.QUESTION)).one().id == task_id
-            )
+            questions = session.exec(select(Task).where(Task.type == TaskType.QUESTION)).all()
+            assert task_id in {question.id for question in questions}
+            assert all(question.status == TaskStatus.DONE for question in questions)
 
 
 @pytest.mark.parametrize("fault_at", ["before_checkpoint", "after_checkpoint", "teacher_handback"])
@@ -450,19 +599,22 @@ async def test_accepted_question_reply_recovers_once_without_manual_restart(
         tools = SympyMathTools()
         fail_review = False
 
-        async def solve(self, content):
+        async def interpret(self, content, images=(), history=()):
             return QuestionDraft(
                 knowledge_point_id=POINT,
                 spec={"operation": "derivative", "expr": "sin(8*x)", "variables": ["x"]},
                 answer="8*cos(8*x)",
             )
 
-        async def review(self, item, attempt):
+        async def review(self, item, attempt, **kwargs):
             if self.fail_review:
                 raise RuntimeError("crash before review")
             return AttemptReview(final_answer="", observation="没有写出尝试")
 
-        async def guide(self, *args):
+        async def guide(self, *args, **kwargs):
+            return "请补充卡住的步骤。"
+
+        async def discuss(self, *args, **kwargs):
             return "请补充卡住的步骤。"
 
     questions = Questions()
