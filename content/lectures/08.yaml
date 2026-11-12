@@ -23,18 +23,186 @@ points:
 - id: calc.ch8.s1
   section: 1
   name: 向量及其线性运算
+  prerequisites: [calc.ch1.function]
 - id: calc.ch8.s2
   section: 2
   name: 数量积、向量积、混合积
+  prerequisites: [calc.ch8.s1]
 - id: calc.ch8.s3
   section: 3
   name: 平面及其方程
+  prerequisites: [calc.ch8.s2]
 - id: calc.ch8.s4
   section: 4
   name: 直线及其方程
+  prerequisites: [calc.ch8.s3]
 - id: calc.ch8.s5
   section: 5
   name: 曲面及其方程
+  prerequisites: [calc.ch8.s3]
 - id: calc.ch8.s6
   section: 6
   name: 空间曲线及其方程
+  prerequisites: [calc.ch8.s4, calc.ch8.s5]
+misconceptions:
+- id: calc.ch8.s1.c3.norm_additive
+  knowledge_point: calc.ch8.s1
+  family: 混淆空间几何对象与运算
+  description: 把三角不等式直接当成等式，认为向量和的模恒等于各模之和。
+  triggers:
+  - 向量及其线性运算
+  examples:
+  - question: '设 $\mathbf a=(3,0,0),\mathbf b=(0,4,0)$，求 $|\mathbf a+\mathbf b|$。'
+    wrong: '7'
+    correct: '5'
+  strategies:
+  - c3.geometry
+  recurs_in:
+  - calc.ch8.s2
+  - calc.ch9.s7
+- id: calc.ch8.s2.c3.cross_product_commutative
+  knowledge_point: calc.ch8.s2
+  family: 混淆空间几何对象与运算
+  description: 把向量积当作可交换乘法，交换两个向量后不改变符号。
+  triggers:
+  - 数量积、向量积、混合积
+  examples:
+  - question: '设 $\mathbf a=(1,0,0),\mathbf b=(0,2,0),\mathbf c=(0,0,3)$，求 $\mathbf b\cdot(\mathbf a\times\mathbf
+      c)$。'
+    wrong: '6'
+    correct: '-6'
+  strategies:
+  - c3.geometry
+  recurs_in:
+  - calc.ch11.s5
+  - calc.ch11.s7
+- id: calc.ch8.s3.c3.plane_offset_sign
+  knowledge_point: calc.ch8.s3
+  family: 混淆空间几何对象与运算
+  description: 写点法式时忽略过点条件，把法向量与位置坐标的内积符号写反。
+  triggers:
+  - 平面及其方程
+  examples:
+  - question: '平面过 (1,2,3)，法向量为 (2,−1,1)。将方程写成 2x−y+z+D=0，求 D。'
+    wrong: '3'
+    correct: '-3'
+  strategies:
+  - c3.geometry
+  recurs_in:
+  - calc.ch9.s6
+- id: calc.ch8.s4.c3.line_direction_as_normal
+  knowledge_point: calc.ch8.s4
+  family: 混淆空间几何对象与运算
+  description: 把直线的方向向量当成平面的法向量，只写一个平面方程来表示直线。
+  triggers:
+  - 直线及其方程
+  examples:
+  - question: '写出过 (1,0,2)、方向向量为 (2,1,−1) 的空间直线参数方程，并说明只有一个平面方程为何不足。'
+    wrong: '2(x−1)+y−(z−2)=0 就是该直线。'
+    correct: '参数方程为 $x=1+2t,y=t,z=2-t$，$t\in\mathbb{R}$。一个平面方程在三维空间中只能给出一个平面，不能单独确定这条直线；参数式须同时满足过点和方向条件。'
+  strategies:
+  - c3.geometry
+  recurs_in:
+  - calc.ch8.s6
+  - calc.ch11.s1
+- id: calc.ch8.s5.c3.sphere_radius_squared
+  knowledge_point: calc.ch8.s5
+  family: 混淆空间几何对象与运算
+  description: 把球面标准方程右端的半径平方直接当作半径。
+  triggers:
+  - 曲面及其方程
+  examples:
+  - question: '求球面 $(x-1)^2+(y+2)^2+(z-3)^2=16$ 的半径。'
+    wrong: '16'
+    correct: '4'
+  strategies:
+  - c3.geometry
+  recurs_in:
+  - calc.ch10.s3
+  - calc.ch11.s4
+- id: calc.ch8.s6.c3.projection_as_space_curve
+  knowledge_point: calc.ch8.s6
+  family: 混淆空间几何对象与运算
+  description: 消元后只保留投影方程，丢弃空间曲线必须同时满足的另一个约束。
+  triggers:
+  - 空间曲线及其方程
+  examples:
+  - question: '给出交线 $x^2+y^2=4,z=x$ 的一组参数方程，并核验两个约束。'
+    wrong: '只写 x²+y²=4 即可，z 可任意。'
+    correct: '可取 $x=2\cos t,y=2\sin t,z=2\cos t$，$0\le t<2\pi$。前两坐标满足柱面方程，第三坐标同时满足 $z=x$；仅写柱面方程会多出整张柱面。'
+  strategies:
+  - c3.geometry
+  recurs_in:
+  - calc.ch11.s1
+  - calc.ch11.s2
+strategies:
+- id: c3.geometry
+  families:
+  - 混淆空间几何对象与运算
+  principles:
+  - 区分点、方向向量、法向量、长度和有向乘积的含义。
+  - 方程或参数表示必须满足全部几何约束。
+  constraints:
+  - 不把投影方程当作完整空间曲线。
+  - 不把向量乘积视作标量乘法或忽略方向。
+  rubric:
+  - 能将候选点或参数代回原约束。
+  - 能解释法向、方向、长度和方向反转的变化。
+items:
+- id: calc.ch8.s1.c3_seed1
+  knowledge_point: calc.ch8.s1
+  purpose: verification
+  dimension: correctness
+  stem: '设 $\mathbf a=(3,0,0),\mathbf b=(0,4,0)$，求 $|\mathbf a+\mathbf b|$。'
+  answer: '5'
+  spec:
+    operation: expression
+    expr: sqrt((3+0)**2+(0+4)**2+(0+0)**2)
+- id: calc.ch8.s2.c3_seed1
+  knowledge_point: calc.ch8.s2
+  purpose: verification
+  dimension: correctness
+  stem: '设 $\mathbf a=(1,0,0),\mathbf b=(0,2,0),\mathbf c=(0,0,3)$，求 $\mathbf b\cdot(\mathbf a\times\mathbf
+    c)$。'
+  answer: '-6'
+  spec:
+    operation: expression
+    expr: 0+2*(0*0-1*3)+0
+- id: calc.ch8.s3.c3_seed1
+  knowledge_point: calc.ch8.s3
+  purpose: verification
+  dimension: correctness
+  stem: '平面过 (1,2,3)，法向量为 (2,−1,1)。将方程写成 2x−y+z+D=0，求 D。'
+  answer: '-3'
+  spec:
+    operation: expression
+    expr: -(2*1-1*2+1*3)
+- id: calc.ch8.s4.c3_seed1
+  knowledge_point: calc.ch8.s4
+  purpose: verification
+  dimension: explanation
+  stem: '写出过 (1,0,2)、方向向量为 (2,1,−1) 的空间直线参数方程，并说明只有一个平面方程为何不足。'
+  answer: '参数方程为 $x=1+2t,y=t,z=2-t$，$t\in\mathbb{R}$。一个平面方程在三维空间中只能给出一个平面，不能单独确定这条直线；参数式须同时满足过点和方向条件。'
+  rubric:
+  - 用同一参数表达三个坐标。
+  - 验证 t=0 时经过指定点。
+  - 区分方向向量与法向量，以及直线与平面的维数。
+- id: calc.ch8.s5.c3_seed1
+  knowledge_point: calc.ch8.s5
+  purpose: verification
+  dimension: correctness
+  stem: '求球面 $(x-1)^2+(y+2)^2+(z-3)^2=16$ 的半径。'
+  answer: '4'
+  spec:
+    operation: expression
+    expr: sqrt(16)
+- id: calc.ch8.s6.c3_seed1
+  knowledge_point: calc.ch8.s6
+  purpose: verification
+  dimension: explanation
+  stem: '给出交线 $x^2+y^2=4,z=x$ 的一组参数方程，并核验两个约束。'
+  answer: '可取 $x=2\cos t,y=2\sin t,z=2\cos t$，$0\le t<2\pi$。前两坐标满足柱面方程，第三坐标同时满足 $z=x$；仅写柱面方程会多出整张柱面。'
+  rubric:
+  - 参数式同时给出 x、y、z。
+  - 分别代回柱面和平面两个方程。
+  - 明确投影或单个曲面方程不能单独确定交线。

@@ -37,7 +37,7 @@ def anyio_backend():
 @pytest.mark.anyio
 async def test_ordinary_task_can_select_authored_series_explanation(tmp_path):
     lectures = Path(__file__).parents[2] / "content/lectures"
-    content = load([lectures / "12.yaml"])
+    content = load(sorted(lectures.glob("*.yaml")))  # C3 的先修与复发关系包含跨讲引用。
     engine = make_engine(f"sqlite:///{tmp_path / 'series.db'}")
     init_db(engine)
 

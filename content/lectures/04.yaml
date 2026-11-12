@@ -17,6 +17,7 @@ points:
 - id: calc.ch4.s1
   section: 1
   name: 不定积分的概念与性质
+  prerequisites: [calc.ch2.derivative_rules]
 - id: calc.ch4.substitution
   section: 2
   name: 不定积分的换元法
@@ -24,9 +25,11 @@ points:
 - id: calc.ch4.s3
   section: 3
   name: 分部积分法
+  prerequisites: [calc.ch4.s1, calc.ch2.derivative_rules]
 - id: calc.ch4.s4
   section: 4
   name: 有理函数的积分
+  prerequisites: [calc.ch4.s1, calc.ch4.substitution]
 misconceptions:
 - id: calc.ch4.substitution.omit_scale
   knowledge_point: calc.ch4.substitution
@@ -52,6 +55,51 @@ misconceptions:
   probes: [calc.ch4.substitution.probe_linear_exp]
   recurs_in: [calc.ch5.substitution]
   strategies: [inverse_differentiation]
+- id: calc.ch4.s1.c3.log_antiderivative_domain
+  knowledge_point: calc.ch4.s1
+  family: 误用原函数与积分代数法则
+  description: 将 1/x 的原函数一律写成 ln(x)，忽略负半轴上的实数定义域。
+  triggers:
+  - 不定积分的概念与性质
+  examples:
+  - question: '在区间 x<2 上，求 $1/(x-2)$ 的一个实原函数。'
+    wrong: '\ln(x-2)'
+    correct: '\ln(2-x)'
+  strategies:
+  - c3.antiderivative
+  recurs_in:
+  - calc.ch5.s4
+  - calc.ch7.s2
+- id: calc.ch4.s3.c3.by_parts_wrong_subtraction
+  knowledge_point: calc.ch4.s3
+  family: 误用原函数与积分代数法则
+  description: 使用分部积分时把 uv−∫vdu 写成 uv+∫vdu。
+  triggers:
+  - 分部积分法
+  examples:
+  - question: '求 $\int x\cos(2x)\,dx$ 的一个原函数。'
+    wrong: '\frac{x\sin(2x)}{2}-\frac{\cos(2x)}{4}'
+    correct: '\frac{x\sin(2x)}{2}+\frac{\cos(2x)}{4}'
+  strategies:
+  - c3.antiderivative
+  recurs_in:
+  - calc.ch5.integration_by_parts
+  - calc.ch12.s6
+- id: calc.ch4.s4.c3.partial_fraction_wrong_sign
+  knowledge_point: calc.ch4.s4
+  family: 误用原函数与积分代数法则
+  description: 部分分式分解时忽略系数符号，未通分核对分子。
+  triggers:
+  - 有理函数的积分
+  examples:
+  - question: '在 x>0 上求 $\int 1/[x(x+2)]\,dx$ 的一个原函数。'
+    wrong: '\frac{1}{2}\ln x+\frac{1}{2}\ln(x+2)'
+    correct: '\frac{1}{2}\ln x-\frac{1}{2}\ln(x+2)'
+  strategies:
+  - c3.antiderivative
+  recurs_in:
+  - calc.ch5.s4
+  - calc.ch7.s2
 strategies:
 - id: differential_measure
   families: [忽略微元变换]
@@ -73,6 +121,18 @@ strategies:
   rubric:
   - 候选原函数求导后与被积函数一致。
   - 能解释为什么线性换元中出现倒数系数。
+- id: c3.antiderivative
+  families:
+  - 误用原函数与积分代数法则
+  principles:
+  - 用求导回代检验原函数，变形须在原定义域内等价。
+  - 分部积分来自乘积求导，部分分式须通分检验。
+  constraints:
+  - 不忽略对数、分母等表达式的定义域。
+  - 不凭记忆省略分部积分的负号或原函数族中的参数。
+  rubric:
+  - 能通过求导或通分核对关键等式。
+  - 能明确解的区间及积分常数的作用。
 items:
 - id: calc.ch4.substitution.probe_linear_exp
   knowledge_point: calc.ch4.substitution
@@ -123,3 +183,40 @@ items:
     answer: '\sin(5x+1)+C'
   - misconception_id: calc.ch4.substitution.multiply_scale
     answer: '5\sin(5x+1)+C'
+- id: calc.ch4.s1.c3_seed1
+  knowledge_point: calc.ch4.s1
+  purpose: verification
+  dimension: explanation
+  stem: '在区间 $x<2$ 上，求 $1/(x-2)$ 的一个实原函数，并解释定义域与求导核验。'
+  answer: '\ln(2-x)'
+  spec:
+    operation: indefinite_integral
+    expr: 1/(x-2)
+    variables:
+    - x
+  rubric:
+  - 说明实对数的定义域：x<2 时 2-x>0，而 x-2<0。
+  - 给出 ln(2-x)（允许加常数），并求导核验为 1/(x-2)。
+  - 区分形式导数相同与在指定区间内为实原函数；ln(x-2) 不是有效答案。
+- id: calc.ch4.s3.c3_seed1
+  knowledge_point: calc.ch4.s3
+  purpose: verification
+  dimension: correctness
+  stem: '求 $\int x\cos(2x)\,dx$ 的一个原函数。'
+  answer: '\frac{x\sin(2x)}{2}+\frac{\cos(2x)}{4}'
+  spec:
+    operation: indefinite_integral
+    expr: x*cos(2*x)
+    variables:
+    - x
+- id: calc.ch4.s4.c3_seed1
+  knowledge_point: calc.ch4.s4
+  purpose: verification
+  dimension: correctness
+  stem: '在 x>0 上求 $\int 1/[x(x+2)]\,dx$ 的一个原函数。'
+  answer: '\frac{1}{2}\ln x-\frac{1}{2}\ln(x+2)'
+  spec:
+    operation: indefinite_integral
+    expr: 1/(x*(x+2))
+    variables:
+    - x

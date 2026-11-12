@@ -32,27 +32,278 @@ points:
 - id: calc.ch7.s1
   section: 1
   name: 微分方程的基本概念
+  prerequisites: [calc.ch2.s3]
 - id: calc.ch7.s2
   section: 2
   name: 可分离变量的微分方程
+  prerequisites: [calc.ch7.s1, calc.ch4.s1]
 - id: calc.ch7.s3
   section: 3
   name: 齐次方程
+  prerequisites: [calc.ch7.s2, calc.ch4.substitution]
 - id: calc.ch7.s4
   section: 4
   name: 一阶线性微分方程
+  prerequisites: [calc.ch7.s1, calc.ch4.s3]
 - id: calc.ch7.s5
   section: 5
   name: 可降阶的高阶微分方程
+  prerequisites: [calc.ch7.s2, calc.ch2.s3]
 - id: calc.ch7.s6
   section: 6
   name: 高阶线性微分方程
+  prerequisites: [calc.ch7.s1, calc.ch2.s3]
 - id: calc.ch7.s7
   section: 7
   name: 常系数齐次线性微分方程
+  prerequisites: [calc.ch7.s6]
 - id: calc.ch7.s8
   section: 8
   name: 常系数非齐次线性微分方程
+  prerequisites: [calc.ch7.s7]
 - id: calc.ch7.s9
   section: 9
   name: 欧拉方程
+  prerequisites: [calc.ch7.s7, calc.ch2.chain_rule]
+misconceptions:
+- id: calc.ch7.s1.c3.order_and_constants
+  knowledge_point: calc.ch7.s1
+  family: 遗漏微分方程的解族结构
+  description: 用低阶解族代替高阶方程的通解，遗漏独立常数而误称已覆盖所有解。
+  triggers:
+  - 微分方程的基本概念
+  examples:
+  - question: '写出 $y″-y=0$ 的通解，代回核验，并说明自由常数的个数。'
+    wrong: 'y=Ce^x'
+    correct: '$y=C_1e^x+C_2e^{-x}$。求两次导数后 $y^{\prime\prime}=y$，任意两实常数均成立；两解线性无关（朗斯基行列式为 $-2$），形成二阶齐次方程的通解。'
+  strategies:
+  - c3.ode
+  recurs_in:
+  - calc.ch7.s6
+  - calc.ch7.s7
+- id: calc.ch7.s2.c3.separation_loses_equilibrium
+  knowledge_point: calc.ch7.s2
+  family: 遗漏微分方程的解族结构
+  description: 分离变量时直接除以未知函数的因子，遗漏该因子为零时的平衡解。
+  triggers:
+  - 可分离变量的微分方程
+  examples:
+  - question: '求 $y′=3y$ 的所有实解，并说明除以 y 是否会漏解。'
+    wrong: '\ln|y|=3x+C，因此只允许 y≠0。'
+    correct: '非零解分离后得到 $y=Ce^{3x}$（$C\ne0$）；另有 $y\equiv0$。统一写为 $y=Ce^{3x}$，$C$ 为任意实数。除以 $y$ 的推导本身不包含零解，须单独检查并补入。'
+  strategies:
+  - c3.ode
+  recurs_in:
+  - calc.ch7.s3
+  - calc.ch7.s5
+- id: calc.ch7.s3.c3.homogeneous_substitution_derivative
+  knowledge_point: calc.ch7.s3
+  family: 遗漏微分方程的解族结构
+  description: 在 y=xu(x) 代换中把 y′ 写成 u′，遗漏乘积求导中的 u 与 x 因子。
+  triggers:
+  - 齐次方程
+  examples:
+  - question: '在 x>0 上求 $y′=1+y/x$ 的通解，并写出 y=xu 后的导数关系。'
+    wrong: 'y=x(Ce^x-1)'
+    correct: '$y^{\prime}=u+xu^{\prime}$，故 $u+xu^{\prime}=1+u$，即 $u^{\prime}=1/x$；$u=\ln x+C$，所以 $y=x(\ln
+      x+C)$。代回有 $y^{\prime}=\ln x+C+1=1+y/x$。'
+  strategies:
+  - c3.ode
+  recurs_in:
+  - calc.ch7.s9
+- id: calc.ch7.s4.c3.integrating_factor_sign
+  knowledge_point: calc.ch7.s4
+  family: 遗漏微分方程的解族结构
+  description: 把一阶线性方程的积分因子 e^(∫Pdx) 写成 e^(−∫Pdx)，误改齐次项的增长方向。
+  triggers:
+  - 一阶线性微分方程
+  examples:
+  - question: '求 $y′+2y=4$ 的通解，并用积分因子解释。'
+    wrong: 'y=2+Ce^{2x}'
+    correct: '积分因子为 $e^{2x}$；$(e^{2x}y)^{\prime}=4e^{2x}$，积分得 $e^{2x}y=2e^{2x}+C$，因此 $y=2+Ce^{-2x}$。'
+  strategies:
+  - c3.ode
+  recurs_in:
+  - calc.ch7.s8
+- id: calc.ch7.s5.c3.reduction_missing_constant
+  knowledge_point: calc.ch7.s5
+  family: 遗漏微分方程的解族结构
+  description: 降阶后恢复 y 时遗漏第二次积分常数，未保留全部解。
+  triggers:
+  - 可降阶的高阶微分方程
+  examples:
+  - question: '求 $y″=6x$ 的通解。说明为什么需要保留两个独立常数。'
+    wrong: 'y=x^3+C'
+    correct: '一次积分得 $y^{\prime}=3x^2+C_1$，再积分得 $y=x^3+C_1x+C_2$；对任意 $C_1,C_2$ 求两次导数均回到 $6x$。仅写 $x^3+C$
+      会遗漏如 $x^3+x$ 的解。'
+  strategies:
+  - c3.ode
+  recurs_in:
+  - calc.ch7.s6
+- id: calc.ch7.s6.c3.nonhomogeneous_superposition
+  knowledge_point: calc.ch7.s6
+  family: 遗漏微分方程的解族结构
+  description: 把齐次方程的线性叠加原则直接用于具有同一非零右端的非齐次解。
+  triggers:
+  - 高阶线性微分方程
+  examples:
+  - question: '$y_1=1+\sin x,y_2=1+\cos x$ 均满足 y″+y=1。它们的和与差分别满足什么方程？说明理由。'
+    wrong: '和与差都满足 y″+y=1。'
+    correct: '由线性性，和满足 $(y_1+y_2)^{\prime\prime}+(y_1+y_2)=2$；差满足 $(y_1-y_2)^{\prime\prime}+(y_1-y_2)=0$。同一非齐次方程两解之差是齐次解，和一般不是原方程的解。'
+  strategies:
+  - c3.ode
+  recurs_in:
+  - calc.ch7.s8
+- id: calc.ch7.s7.c3.repeated_root_missing_x
+  knowledge_point: calc.ch7.s7
+  family: 遗漏微分方程的解族结构
+  description: 常系数方程出现二重特征根时仍只用重复的指数解，遗漏 x 倍项。
+  triggers:
+  - 常系数齐次线性微分方程
+  examples:
+  - question: '求 $y″-6y′+9y=0$ 的通解，解释二重根的处理。'
+    wrong: 'y=(C_1+C_2)e^{3x}'
+    correct: '特征方程为 $(r-3)^2=0$；通解 $y=(C_1+C_2x)e^{3x}$。$e^{3x}$ 与 $xe^{3x}$ 线性无关，两个同为 $e^{3x}$ 的项不能提供两个独立解。'
+  strategies:
+  - c3.ode
+  recurs_in:
+  - calc.ch7.s8
+  - calc.ch7.s9
+- id: calc.ch7.s8.c3.resonance_without_x
+  knowledge_point: calc.ch7.s8
+  family: 遗漏微分方程的解族结构
+  description: 待定系数法遇到与齐次解重合的强迫项时，不乘 x 修正试探特解。
+  triggers:
+  - 常系数非齐次线性微分方程
+  examples:
+  - question: '求 $y″-4y=e^{2x}$ 的通解，解释特解的选取。'
+    wrong: '设特解 Ae^{2x}，故无解。'
+    correct: '齐次解为 $C_1e^{2x}+C_2e^{-2x}$。因 $2$ 为单重特征根，取特解 $Axe^{2x}$；代回得到 $4Ae^{2x}=e^{2x}$，故 $A=1/4$。通解为
+      $C_1e^{2x}+C_2e^{-2x}+xe^{2x}/4$。'
+  strategies:
+  - c3.ode
+  recurs_in:
+  - calc.ch7.s9
+- id: calc.ch7.s9.c3.euler_second_derivative
+  knowledge_point: calc.ch7.s9
+  family: 遗漏微分方程的解族结构
+  description: 欧拉方程作 t=ln x 代换时把 x²y″ 误写为对 t 的二阶导数，遗漏一阶修正项。
+  triggers:
+  - 欧拉方程
+  examples:
+  - question: '在 x>0 上求 $x^2y″+xy′-y=0$ 的通解，并写出 t=ln x 下的导数关系。'
+    wrong: '将方程化为 Y″+Y′−Y=0。'
+    correct: '设 $Y(t)=y(e^t)$，则 $xy^{\prime}=Y^{\prime}$，$x^2y^{\prime\prime}=Y^{\prime\prime}-Y^{\prime}$。方程化为
+      $Y^{\prime\prime}-Y=0$，故 $Y=C_1e^t+C_2e^{-t}$，即 $y=C_1x+C_2/x$。'
+  strategies:
+  - c3.ode
+  recurs_in:
+  - calc.ch9.multivar_chain
+strategies:
+- id: c3.ode
+  families:
+  - 遗漏微分方程的解族结构
+  principles:
+  - 把候选解及所需阶数的导数代回原方程核对。
+  - 除以含未知函数的因子前检查零解；降阶后保留恢复所需的常数。
+  constraints:
+  - 不以满足某个变形后的方程代替满足原方程。
+  - 不遗漏平衡解、重根项或共振时的修正因子。
+  rubric:
+  - 能代回原方程核验。
+  - 能说明定义区间、自由常数与特解或齐次解的关系。
+items:
+- id: calc.ch7.s1.c3_seed1
+  knowledge_point: calc.ch7.s1
+  purpose: verification
+  dimension: explanation
+  stem: '写出 $y″-y=0$ 的通解，代回核验，并说明自由常数的个数。'
+  answer: '$y=C_1e^x+C_2e^{-x}$。求两次导数后 $y^{\prime\prime}=y$，任意两实常数均成立；两解线性无关（朗斯基行列式为 $-2$），形成二阶齐次方程的通解。'
+  rubric:
+  - 保留两个独立常数及 e^x、e^(-x) 两支。
+  - 求导代回原方程。
+  - 说明线性无关性和二阶方程通解的关系。
+- id: calc.ch7.s2.c3_seed1
+  knowledge_point: calc.ch7.s2
+  purpose: verification
+  dimension: explanation
+  stem: '求 $y′=3y$ 的所有实解，并说明除以 y 是否会漏解。'
+  answer: '非零解分离后得到 $y=Ce^{3x}$（$C\ne0$）；另有 $y\equiv0$。统一写为 $y=Ce^{3x}$，$C$ 为任意实数。除以 $y$ 的推导本身不包含零解，须单独检查并补入。'
+  rubric:
+  - 对非零解正确分离并积分。
+  - 单独代回检验 y≡0。
+  - 用允许 C=0 的解族统一表达，说明漏解产生的位置。
+- id: calc.ch7.s3.c3_seed1
+  knowledge_point: calc.ch7.s3
+  purpose: verification
+  dimension: explanation
+  stem: '在 x>0 上求 $y′=1+y/x$ 的通解，并写出 y=xu 后的导数关系。'
+  answer: '$y^{\prime}=u+xu^{\prime}$，故 $u+xu^{\prime}=1+u$，即 $u^{\prime}=1/x$；$u=\ln x+C$，所以 $y=x(\ln
+    x+C)$。代回有 $y^{\prime}=\ln x+C+1=1+y/x$。'
+  rubric:
+  - 正确写出 y′=u+xu′。
+  - 约去 u 后得到 u′=1/x 并保留常数。
+  - 说明 x>0 的定义区间并代回核验。
+- id: calc.ch7.s4.c3_seed1
+  knowledge_point: calc.ch7.s4
+  purpose: verification
+  dimension: explanation
+  stem: '求 $y′+2y=4$ 的通解，并用积分因子解释。'
+  answer: '积分因子为 $e^{2x}$；$(e^{2x}y)^{\prime}=4e^{2x}$，积分得 $e^{2x}y=2e^{2x}+C$，因此 $y=2+Ce^{-2x}$。'
+  rubric:
+  - 积分因子符号为正。
+  - 用乘积导数正确组织左端。
+  - 代回通解验证 y′+2y=4。
+- id: calc.ch7.s5.c3_seed1
+  knowledge_point: calc.ch7.s5
+  purpose: verification
+  dimension: explanation
+  stem: '求 $y″=6x$ 的通解。说明为什么需要保留两个独立常数。'
+  answer: '一次积分得 $y^{\prime}=3x^2+C_1$，再积分得 $y=x^3+C_1x+C_2$；对任意 $C_1,C_2$ 求两次导数均回到 $6x$。仅写 $x^3+C$ 会遗漏如
+    $x^3+x$ 的解。'
+  rubric:
+  - 两次积分分别引入独立常数。
+  - 保留 C₁x 项。
+  - 通过代回或反例说明仅一个常数不足。
+- id: calc.ch7.s6.c3_seed1
+  knowledge_point: calc.ch7.s6
+  purpose: verification
+  dimension: explanation
+  stem: '$y_1=1+\sin x,y_2=1+\cos x$ 均满足 y″+y=1。它们的和与差分别满足什么方程？说明理由。'
+  answer: '由线性性，和满足 $(y_1+y_2)^{\prime\prime}+(y_1+y_2)=2$；差满足 $(y_1-y_2)^{\prime\prime}+(y_1-y_2)=0$。同一非齐次方程两解之差是齐次解，和一般不是原方程的解。'
+  rubric:
+  - 分别处理右端 1+1 与 1−1。
+  - 明确差是对应齐次方程的解。
+  - 不把齐次叠加原则直接用于原非齐次方程。
+- id: calc.ch7.s7.c3_seed1
+  knowledge_point: calc.ch7.s7
+  purpose: verification
+  dimension: explanation
+  stem: '求 $y″-6y′+9y=0$ 的通解，解释二重根的处理。'
+  answer: '特征方程为 $(r-3)^2=0$；通解 $y=(C_1+C_2x)e^{3x}$。$e^{3x}$ 与 $xe^{3x}$ 线性无关，两个同为 $e^{3x}$ 的项不能提供两个独立解。'
+  rubric:
+  - 求出二重根 3。
+  - 写出 xe^(3x) 对应的第二个解。
+  - 解释两个独立常数不能合并为一个指数项。
+- id: calc.ch7.s8.c3_seed1
+  knowledge_point: calc.ch7.s8
+  purpose: verification
+  dimension: explanation
+  stem: '求 $y″-4y=e^{2x}$ 的通解，解释特解的选取。'
+  answer: '齐次解为 $C_1e^{2x}+C_2e^{-2x}$。因 $2$ 为单重特征根，取特解 $Axe^{2x}$；代回得到 $4Ae^{2x}=e^{2x}$，故 $A=1/4$。通解为
+    $C_1e^{2x}+C_2e^{-2x}+xe^{2x}/4$。'
+  rubric:
+  - 识别 e^(2x) 已属于齐次解。
+  - 乘 x 后代回求 A=1/4。
+  - 将特解与完整齐次通解相加。
+- id: calc.ch7.s9.c3_seed1
+  knowledge_point: calc.ch7.s9
+  purpose: verification
+  dimension: explanation
+  stem: '在 x>0 上求 $x^2y″+xy′-y=0$ 的通解，并写出 t=ln x 下的导数关系。'
+  answer: '设 $Y(t)=y(e^t)$，则 $xy^{\prime}=Y^{\prime}$，$x^2y^{\prime\prime}=Y^{\prime\prime}-Y^{\prime}$。方程化为
+    $Y^{\prime\prime}-Y=0$，故 $Y=C_1e^t+C_2e^{-t}$，即 $y=C_1x+C_2/x$。'
+  rubric:
+  - 正确写出 x²y″=Y″−Y′。
+  - 化为 Y″−Y=0 并求出两支解。
+  - 还原到 x>0，代回核验。
