@@ -29,6 +29,7 @@ from app.contracts.enums import (
     ItemPurpose,
     ItemSource,
     JudgedBy,
+    TaskType,
     TutorOutcome,
 )
 from app.contracts.events import EventPublisher, EvidenceAdded, HypothesisUpdated, TokenDelta
@@ -127,12 +128,19 @@ class DiagnosticTutor:
             row = session.get(TutorSession, task.id)
             state = TeachingState.model_validate(row.state) if row else TeachingState()
             error = session.get(Evidence, inp.task.error_evidence_id)
+            stuck_attempt = (
+                error is not None
+                and task.type == TaskType.QUESTION
+                and error.task_id == task.id
+                and error.kind == EvidenceKind.PRACTICE
+                and error.is_correct is None
+            )
             if (
                 error is None
                 or error.student_id != task.student_id
                 or (
                     error.knowledge_point_id != task.knowledge_point_id
-                    or error.is_correct is not False
+                    or (error.is_correct is not False and not stuck_attempt)
                 )
             ):
                 return self._commit(
@@ -212,7 +220,11 @@ class DiagnosticTutor:
                                     key,
                                     TutorTurn(
                                         outcome=TutorOutcome.REQUEST_VERIFICATION,
-                                        message="追问的表现支持偶发失误。接下来做一道独立验证题。",
+                                        message=(
+                                            "追问的表现支持偶发失误。回到原题继续尝试。"
+                                            if task.type == TaskType.QUESTION
+                                            else "追问的表现支持偶发失误。接下来做一道独立验证题。"
+                                        ),
                                         confirmed_misconception_ids=[SLIP],
                                     ),
                                 )
@@ -333,6 +345,19 @@ class DiagnosticTutor:
                     session.flush()
                     state.hypothesis_ids.append(h.id)
 
+            if task.type == TaskType.QUESTION and state.phase == "practice":
+                return self._commit(
+                    session,
+                    task,
+                    state,
+                    key,
+                    TutorTurn(
+                        outcome=TutorOutcome.REQUEST_VERIFICATION,
+                        message="追问已定位错因，继续处理原题。",
+                        confirmed_misconception_ids=[state.confirmed_id],
+                    ),
+                )
+
             self._stage(session, task, state, key + ":candidates")
             await self._publish_state(task.id, publish)
 
@@ -397,12 +422,17 @@ class DiagnosticTutor:
             if m.source == ContentSource.TEACHER
         ]
         recent = session.exec(select(Evidence).where(Evidence.task_id == task.id)).all()
+        original = session.get(Item, error.item_id) if error.item_id else None
         selection = await self.llm.generate(
             messages(
-                "选择最能解释原始错误及追问表现的至多两个候选错因。不要把相同错答直接当确诊。"
+                "选择最能解释原始错误或具体卡点及追问表现的至多两个候选错因。"
+                "卡点不等于错答，不要直接当确诊。"
                 "仅使用 pool 中 ID；没有合适的库内错因时填写未建模描述与族。偶发失误由程序添加。",
                 {
                     "error": error.model_dump(mode="json"),
+                    "problem": original.stem
+                    if original and task.type == TaskType.QUESTION
+                    else None,
                     "pool": [m.model_dump(mode="json") for m in pool],
                     "probe_count": state.probe_count,
                     "evidence": [e.model_dump(mode="json") for e in recent],
@@ -413,7 +443,6 @@ class DiagnosticTutor:
         ids = selection.misconception_ids
         if len(ids) != len(set(ids)) or set(ids) - {m.id for m in pool}:
             raise ValueError("候选错因包含重复或库外 ID")
-        original = session.get(Item, error.item_id) if error.item_id else None
         matching = []
         if original and original.spec:
             allowed = {m.id for m in pool}

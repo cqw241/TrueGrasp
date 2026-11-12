@@ -228,6 +228,20 @@ async def plan(engine, event, model=None):
 
 
 @pytest.mark.anyio
+async def test_repeated_help_requests_keep_the_student_owner(classroom):
+    engine = classroom
+    for student in ("A", "A", "B"):
+        task(engine, student=student, type=TaskType.QUESTION)
+    error = evidence(engine)
+    eid = event_id(engine, HomeworkImported(knowledge_point_ids=["kp"], evidence_ids=[error]))
+    model = PlanningModel()
+    await plan(engine, eid, model)
+    assert model.contexts[-1]["facts"]["recent_help_requests"] == [
+        {"student_id": "A", "knowledge_point_id": "kp", "questions": 2}
+    ]
+
+
+@pytest.mark.anyio
 async def test_real_demo_import_plans_twelve_individuals_and_eight_person_issue(tmp_path):
     sys.path.insert(0, str(Path(__file__).parents[2]))
     from demo.dataset import CHAIN, load_dataset

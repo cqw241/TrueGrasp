@@ -46,13 +46,19 @@ def _scalar(expr: sp.Expr) -> sp.Expr:
     return expr
 
 
-def parse_expr(source: str) -> sp.Expr:
-    """ItemSpec uses a small arithmetic/function subset of SymPy syntax, never eval."""
+def expression_syntax(source: str) -> ast.expr:
     if len(source) > 4096:
         raise ValueError("Expression is too long")
     tree = ast.parse(source.strip(), mode="eval")
     if sum(1 for _ in ast.walk(tree)) > 256:
         raise ValueError("Expression is too complex")
+    return tree.body
+
+
+def parse_expr(source: str, *, preserve_structure: bool = False) -> sp.Expr:
+    """ItemSpec uses a small arithmetic/function subset of SymPy syntax, never eval."""
+    expression = expression_syntax(source)
+    evaluate = not preserve_structure
 
     def visit(node: ast.AST) -> sp.Expr:
         match node:
@@ -63,27 +69,27 @@ def parse_expr(source: str) -> sp.Expr:
             case ast.UnaryOp(op=ast.UAdd(), operand=operand):
                 return visit(operand)
             case ast.UnaryOp(op=ast.USub(), operand=operand):
-                return -visit(operand)
+                return sp.Mul(-1, visit(operand), evaluate=evaluate)
             case ast.BinOp(left=left, op=op, right=right):
                 a, b = visit(left), visit(right)
                 match op:
                     case ast.Add():
-                        return a + b
+                        return sp.Add(a, b, evaluate=evaluate)
                     case ast.Sub():
-                        return a - b
+                        return sp.Add(a, sp.Mul(-1, b, evaluate=evaluate), evaluate=evaluate)
                     case ast.Mult():
-                        return a * b
+                        return sp.Mul(a, b, evaluate=evaluate)
                     case ast.Div():
-                        return a / b
+                        return sp.Mul(a, sp.Pow(b, -1, evaluate=evaluate), evaluate=evaluate)
                     case ast.Pow():
                         if b.is_number and abs(b) > 1000:
                             raise ValueError("Exponent is too large")
-                        return a**b
+                        return sp.Pow(a, b, evaluate=evaluate)
             case ast.Call(func=ast.Name(id=name), args=args, keywords=[]) if name in FUNCTIONS:
-                return FUNCTIONS[name](*(visit(arg) for arg in args))
+                return FUNCTIONS[name](*(visit(arg) for arg in args), evaluate=evaluate)
         raise ValueError("Unsupported expression syntax")
 
-    return _scalar(visit(tree.body))
+    return _scalar(visit(expression))
 
 
 def parse_answer(source: str) -> sp.Expr:

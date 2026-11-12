@@ -18,6 +18,7 @@ from app.contracts.api import Accepted, AnswerTarget, ChatTurn, MessageCreate, Q
 from app.contracts.entities import Student, Task
 from app.llm.client import LLMOutputError, OpenAICompatClient
 from app.llm.vision import Transcription, transcribe_answer
+from app.orchestration.questions import create_question
 from app.verify.parsing import parse_answer
 
 router = APIRouter(tags=["student"])
@@ -80,7 +81,9 @@ async def start_task(task_id: int, request: Request) -> Accepted:
 
 @router.get("/tasks/{task_id}/messages")
 async def list_messages(task_id: int, request: Request) -> list[ChatTurn]:
-    return await request.app.state.orchestrator.get_messages(task_id)
+    return await request.app.state.orchestrator.get_messages(
+        task_id, student_view=request.state.principal.role == "student"
+    )
 
 
 @router.get("/tasks/{task_id}/answer-target")
@@ -232,7 +235,7 @@ async def ask_question(student_id: str, body: QuestionCreate, request: Request) 
     创建一条 ``question`` 任务，辅导 Agent 先请学生尝试。之后的分层提示与完整解答作为
     该任务的对话推送，由 ``ChatTurn.hint_level`` 与 ``ChatTurn.solution`` 标注。
     """
-    not_implemented("T15")
+    return await create_question(request.app.state.orchestrator, student_id, body)
 
 
 @router.post("/tasks/{task_id}/messages", status_code=status.HTTP_202_ACCEPTED)

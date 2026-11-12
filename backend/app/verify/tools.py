@@ -1,5 +1,6 @@
 """Deterministic math checks. An inconclusive check is never a negative verdict."""
 
+import ast
 import contextlib
 import hashlib
 import json
@@ -13,7 +14,7 @@ from sympy.calculus.util import continuous_domain
 from app.contracts.enums import EquivalenceMode, Operation
 from app.contracts.values import SLIP, ItemSpec, LaTeX, Prediction
 from app.contracts.verify import AnswerGroup, Distinctness, Equivalence, ItemCheck
-from app.verify.parsing import parse_answer, parse_expr, symbol
+from app.verify.parsing import expression_syntax, parse_answer, parse_expr, symbol
 
 
 def _real_value(expr: sp.Expr) -> float | None:
@@ -104,7 +105,23 @@ def _compute(spec: ItemSpec) -> sp.Expr:
             point = {"oo": sp.oo, "-oo": -sp.oo}.get(spec.limit_point)
             if point is None:
                 point = parse_expr(spec.limit_point)
-            expr = sp.limit(expr, symbol(spec.variables[0]), point, dir=spec.limit_direction)
+            variable = symbol(spec.variables[0])
+            domain = continuous_domain(
+                parse_expr(spec.expr, preserve_structure=True), variable, sp.S.Reals
+            )
+            if point == sp.oo:
+                approaches = domain.sup == sp.oo
+            elif point == -sp.oo:
+                approaches = domain.inf == -sp.oo
+            else:
+                left = domain.intersect(sp.Interval.open(-sp.oo, point))
+                right = domain.intersect(sp.Interval.open(point, sp.oo))
+                approaches = (
+                    spec.limit_direction == "+" or (not left.is_empty and left.sup == point)
+                ) and (spec.limit_direction == "-" or (not right.is_empty and right.inf == point))
+            if not approaches:
+                raise ValueError("The real domain does not approach the requested limit point")
+            expr = sp.limit(expr, variable, point, dir=spec.limit_direction)
         case Operation.DERIVATIVE:
             expr = sp.diff(expr, *(symbol(var) for var in spec.variables))
         case Operation.INDEFINITE_INTEGRAL:
@@ -126,6 +143,28 @@ def _compute(spec: ItemSpec) -> sp.Expr:
 
 
 class SympyMathTools:
+    def same_revealed_answer(
+        self,
+        requested: LaTeX,
+        requested_spec: ItemSpec,
+        protected: LaTeX,
+        protected_spec: ItemSpec,
+    ) -> bool:
+        """Would the requested solution give away a protected verification answer?"""
+        try:
+            a, b = parse_answer(requested), parse_answer(protected)
+            left = list(dict.fromkeys(requested_spec.variables))
+            right = list(dict.fromkeys(protected_spec.variables))
+            if len(left) == len(right):
+                # The student may rephrase the problem using other variable names.
+                aliases = [symbol(f"TG{index}") for index in range(len(left))]
+                a = a.xreplace(dict(zip(map(symbol, left), aliases, strict=True)))
+                b = b.xreplace(dict(zip(map(symbol, right), aliases, strict=True)))
+                right = [str(alias) for alias in aliases]
+            return _compare(a, b, protected_spec.answer_mode, right).equivalent is True
+        except (ValueError, SyntaxError, TypeError, ArithmeticError, NotImplementedError):
+            return False
+
     def check_equivalent(
         self, a: LaTeX, b: LaTeX, mode: EquivalenceMode, variables: list[str]
     ) -> Equivalence:
@@ -183,8 +222,22 @@ class SympyMathTools:
         candidate_groups = sum(bool(group.misconception_ids) for group in groups)
         return Distinctness(ok=candidate_groups >= 2, groups=groups)
 
-    def fingerprint(self, spec: ItemSpec) -> str:
+    def fingerprint(self, spec: ItemSpec, *, preserve_symbols: bool = False) -> str:
         canonical = spec.model_dump(mode="json")
+        if preserve_symbols:
+            # Keep the original operations: simplifying sqrt(x)*sqrt(x) to x
+            # or cancelling x/x would lose conditions on the original domain.
+            canonical["variables"] = (
+                sorted(spec.variables) if spec.operation == Operation.EXPRESSION else spec.variables
+            )
+            canonical["expr"] = ast.dump(expression_syntax(spec.expr))
+            for bound in canonical["bounds"]:
+                for key in ("lower", "upper"):
+                    bound[key] = ast.dump(expression_syntax(bound[key]))
+            if spec.limit_point not in (None, "oo", "-oo"):
+                canonical["limit_point"] = ast.dump(expression_syntax(spec.limit_point))
+            encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+            return hashlib.sha256(encoded.encode()).hexdigest()
         # Preserve variable roles (including repeated derivative variables), not spelling.
         variables = [] if spec.bounds or spec.operation == Operation.EXPRESSION else spec.variables
         names = list(dict.fromkeys([*(bound.var for bound in spec.bounds), *variables]))
