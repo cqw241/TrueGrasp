@@ -17,6 +17,7 @@ points:
 - id: calc.ch10.s1
   section: 1
   name: 二重积分的概念与性质
+  prerequisites: [calc.ch5.s1, calc.ch9.s1]
 - id: calc.ch10.double_integral_cartesian
   section: 2
   name: 利用直角坐标计算二重积分
@@ -28,9 +29,11 @@ points:
 - id: calc.ch10.s3
   section: 3
   name: 三重积分
+  prerequisites: [calc.ch10.double_integral_cartesian, calc.ch8.s5]
 - id: calc.ch10.s4
   section: 4
   name: 重积分的应用
+  prerequisites: [calc.ch10.s1, calc.ch8.s2]
 misconceptions:
 - id: calc.ch10.double_integral_cartesian.freeze_inner_bound
   knowledge_point: calc.ch10.double_integral_cartesian
@@ -80,6 +83,51 @@ misconceptions:
   probes: [calc.ch10.polar.probe_disk_area]
   recurs_in: [calc.ch10.s3, calc.ch10.s4]
   strategies: [region_slices]
+- id: calc.ch10.s1.c3.constant_integral_without_area
+  knowledge_point: calc.ch10.s1
+  family: 混淆积分的权重方向与范围
+  description: 把二重积分中的常数直接提出后当作积分值，遗漏区域面积。
+  triggers:
+  - 二重积分的概念与性质
+  examples:
+  - question: 设 D 为 0≤x≤2、0≤y≤3 的矩形，求 $\iint_D3\,dx\,dy$。
+    wrong: '3'
+    correct: '18'
+  strategies:
+  - c3.integral
+  recurs_in:
+  - calc.ch10.s3
+  - calc.ch11.s4
+- id: calc.ch10.s3.c3.spherical_missing_sine
+  knowledge_point: calc.ch10.s3
+  family: 混淆积分的权重方向与范围
+  description: 球坐标三重积分的体积元只写 ρ²dρdφdθ，遗漏 sinφ。
+  triggers:
+  - 三重积分
+  examples:
+  - question: 用球坐标计算单位球 $x^2+y^2+z^2\le1$ 的体积，约定 φ 为与正 z 轴的夹角。
+    wrong: \frac{2\pi^2}{3}
+    correct: 体积元为 $\rho^2\sin\varphi\,d\rho\,d\varphi\,d\theta$，范围为 0≤ρ≤1、0≤φ≤π、0≤θ≤2π。积分为 $(1/3)\cdot2\cdot2\pi=4\pi/3$。
+  strategies:
+  - c3.integral
+  recurs_in:
+  - calc.ch11.s6
+- id: calc.ch10.s4.c3.centroid_without_mass
+  knowledge_point: calc.ch10.s4
+  family: 混淆积分的权重方向与范围
+  description: 把一阶质量矩直接当成质心坐标，遗漏除以总质量。
+  triggers:
+  - 重积分的应用
+  examples:
+  - question: 矩形薄片 0≤x≤3、0≤y≤2，面密度恒为 2，求质心的 x 坐标并说明计算。
+    wrong: 一阶质量矩为 18，所以 x 坐标为 18。
+    correct: 总质量 $m=\int_0^3\int_0^2 2\,dy\,dx=12$，关于 y 轴的一阶质量矩为 $\int_0^3\int_0^2 2x\,dy\,dx=18$，故 $\bar
+      x=18/12=3/2$，与均匀矩形的对称性一致。
+  strategies:
+  - c3.integral
+  recurs_in:
+  - calc.ch11.s4
+
 strategies:
 - id: region_slices
   families: [忽略积分区域依赖, 误读积分区域方向]
@@ -296,3 +344,40 @@ items:
       lower: '0'
       upper: '2'
   answer: '\frac{5\pi}{4}'
+- id: calc.ch10.s1.c3_seed1
+  knowledge_point: calc.ch10.s1
+  purpose: verification
+  dimension: correctness
+  stem: 设 D 为 0≤x≤2、0≤y≤3 的矩形，求 $\iint_D3\,dx\,dy$。
+  answer: '18'
+  spec:
+    operation: double_integral
+    expr: '3'
+    bounds:
+    - var: y
+      lower: '0'
+      upper: '3'
+    - var: x
+      lower: '0'
+      upper: '2'
+- id: calc.ch10.s3.c3_seed1
+  knowledge_point: calc.ch10.s3
+  purpose: verification
+  dimension: explanation
+  stem: 用球坐标计算单位球 $x^2+y^2+z^2\le1$ 的体积，约定 φ 为与正 z 轴的夹角。
+  answer: 体积元为 $\rho^2\sin\varphi\,d\rho\,d\varphi\,d\theta$，范围为 0≤ρ≤1、0≤φ≤π、0≤θ≤2π。积分为 $(1/3)\cdot2\cdot2\pi=4\pi/3$。
+  rubric:
+  - 明确球坐标角度约定及三个积分范围。
+  - 保留 Jacobian 中的 ρ²sinφ。
+  - 分别算出径向 1/3、极角 2、方位角 2π 并相乘。
+- id: calc.ch10.s4.c3_seed1
+  knowledge_point: calc.ch10.s4
+  purpose: verification
+  dimension: explanation
+  stem: 矩形薄片 0≤x≤3、0≤y≤2，面密度恒为 2，求质心的 x 坐标并说明计算。
+  answer: 总质量 $m=\int_0^3\int_0^2 2\,dy\,dx=12$，关于 y 轴的一阶质量矩为 $\int_0^3\int_0^2 2x\,dy\,dx=18$，故 $\bar
+    x=18/12=3/2$，与均匀矩形的对称性一致。
+  rubric:
+  - 分别计算总质量与对应的一阶质量矩。
+  - 使用质量矩除以总质量，得到 3/2。
+  - 用量纲或对称性检验坐标位于薄片内部。

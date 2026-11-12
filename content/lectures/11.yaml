@@ -26,21 +26,240 @@ points:
 - id: calc.ch11.s1
   section: 1
   name: 对弧长的曲线积分
+  prerequisites: [calc.ch5.s1, calc.ch8.s6]
 - id: calc.ch11.s2
   section: 2
   name: 对坐标的曲线积分
+  prerequisites: [calc.ch11.s1, calc.ch8.s2]
 - id: calc.ch11.s3
   section: 3
   name: 格林公式及其应用
+  prerequisites: [calc.ch11.s2, calc.ch10.double_integral_cartesian, calc.ch9.partial_derivative]
 - id: calc.ch11.s4
   section: 4
   name: 对面积的曲面积分
+  prerequisites: [calc.ch11.s1, calc.ch10.s1, calc.ch8.s5]
 - id: calc.ch11.s5
   section: 5
   name: 对坐标的曲面积分
+  prerequisites: [calc.ch11.s4, calc.ch8.s2]
 - id: calc.ch11.s6
   section: 6
   name: 高斯公式
+  prerequisites: [calc.ch11.s5, calc.ch10.s3, calc.ch9.partial_derivative]
 - id: calc.ch11.s7
   section: 7
   name: 斯托克斯公式
+  prerequisites: [calc.ch11.s2, calc.ch11.s5, calc.ch9.partial_derivative]
+misconceptions:
+- id: calc.ch11.s1.c3.arc_length_as_dx
+  knowledge_point: calc.ch11.s1
+  family: 忽略曲线曲面积分的定向与边界
+  description: 对弧长的曲线积分直接把 ds 写成 dx 或参数微元，忽略速度的模。
+  triggers:
+  - 对弧长的曲线积分
+  examples:
+  - question: C 为从 (0,0) 到 (3,4) 的线段，求 $\int_C(x+y)\,ds$。
+    wrong: \frac{7}{2}
+    correct: \frac{35}{2}
+  strategies:
+  - c3.orientation
+  recurs_in:
+  - calc.ch11.s4
+- id: calc.ch11.s2.c3.line_integral_no_orientation
+  knowledge_point: calc.ch11.s2
+  family: 忽略曲线曲面积分的定向与边界
+  description: 把对坐标的曲线积分当作无向长度积分，反转路径时仍保持原符号。
+  triggers:
+  - 对坐标的曲线积分
+  examples:
+  - question: C 为单位圆上半圆，从 (1,0) 沿上半圆到 (−1,0)，求 $\int_C dx$。
+    wrong: '2'
+    correct: '-2'
+  strategies:
+  - c3.orientation
+  recurs_in:
+  - calc.ch11.s3
+  - calc.ch11.s7
+- id: calc.ch11.s3.c3.green_curl_sign
+  knowledge_point: calc.ch11.s3
+  family: 忽略曲线曲面积分的定向与边界
+  description: 格林公式中把 Q_x−P_y 的次序写反，但保持原来的正向边界。
+  triggers:
+  - 格林公式及其应用
+  examples:
+  - question: C 为矩形 0≤x≤2、0≤y≤1 的逆时针边界，求 $\oint_C(-2y\,dx+3x\,dy)$。
+    wrong: '-10'
+    correct: '10'
+  strategies:
+  - c3.orientation
+  recurs_in:
+  - calc.ch11.s7
+- id: calc.ch11.s4.c3.surface_area_projection
+  knowledge_point: calc.ch11.s4
+  family: 忽略曲线曲面积分的定向与边界
+  description: 把曲面面积元直接当作其平面投影面积元，遗漏斜率因子。
+  triggers:
+  - 对面积的曲面积分
+  examples:
+  - question: S 为平面 z=2x+y 在 0≤x≤1、0≤y≤2 上方的部分，求 $\iint_S1\,dS$。
+    wrong: '2'
+    correct: 2\sqrt{6}
+  strategies:
+  - c3.orientation
+  recurs_in:
+  - calc.ch11.s5
+- id: calc.ch11.s5.c3.flux_ignores_normal
+  knowledge_point: calc.ch11.s5
+  family: 忽略曲线曲面积分的定向与边界
+  description: 把第二类曲面积分当作无向面积积分，忽略法向方向导致的通量符号。
+  triggers:
+  - 对坐标的曲面积分
+  examples:
+  - question: S 为 z=3 上 0≤x≤2、0≤y≤1 的矩形，取向下法向，向量场 F=(0,0,2)。求通量。
+    wrong: '4'
+    correct: '-4'
+  strategies:
+  - c3.orientation
+  recurs_in:
+  - calc.ch11.s6
+  - calc.ch11.s7
+- id: calc.ch11.s6.c3.gauss_on_open_surface
+  knowledge_point: calc.ch11.s6
+  family: 忽略曲线曲面积分的定向与边界
+  description: 对未闭合曲面直接套用高斯公式，遗漏补面通量。
+  triggers:
+  - 高斯公式
+  examples:
+  - question: S 为单位球上半球面（不含底面），法向取球外方向，F=(0,0,1)。求通量，并解释高斯公式的使用。
+    wrong: 散度为 0，所以半球面通量为 0。
+    correct: 补上 z=0 的单位圆盘，组成闭曲面。总体通量因散度为 0 而为 0；底盘外法向向下，通量为 -π，所以原半球面通量为 π。不能把开曲面直接当闭曲面。
+  strategies:
+  - c3.orientation
+  recurs_in:
+  - calc.ch11.s7
+- id: calc.ch11.s7.c3.stokes_boundary_orientation
+  knowledge_point: calc.ch11.s7
+  family: 忽略曲线曲面积分的定向与边界
+  description: 使用斯托克斯公式时固定取向上法向，却未检查边界实际是顺时针还是逆时针。
+  triggers:
+  - 斯托克斯公式
+  examples:
+  - question: C 为 z=0、x²+y²=4 的圆周，从正 z 轴看为顺时针。求 $\oint_C(-y\,dx/2+x\,dy/2)$。
+    wrong: 4\pi
+    correct: -4\pi
+  strategies:
+  - c3.orientation
+  recurs_in:
+  - calc.ch11.s3
+strategies:
+- id: c3.orientation
+  families:
+  - 忽略曲线曲面积分的定向与边界
+  principles:
+  - 先区分第一类与第二类积分，确定路径、法向及边界定向。
+  - 格林、高斯和斯托克斯公式必须满足区域、闭合性与方向条件。
+  constraints:
+  - 不把开曲面直接当作闭曲面套用高斯公式。
+  - 不在反向后保留有向积分原符号。
+  rubric:
+  - 能用参数或法向明确方向。
+  - 能说明补面、边界方向以及被积微元的对应。
+items:
+- id: calc.ch11.s1.c3_seed1
+  knowledge_point: calc.ch11.s1
+  purpose: verification
+  dimension: correctness
+  stem: C 为从 (0,0) 到 (3,4) 的线段，求 $\int_C(x+y)\,ds$。
+  answer: \frac{35}{2}
+  spec:
+    operation: definite_integral
+    expr: 35*t
+    bounds:
+    - var: t
+      lower: '0'
+      upper: '1'
+- id: calc.ch11.s2.c3_seed1
+  knowledge_point: calc.ch11.s2
+  purpose: verification
+  dimension: correctness
+  stem: C 为单位圆上半圆，从 (1,0) 沿上半圆到 (−1,0)，求 $\int_C dx$。
+  answer: '-2'
+  spec:
+    operation: definite_integral
+    expr: -sin(t)
+    bounds:
+    - var: t
+      lower: '0'
+      upper: pi
+- id: calc.ch11.s3.c3_seed1
+  knowledge_point: calc.ch11.s3
+  purpose: verification
+  dimension: correctness
+  stem: C 为矩形 0≤x≤2、0≤y≤1 的逆时针边界，求 $\oint_C(-2y\,dx+3x\,dy)$。
+  answer: '10'
+  spec:
+    operation: double_integral
+    expr: '5'
+    bounds:
+    - var: y
+      lower: '0'
+      upper: '1'
+    - var: x
+      lower: '0'
+      upper: '2'
+- id: calc.ch11.s4.c3_seed1
+  knowledge_point: calc.ch11.s4
+  purpose: verification
+  dimension: correctness
+  stem: S 为平面 z=2x+y 在 0≤x≤1、0≤y≤2 上方的部分，求 $\iint_S1\,dS$。
+  answer: 2\sqrt{6}
+  spec:
+    operation: double_integral
+    expr: sqrt(6)
+    bounds:
+    - var: y
+      lower: '0'
+      upper: '2'
+    - var: x
+      lower: '0'
+      upper: '1'
+- id: calc.ch11.s5.c3_seed1
+  knowledge_point: calc.ch11.s5
+  purpose: verification
+  dimension: correctness
+  stem: S 为 z=3 上 0≤x≤2、0≤y≤1 的矩形，取向下法向，向量场 F=(0,0,2)。求通量。
+  answer: '-4'
+  spec:
+    operation: double_integral
+    expr: '-2'
+    bounds:
+    - var: y
+      lower: '0'
+      upper: '1'
+    - var: x
+      lower: '0'
+      upper: '2'
+- id: calc.ch11.s6.c3_seed1
+  knowledge_point: calc.ch11.s6
+  purpose: verification
+  dimension: explanation
+  stem: S 为单位球上半球面（不含底面），法向取球外方向，F=(0,0,1)。求通量，并解释高斯公式的使用。
+  answer: 补上 z=0 的单位圆盘，组成闭曲面。总体通量因散度为 0 而为 0；底盘外法向向下，通量为 -π，所以原半球面通量为 π。不能把开曲面直接当闭曲面。
+  rubric:
+  - 明确原半球面未闭合。
+  - 补底盘并确定其外法向向下。
+  - 由总通量 0 减去底盘通量 -π 得到 π。
+- id: calc.ch11.s7.c3_seed1
+  knowledge_point: calc.ch11.s7
+  purpose: verification
+  dimension: correctness
+  stem: C 为 z=0、x²+y²=4 的圆周，从正 z 轴看为顺时针。求 $\oint_C(-y\,dx/2+x\,dy/2)$。
+  answer: -4\pi
+  spec:
+    operation: definite_integral
+    expr: '-2'
+    bounds:
+    - var: t
+      lower: '0'
+      upper: 2*pi

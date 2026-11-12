@@ -14,9 +14,95 @@ points:
 - id: calc.ch6.s1
   section: 1
   name: 定积分的元素法
+  prerequisites: [calc.ch5.s1]
 - id: calc.ch6.s2
   section: 2
   name: 定积分的几何应用
+  prerequisites: [calc.ch6.s1, calc.ch5.s2]
 - id: calc.ch6.s3
   section: 3
   name: 定积分在物理上的应用
+  prerequisites: [calc.ch6.s1]
+misconceptions:
+- id: calc.ch6.s1.c3.volume_missing_square
+  knowledge_point: calc.ch6.s1
+  family: 混淆积分的权重方向与范围
+  description: 旋转体体积元素把圆截面积 πy² 写成 πy，遗漏半径平方。
+  triggers:
+  - 定积分的元素法
+  examples:
+  - question: 由 $y=2x$、x 轴和 x=1 围成的平面区域绕 x 轴旋转，求所得体积。
+    wrong: \pi
+    correct: \frac{4\pi}{3}
+  strategies:
+  - c3.integral
+  recurs_in:
+  - calc.ch10.s4
+- id: calc.ch6.s2.c3.area_lower_minus_upper
+  knowledge_point: calc.ch6.s2
+  family: 混淆积分的权重方向与范围
+  description: 两曲线围成面积时不判断上下位置，把下函数减上函数并得到负面积。
+  triggers:
+  - 定积分的几何应用
+  examples:
+  - question: 求曲线 $y=2x$ 与 $y=x^2$ 所围区域的面积。
+    wrong: -\frac{4}{3}
+    correct: \frac{4}{3}
+  strategies:
+  - c3.integral
+  recurs_in:
+  - calc.ch10.double_integral_cartesian
+- id: calc.ch6.s3.c3.variable_force_as_constant
+  knowledge_point: calc.ch6.s3
+  family: 混淆积分的权重方向与范围
+  description: 把变力做功直接算作终点力乘总位移，忽略力沿过程的变化。
+  triggers:
+  - 定积分在物理上的应用
+  examples:
+  - question: 弹簧遵循 F(x)=4x（N，x 以 m 计），从自然长拉伸到 3 m，求外力做功（J）。
+    wrong: '36'
+    correct: '18'
+  strategies:
+  - c3.integral
+  recurs_in:
+  - calc.ch11.s2
+items:
+- id: calc.ch6.s1.c3_seed1
+  knowledge_point: calc.ch6.s1
+  purpose: verification
+  dimension: correctness
+  stem: 由 $y=2x$、x 轴和 x=1 围成的平面区域绕 x 轴旋转，求所得体积。
+  answer: \frac{4\pi}{3}
+  spec:
+    operation: definite_integral
+    expr: pi*(2*x)**2
+    bounds:
+    - var: x
+      lower: '0'
+      upper: '1'
+- id: calc.ch6.s2.c3_seed1
+  knowledge_point: calc.ch6.s2
+  purpose: verification
+  dimension: correctness
+  stem: 求曲线 $y=2x$ 与 $y=x^2$ 所围区域的面积。
+  answer: \frac{4}{3}
+  spec:
+    operation: definite_integral
+    expr: 2*x-x**2
+    bounds:
+    - var: x
+      lower: '0'
+      upper: '2'
+- id: calc.ch6.s3.c3_seed1
+  knowledge_point: calc.ch6.s3
+  purpose: verification
+  dimension: correctness
+  stem: 弹簧遵循 F(x)=4x（N，x 以 m 计），从自然长拉伸到 3 m，求外力做功（J）。
+  answer: '18'
+  spec:
+    operation: definite_integral
+    expr: 4*x
+    bounds:
+    - var: x
+      lower: '0'
+      upper: '3'

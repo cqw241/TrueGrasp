@@ -20,6 +20,7 @@ points:
 - id: calc.ch2.s1
   section: 1
   name: 导数概念
+  prerequisites: [calc.ch1.s3, calc.ch1.s8]
 - id: calc.ch2.derivative_rules
   section: 2
   name: 四则运算与基本初等函数的求导
@@ -35,6 +36,7 @@ points:
 - id: calc.ch2.s3
   section: 3
   name: 高阶导数
+  prerequisites: [calc.ch2.derivative_rules]
 - id: calc.ch2.implicit_diff
   section: 4
   name: 隐函数及由参数方程确定的函数的导数
@@ -42,6 +44,7 @@ points:
 - id: calc.ch2.s5
   section: 5
   name: 函数的微分
+  prerequisites: [calc.ch2.s1]
 misconceptions:
 - id: calc.ch2.derivative_rules.product_of_derivatives
   knowledge_point: calc.ch2.derivative_rules
@@ -139,6 +142,51 @@ misconceptions:
   probes: [calc.ch2.implicit_diff.probe_circle]
   recurs_in: [calc.ch9.s5]
   strategies: [implicit_balance]
+- id: calc.ch2.s1.c3.continuity_implies_derivative
+  knowledge_point: calc.ch2.s1
+  family: 混淆导数阶次或微分近似
+  description: 把连续当作可导的充分条件，跳过左右差商检验。
+  triggers:
+  - 导数概念
+  examples:
+  - question: $f(x)=|x-1|$ 在 x=1 是否可导？用定义说明。
+    wrong: 连续，所以导数为 0。
+    correct: 不可导。差商为 $|h|/h$，h→0⁻ 时为 -1，h→0⁺ 时为 1；两侧导数不同。
+  strategies:
+  - c3.derivative
+  recurs_in:
+  - calc.ch3.s1
+  - calc.ch9.s3
+- id: calc.ch2.s3.c3.second_derivative_as_square
+  knowledge_point: calc.ch2.s3
+  family: 混淆导数阶次或微分近似
+  description: 把二阶导数 f″ 误读成一阶导数的平方 $(f′)^2$。
+  triggers:
+  - 高阶导数
+  examples:
+  - question: 求 $y=x^4$ 的二阶导数。
+    wrong: 16x^6
+    correct: 12x^2
+  strategies:
+  - c3.derivative
+  recurs_in:
+  - calc.ch3.s3
+  - calc.ch7.s1
+- id: calc.ch2.s5.c3.differential_as_exact_increment
+  knowledge_point: calc.ch2.s5
+  family: 混淆导数阶次或微分近似
+  description: 把有限增量 Δy 与一阶微分 dy 当成严格相等，遗漏余项。
+  triggers:
+  - 函数的微分
+  examples:
+  - question: $y=x^2$，从 x=3 增加 Δx=0.1。分别求 dy、Δy，并解释二者关系。
+    wrong: dy=\Delta y=0.6
+    correct: $dy=2\cdot3\cdot0.1=0.6$；$\Delta y=3.1^2-3^2=0.61$。差为 $(\Delta x)^2=0.01$；dy 是一阶近似。
+  strategies:
+  - c3.derivative
+  recurs_in:
+  - calc.ch9.s3
+
 strategies:
 - id: derivative_algebra
   families: [误用求导运算法则]
@@ -205,6 +253,19 @@ strategies:
   rubric:
   - 能从求导后的等式解释负号来源。
   - 明确局部分支与分母非零条件。
+- id: c3.derivative
+  families:
+  - 混淆导数阶次或微分近似
+  principles:
+  - 导数由差商极限定义，高阶导数是重复求导。
+  - 微分是增量的一阶线性部分，有限增量还包含余项。
+  constraints:
+  - 不把函数连续、导数存在和导数连续混为一谈。
+  - 不把一阶微分公式当作任意增量下的精确恒等式。
+  rubric:
+  - 能指出求导次数、保持不变的量及定义域。
+  - 能区分导数、微分和有限增量并检验误差。
+
 items:
 - id: calc.ch2.derivative_rules.probe_product
   knowledge_point: calc.ch2.derivative_rules
@@ -457,3 +518,35 @@ items:
     answer: '0'
   - misconception_id: calc.ch2.implicit_diff.sign_transfer
     answer: '\frac{x}{3\sqrt{4-x^2/3}}'
+- id: calc.ch2.s1.c3_seed1
+  knowledge_point: calc.ch2.s1
+  purpose: verification
+  dimension: explanation
+  stem: $f(x)=|x-1|$ 在 x=1 是否可导？用定义说明。
+  answer: 不可导。差商为 $|h|/h$，h→0⁻ 时为 -1，h→0⁺ 时为 1；两侧导数不同。
+  rubric:
+  - 写出以 h 为增量的差商。
+  - 分别得到左右导数 -1 与 1。
+  - 明确连续不推出可导。
+- id: calc.ch2.s3.c3_seed1
+  knowledge_point: calc.ch2.s3
+  purpose: verification
+  dimension: correctness
+  stem: 求 $y=x^4$ 的二阶导数。
+  answer: 12x^2
+  spec:
+    operation: derivative
+    expr: x**4
+    variables:
+    - x
+    - x
+- id: calc.ch2.s5.c3_seed1
+  knowledge_point: calc.ch2.s5
+  purpose: verification
+  dimension: explanation
+  stem: $y=x^2$，从 x=3 增加 Δx=0.1。分别求 dy、Δy，并解释二者关系。
+  answer: $dy=2\cdot3\cdot0.1=0.6$；$\Delta y=3.1^2-3^2=0.61$。差为 $(\Delta x)^2=0.01$；dy 是一阶近似。
+  rubric:
+  - 微分在原点 x=3 取导数。
+  - 用函数值差精确算出 Δy=0.61。
+  - 指出二阶余项，不能将近似号无条件改为等号。

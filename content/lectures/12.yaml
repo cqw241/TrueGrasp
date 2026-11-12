@@ -23,21 +23,27 @@ points:
 - id: calc.ch12.s1
   section: 1
   name: 常数项级数的概念和性质
+  prerequisites: [calc.ch1.s2]
 - id: calc.ch12.s2
   section: 2
   name: 常数项级数审敛法
+  prerequisites: [calc.ch12.s1, calc.ch5.s5]
 - id: calc.ch12.s3
   section: 3
   name: 幂级数
+  prerequisites: [calc.ch12.s2]
 - id: calc.ch12.s4
   section: 4
   name: 函数展开为幂级数
+  prerequisites: [calc.ch12.s3, calc.ch3.s3]
 - id: calc.ch12.s5
   section: 5
   name: 傅里叶级数
+  prerequisites: [calc.ch5.s1, calc.ch1.function]
 - id: calc.ch12.s6
   section: 6
   name: 一般周期的傅里叶级数
+  prerequisites: [calc.ch12.s5, calc.ch4.substitution]
 items:
 - id: calc.ch12.s1.seed_term_zero_counterexample
   knowledge_point: calc.ch12.s1
@@ -70,3 +76,179 @@ items:
   - 两个例子的比值极限都确为 1。
   - 用有效的审敛方法分别证明一个收敛、一个发散。
   - 明确比值等于 1 表示该判别法不能下结论，不等于级数发散。
+- id: calc.ch12.s1.c3_seed1
+  knowledge_point: calc.ch12.s1
+  purpose: verification
+  dimension: explanation
+  stem: 判断 $\sum_{n=2}^{\infty}1/(n\ln n)$ 的敛散性，并说明理由。
+  answer: 发散。f(x)=1/(x ln x) 在 x≥2 上正、连续且递减；$\int_2^R dx/(x\ln x)=\ln\ln R-\ln\ln2\to+\infty$，由积分判别法发散。通项趋零不充分。
+  rubric:
+  - 验证积分判别所需的正性、连续性和单调性。
+  - 计算截断积分 ln ln R−ln ln 2 并取极限。
+  - 明确通项趋零仅是必要条件。
+- id: calc.ch12.s2.c3_seed1
+  knowledge_point: calc.ch12.s2
+  purpose: verification
+  dimension: explanation
+  stem: 判断 $\sum_{n=1}^{\infty}(-1)^{n-1}/\sqrt n$ 是否收敛、是否绝对收敛，并说明理由。
+  answer: 条件收敛。幅度 1/√n 单调趋零，莱布尼茨判别法给出原级数收敛；绝对值级数是 p=1/2 的正项级数，可由积分判别得发散，故不绝对收敛。
+  rubric:
+  - 检查交错级数幅度的单调性和趋零。
+  - 独立证明绝对值级数发散。
+  - 准确得出条件收敛，不能倒用绝对收敛的充分性。
+- id: calc.ch12.s3.c3_seed1
+  knowledge_point: calc.ch12.s3
+  purpose: verification
+  dimension: explanation
+  stem: 求 $\sum_{n=1}^{\infty}(x-2)^n/n$ 的收敛半径及实数收敛区间，说明端点情况。
+  answer: R=1。|x−2|<1 时绝对收敛；x=1 为交错调和级数，条件收敛；x=3 为调和级数，发散。收敛区间为 [1,3)。
+  rubric:
+  - 通过根值或比值判断半径为 1。
+  - 分别审查两个端点，不能只引用半径。
+  - 写出 [1,3) 并区分左端条件收敛与内部绝对收敛。
+- id: calc.ch12.s4.c3_seed1
+  knowledge_point: calc.ch12.s4
+  purpose: verification
+  dimension: explanation
+  stem: 在 |x|<1 内展开 ln(1−x) 为幂级数，写出前三个非零项并说明来源。
+  answer: $\ln(1-x)=-\sum_{n=1}^{\infty}x^n/n=-x-x^2/2-x^3/3-\cdots$。由 1/(1−t)=∑_{n=0}∞t^n 在 0 到 x 上逐项积分，左端为
+    −ln(1−x)，再取负号；x=0 确定常数为 0。
+  rubric:
+  - 说明几何级数展开及 |x|<1 的范围。
+  - 积分得到正确分母 n 并保留总负号。
+  - 用 x=0 核定常数并正确写出前三项。
+- id: calc.ch12.s5.c3_seed1
+  knowledge_point: calc.ch12.s5
+  purpose: verification
+  dimension: explanation
+  stem: 对 2π 周期函数 f(x)=2，按 $f\sim a_0/2+\sum_{n\ge1}(a_n\cos nx+b_n\sin nx)$ 求系数并说明常数项。
+  answer: $a_0=(1/\pi)\int_{-\pi}^{\pi}2\,dx=4$；n≥1 时 a_n=b_n=0。展开的常数项是 a₀/2=2，恰好还原原函数。
+  rubric:
+  - 使用 1/π 的系数归一化计算 a₀=4。
+  - 依据整周期正弦余弦积分或正交性求出其余系数为零。
+  - 保留常数项中的 1/2 并还原 f=2。
+- id: calc.ch12.s6.c3_seed1
+  knowledge_point: calc.ch12.s6
+  purpose: verification
+  dimension: explanation
+  stem: f(x)=x 在 (−2,2) 上给定，并作周期 4 延拓。写出其傅里叶正弦级数，说明频率与系数。
+  answer: L=2，基函数为 sin(nπx/2)。f 为奇函数，a₀=a_n=0；$b_n=(2/L)\int_0^Lx\sin(n\pi x/L)\,dx=4(-1)^{n+1}/(n\pi)$。因此在
+    −2<x<2 时 $x=(4/\pi)\sum_{n\ge1}(-1)^{n+1}\sin(n\pi x/2)/n$；跳跃点处级数收敛到左右极限均值 0。
+  rubric:
+  - 由周期 4 得出 L=2 和频率 nπ/2。
+  - 利用奇性消去余弦系数，并经分部积分求 b_n。
+  - 给出正确的收敛区间表达及跳跃点的均值说明。
+
+misconceptions:
+- id: calc.ch12.s1.c3.zero_terms_suffice
+  knowledge_point: calc.ch12.s1
+  family: 误用级数审敛与展开条件
+  description: 把级数通项趋零的必要条件当作充分条件，不检查部分和或其他审敛条件。
+  triggers:
+  - 常数项级数的概念和性质
+  examples:
+  - question: 判断 $\sum_{n=2}^{\infty}1/(n\ln n)$ 的敛散性，并说明理由。
+    wrong: 通项趋于 0，所以收敛。
+    correct: 发散。f(x)=1/(x ln x) 在 x≥2 上正、连续且递减；$\int_2^R dx/(x\ln x)=\ln\ln R-\ln\ln2\to+\infty$，由积分判别法发散。通项趋零不充分。
+  strategies:
+  - c3.series
+  recurs_in:
+  - calc.ch12.s2
+  - calc.ch12.s3
+- id: calc.ch12.s2.c3.absolute_divergence_implies_divergence
+  knowledge_point: calc.ch12.s2
+  family: 误用级数审敛与展开条件
+  description: 把绝对值级数发散当作原变号级数发散的充分条件，忽略条件收敛。
+  triggers:
+  - 常数项级数审敛法
+  examples:
+  - question: 判断 $\sum_{n=1}^{\infty}(-1)^{n-1}/\sqrt n$ 是否收敛、是否绝对收敛，并说明理由。
+    wrong: 绝对值级数发散，所以原级数也发散。
+    correct: 条件收敛。幅度 1/√n 单调趋零，莱布尼茨判别法给出原级数收敛；绝对值级数是 p=1/2 的正项级数，可由积分判别得发散，故不绝对收敛。
+  strategies:
+  - c3.series
+  recurs_in:
+  - calc.ch12.s3
+- id: calc.ch12.s3.c3.radius_includes_endpoints
+  knowledge_point: calc.ch12.s3
+  family: 误用级数审敛与展开条件
+  description: 由幂级数收敛半径直接把两个端点都纳入收敛区间，未逐个代入审敛。
+  triggers:
+  - 幂级数
+  examples:
+  - question: 求 $\sum_{n=1}^{\infty}(x-2)^n/n$ 的收敛半径及实数收敛区间，说明端点情况。
+    wrong: R=1，所以收敛区间为 [1,3]。
+    correct: R=1。|x−2|<1 时绝对收敛；x=1 为交错调和级数，条件收敛；x=3 为调和级数，发散。收敛区间为 [1,3)。
+  strategies:
+  - c3.series
+  recurs_in:
+  - calc.ch12.s4
+- id: calc.ch12.s4.c3.log_series_wrong_sign
+  knowledge_point: calc.ch12.s4
+  family: 误用级数审敛与展开条件
+  description: 对几何级数逐项积分时忽略原函数的负号或积分常数，写错对数展开。
+  triggers:
+  - 函数展开为幂级数
+  examples:
+  - question: 在 |x|<1 内展开 ln(1−x) 为幂级数，写出前三个非零项并说明来源。
+    wrong: x+x^2/2+x^3/3+\cdots
+    correct: $\ln(1-x)=-\sum_{n=1}^{\infty}x^n/n=-x-x^2/2-x^3/3-\cdots$。由 1/(1−t)=∑_{n=0}∞t^n 在 0 到 x
+      上逐项积分，左端为 −ln(1−x)，再取负号；x=0 确定常数为 0。
+  strategies:
+  - c3.series
+  recurs_in:
+  - calc.ch12.s3
+- id: calc.ch12.s5.c3.fourier_constant_normalization
+  knowledge_point: calc.ch12.s5
+  family: 误用傅里叶归一化与周期缩放
+  description: 把傅里叶常数项 a0/2 误写成 a0，导致常数分量加倍。
+  triggers:
+  - 傅里叶级数
+  examples:
+  - question: 对 2π 周期函数 f(x)=2，按 $f\sim a_0/2+\sum_{n\ge1}(a_n\cos nx+b_n\sin nx)$ 求系数并说明常数项。
+    wrong: a₀=4，所以展开为 f(x)=4。
+    correct: $a_0=(1/\pi)\int_{-\pi}^{\pi}2\,dx=4$；n≥1 时 a_n=b_n=0。展开的常数项是 a₀/2=2，恰好还原原函数。
+  strategies:
+  - c3.fourier
+  recurs_in:
+  - calc.ch12.s6
+- id: calc.ch12.s6.c3.fourier_period_scaling
+  knowledge_point: calc.ch12.s6
+  family: 误用傅里叶归一化与周期缩放
+  description: 将一般周期 2L 的傅里叶基函数仍写成 sin(nx)、cos(nx)，遗漏频率 π/L。
+  triggers:
+  - 一般周期的傅里叶级数
+  examples:
+  - question: f(x)=x 在 (−2,2) 上给定，并作周期 4 延拓。写出其傅里叶正弦级数，说明频率与系数。
+    wrong: 使用 sin(nx) 作为周期 4 的基本正弦项。
+    correct: L=2，基函数为 sin(nπx/2)。f 为奇函数，a₀=a_n=0；$b_n=(2/L)\int_0^Lx\sin(n\pi x/L)\,dx=4(-1)^{n+1}/(n\pi)$。因此在
+      −2<x<2 时 $x=(4/\pi)\sum_{n\ge1}(-1)^{n+1}\sin(n\pi x/2)/n$；跳跃点处级数收敛到左右极限均值 0。
+  strategies:
+  - c3.fourier
+  recurs_in:
+  - calc.ch11.s1
+strategies:
+- id: c3.series
+  families:
+  - 误用级数审敛与展开条件
+  principles:
+  - 通项趋零、级数收敛和绝对收敛是不同命题。
+  - 按正项、变号、幂级数分别选择判据；收敛半径不决定端点。
+  constraints:
+  - 不把有限部分和作为收敛证明。
+  - 不把比值判别失效解释为发散。
+  rubric:
+  - 能验证所用审敛法的条件并单独检查端点。
+  - 能区分收敛范围、绝对收敛与逐项运算的适用范围。
+- id: c3.fourier
+  families:
+  - 误用傅里叶归一化与周期缩放
+  principles:
+  - 系数归一化、常数项和基函数频率必须与实际周期一致。
+  - 利用奇偶性前核对区间与周期延拓，并按左右极限解释间断点取值。
+  constraints:
+  - 不把 a0 直接当作常数项。
+  - 不把任意周期函数都按周期 2π 套用频率。
+  rubric:
+  - 能写出与周期对应的系数积分及基函数。
+  - 能检查常数函数、奇偶性和跳跃点的收敛值。
