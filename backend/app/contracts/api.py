@@ -167,6 +167,9 @@ class AnswerTarget(BaseModel):
     stem: str = ""
     turn: int = 0
     accepts_text: bool = False  # Some item-bound turns accept a description of a stuck step.
+    # Only the original-question phase treats an upload as question material. Item-bound
+    # diagnostic/practice turns still submit through answer-photo so the tutor can judge it.
+    accepts_question_photo: bool = False
 
 
 class Accepted(BaseModel):

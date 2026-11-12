@@ -467,6 +467,7 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
             target = await runtime.get_answer_target(task_id)
             assert target.item_id and not target.item_id.startswith("student-question.")
             assert target.accepts_text
+            assert not target.accepts_question_photo
             with Session(engine) as session:
                 question_receipt = session.get(NodeReceipt, f"question:{task_id}")
                 receipt = session.get(
@@ -488,6 +489,7 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
             app.state.photo_llm = Vision()
             target = await runtime.get_answer_target(task_id)
             assert target.stem == "求 sin(8x) 的导数" and target.accepts_text
+            assert target.accepts_question_photo
             png = BytesIO()
             Image.new("RGB", (4, 4), "white").save(png, format="PNG")
             photo = await client.post(

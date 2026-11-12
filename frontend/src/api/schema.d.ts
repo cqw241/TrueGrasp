@@ -756,6 +756,11 @@ export interface components {
        * @default false
        */
       accepts_text: boolean
+      /**
+       * Accepts Question Photo
+       * @default false
+       */
+      accepts_question_photo: boolean
     }
     /** Body_import_homework_api_homework_post */
     Body_import_homework_api_homework_post: {

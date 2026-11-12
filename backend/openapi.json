@@ -2220,6 +2220,11 @@
             "type": "boolean",
             "title": "Accepts Text",
             "default": false
+          },
+          "accepts_question_photo": {
+            "type": "boolean",
+            "title": "Accepts Question Photo",
+            "default": false
           }
         },
         "type": "object",

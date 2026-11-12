@@ -768,7 +768,7 @@ async def test_different_questions_with_same_answer_are_not_blocked(business):
         )
         session.commit()
         # Same answer, different operation: allowed.
-        _reject_open_verification(session, "A", asked.stem, asked)
+        _reject_open_verification(session, "A", asked.stem, asked.fingerprint)
         with pytest.raises(HTTPException):
             _reject_open_verification(session, "A", protected.stem)
         copy = asked.model_copy(
@@ -777,7 +777,153 @@ async def test_different_questions_with_same_answer_are_not_blocked(business):
         session.add(copy)
         session.flush()
         with pytest.raises(HTTPException):
-            _reject_open_verification(session, "A", copy.stem, copy)
+            _reject_open_verification(session, "A", copy.stem, copy.fingerprint)
+        # A rewritten stem must still be caught by the fingerprint alone.
+        with pytest.raises(HTTPException):
+            _reject_open_verification(session, "A", "完全不同的题面", "fp-protected")
+
+
+async def test_correction_cannot_reinterpret_an_open_verification_item(business):
+    from app.agents.tutor.student_question import AttemptReview, QuestionDraft
+    from app.contracts.values import ItemSpec
+    from app.orchestration.questions import _correct
+    from app.orchestration.storage import NodeReceipt
+    from app.verify.tools import SympyMathTools
+
+    tools = SympyMathTools()
+    protected_spec = ItemSpec(operation="limit", expr="sin(x)/x", variables=["x"], limit_point="0")
+    current_spec = ItemSpec(operation="derivative", expr="sin(2*x)", variables=["x"])
+    with Session(business) as session:
+        verification = Task(
+            type=TaskType.VERIFICATION,
+            student_id="A",
+            knowledge_point_id="kp",
+            created_on=TODAY,
+        )
+        question = Task(
+            type=TaskType.QUESTION,
+            student_id="A",
+            knowledge_point_id="kp",
+            created_on=TODAY,
+        )
+        session.add_all([verification, question])
+        session.flush()
+        protected = Item(
+            id="protected-open",
+            knowledge_point_id="kp",
+            purpose=ItemPurpose.VERIFICATION,
+            source=ItemSource.SEED,
+            stem="求 lim sin(x)/x",
+            spec=protected_spec,
+            answer="1",
+            fingerprint=tools.fingerprint(protected_spec),
+        )
+        current = Item(
+            id="student-question.current",
+            knowledge_point_id="kp",
+            purpose=ItemPurpose.PRACTICE,
+            source=ItemSource.GENERATED,
+            stem="求 sin(2x) 的导数",
+            spec=current_spec,
+            answer="2*cos(2*x)",
+            fingerprint=tools.fingerprint(current_spec),
+        )
+        session.add_all([protected, current])
+        session.flush()
+        session.add(
+            ItemExposure(
+                student_id="A",
+                fingerprint=protected.fingerprint,
+                task_id=verification.id,
+                item_id=protected.id,
+            )
+        )
+        old = Evidence(
+            student_id="A",
+            knowledge_point_id="kp",
+            task_id=question.id,
+            item_id=current.id,
+            kind=EvidenceKind.PRACTICE,
+            student_answer="cos(2x)",
+            is_correct=False,
+            judged_by=JudgedBy.TOOL,
+            teaching_date=TODAY,
+        )
+        session.add(old)
+        session.flush()
+        question.evidence_ids = [old.id]
+        session.add(
+            NodeReceipt(
+                key=f"question:{question.id}",
+                result={"item": current.id, "revision": 0, "interpreted": True},
+            )
+        )
+        session.commit()
+        question_id = question.id
+        item = session.get(Item, current.id)
+        session.expunge(item)
+
+    class Questions:
+        tools = SympyMathTools()
+        draft = QuestionDraft(stem="换一种写法", spec=protected_spec, answer="1")
+
+        async def interpret(self, content, images=(), history=()):
+            return self.draft
+
+        async def discuss(self, item, message, intent, **kwargs):
+            return "已更新题意。"
+
+    class Runtime:
+        engine = business
+        questions = Questions()
+
+        def _task(self, session, task_id):
+            return session.get(Task, task_id)
+
+    runtime = Runtime()
+    state = {"task_id": question_id, "teaching_date": TODAY.isoformat()}
+    history = [{"role": "user", "content": "求 sin(2x) 的导数"}]
+    blocked = await _correct(
+        runtime,
+        state,
+        item,
+        history,
+        "更正：换一种写法",
+        AttemptReview(intent="correction", reason="改题"),
+        [],
+    )
+    assert "独立验证题" in blocked["messages"][-1]["content"]
+    with Session(business) as session:
+        unchanged = session.get(Item, item.id)
+        assert unchanged.stem == "求 sin(2x) 的导数"
+        assert unchanged.answer == "2*cos(2*x)"
+
+    # A correction to a different problem applies, but the old judgement leaves the
+    # task's active evidence chain and is retained only in the receipt.
+    runtime.questions.draft = QuestionDraft(
+        stem="求 cos(2x) 的导数",
+        spec=ItemSpec(operation="derivative", expr="cos(2*x)", variables=["x"]),
+        answer="-2*sin(2*x)",
+    )
+    applied = await _correct(
+        runtime,
+        state,
+        item,
+        history,
+        "更正：求 cos(2x) 的导数",
+        AttemptReview(intent="correction", reason="改题"),
+        [],
+    )
+    assert applied["messages"][-1]["content"] == "已更新题意。"
+    with Session(business) as session:
+        updated = session.get(Item, item.id)
+        assert updated.stem == "求 cos(2x) 的导数"
+        current_task = session.get(Task, question_id)
+        assert current_task.evidence_ids == []
+        receipt = session.get(NodeReceipt, f"question:{question_id}")
+        assert receipt.result["superseded_evidence_ids"]
+        assert receipt.result["corrections"][0]["previous_stem"] == "求 sin(2x) 的导数"
+        assert not session.exec(select(Evidence).where(Evidence.reason.like("学生更正%"))).all()
 
 
 async def test_existing_verification_works_and_resumes_without_planner(business, tmp_path):

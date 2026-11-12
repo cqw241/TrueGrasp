@@ -15,7 +15,7 @@ from app.contracts.entities import Evidence, Item, KnowledgePoint, Misconception
 from app.contracts.enums import EquivalenceMode, EvidenceKind, ItemPurpose, ItemSource, JudgedBy
 from app.contracts.events import HomeworkImported, make_event
 from app.contracts.llm import ChatMessage, LLMClient
-from app.contracts.values import SLIP
+from app.contracts.values import PENDING_KNOWLEDGE_POINT_ID, SLIP
 from app.ingest.models import (
     HomeworkAnalysis,
     HomeworkRow,
@@ -143,7 +143,11 @@ class HomeworkImporter:
             raise IngestError("同批次学生和题目组合重复")
         # 模型调用前不写业务数据；任何行失败都不留下半批导入。
         with Session(self.engine) as session:
-            points = {point.id: point for point in session.exec(select(KnowledgePoint)).all()}
+            points = {
+                point.id: point
+                for point in session.exec(select(KnowledgePoint)).all()
+                if point.id != PENDING_KNOWLEDGE_POINT_ID
+            }
             misconceptions = {
                 cause.id: cause for cause in session.exec(select(Misconception)).all()
             }

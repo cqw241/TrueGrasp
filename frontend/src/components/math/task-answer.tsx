@@ -120,6 +120,7 @@ function AnswerEditor({
 }) {
   const { item_id: itemId, turn = 0 } = target
   const acceptsText = target.accepts_text
+  const questionPhoto = target.accepts_question_photo
   const [answer, setAnswer] = useState('')
   const [photoIds, setPhotoIds] = useState<string[]>([])
   const [preview, setPreview] = useState('')
@@ -171,8 +172,8 @@ function AnswerEditor({
     // （技术文档第 8 节第 5 条）。T06 的 requires_confirmation 恒为真，这里只看 doubts。
     let direct: string | null = null
     try {
-      if (acceptsText) {
-        // 主动提问的追问：保存原图，模型会结合图片和文字继续交流，不当作公式作答。
+      if (questionPhoto) {
+        // 主动提问的原题阶段：保存原图，模型会结合图片和文字继续交流，不当作公式作答。
         const { data } = await fetchClient.POST(
           '/api/tasks/{task_id}/question-photo',
           {
@@ -215,7 +216,11 @@ function AnswerEditor({
       }
     } catch (error) {
       if (!controller.signal.aborted) {
-        if (error instanceof ApiError && error.status === 409 && !acceptsText) {
+        if (
+          error instanceof ApiError &&
+          error.status === 409 &&
+          !questionPhoto
+        ) {
           setPhotoExpired(true)
           await onRefresh()
         } else {

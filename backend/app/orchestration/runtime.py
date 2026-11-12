@@ -601,6 +601,8 @@ class Orchestrator:
             stem=stem,
             turn=len(messages),
             accepts_text=task.type == TaskType.QUESTION,
+            accepts_question_photo=task.type == TaskType.QUESTION
+            and snapshot.values.get("phase") == "question",
         )
 
     async def _run_task(self, key: str, inp: RunState | Command | None) -> None:

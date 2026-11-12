@@ -28,7 +28,7 @@ from app.orchestration.storage import (
 from app.verify.tools import stem_fingerprint
 
 
-def _reject_open_verification(session, student_id, stem, question=None):
+def _reject_open_verification(session, student_id, stem, fingerprint: str | None = None):
     answered = (
         select(Evidence.id)
         .where(
@@ -52,13 +52,11 @@ def _reject_open_verification(session, student_id, stem, question=None):
         )
     )
     compact_stem = "".join(stem.split())
-    fingerprint = question.fingerprint if question is not None else None
     for item in items:
         if "".join(item.stem.split()) == compact_stem:
             raise HTTPException(409, "这会给出一道尚未作答的独立验证题的结果，请先完成作答")
         if (
-            question is not None
-            and fingerprint is not None
+            fingerprint is not None
             and item.fingerprint is not None
             and item.fingerprint == fingerprint
         ):
@@ -82,6 +80,12 @@ def _item_fingerprint(runtime, item: Item) -> str:
     if item.spec is not None:
         return runtime.questions.tools.fingerprint(item.spec)
     return stem_fingerprint(item.stem)
+
+
+def _draft_fingerprint(runtime, draft, stem: str) -> str:
+    if draft.spec is not None:
+        return runtime.questions.tools.fingerprint(draft.spec)
+    return stem_fingerprint(stem)
 
 
 async def create_question(runtime, student_id: str, body: QuestionCreate) -> Task:
@@ -125,7 +129,7 @@ async def create_question(runtime, student_id: str, body: QuestionCreate) -> Tas
             raise HTTPException(422, str(exc)) from exc
         if content:
             # The flush holds SQLite's writer lock while the final anti-screenshot check runs.
-            _reject_open_verification(session, student_id, content, item)
+            _reject_open_verification(session, student_id, content, item.fingerprint)
         session.add(
             NodeReceipt(
                 key=f"question:{task.id}",
@@ -179,7 +183,7 @@ async def _interpret(runtime, state, task_id: int) -> tuple[Item, list[str], str
         task.knowledge_point_id = item.knowledge_point_id
         blocked = None
         try:
-            _reject_open_verification(session, task.student_id, item.stem, item)
+            _reject_open_verification(session, task.student_id, item.stem, item.fingerprint)
         except HTTPException as exc:
             # The interpreted problem is the same as (or an equivalent rewrite of) an
             # unanswered verification item. Keep the input but do not tutor it.
@@ -424,39 +428,40 @@ async def _next_hint(runtime, state, item, history, attempt, observation, confir
 
 
 async def _correct(runtime, state, item, history, message, review, images) -> dict:
-    with Session(runtime.engine) as session:
-        receipt = session.get(NodeReceipt, f"question:{state['task_id']}")
-        initial = dict(receipt.result)
-        revision = initial.get("revision", 0)
-        previous_answer = item.answer
-        key = f"question:{state['task_id']}:{item.id}:{revision}:correction"
-        if session.get(NodeReceipt, key) is None:
-            task = runtime._task(session, state["task_id"])
-            evidence = Evidence(
-                student_id=task.student_id,
-                task_id=task.id,
-                item_id=item.id,
-                knowledge_point_id=task.knowledge_point_id,
-                kind=EvidenceKind.PRACTICE,
-                student_answer=message,
-                correct_answer=previous_answer,
-                is_correct=None,
-                judged_by=JudgedBy.MODEL,
-                reason="学生更正/补充题目条件：" + review.reason,
-                teaching_date=date.fromisoformat(state["teaching_date"]),
-            )
-            session.add(evidence)
-            session.flush()
-            task.evidence_ids = [*task.evidence_ids, evidence.id]
-            session.add(NodeReceipt(key=key, result={"evidence_id": evidence.id}))
-            session.commit()
     draft = await runtime.questions.interpret(message, images, history)
+    stem = draft.stem or item.stem
+    # A correction must not turn an unanswered verification item into a tutored question:
+    # the level-4 hint would then reveal that item's answer.
+    with Session(runtime.engine) as session:
+        task = runtime._task(session, state["task_id"])
+        try:
+            _reject_open_verification(
+                session, task.student_id, stem, _draft_fingerprint(runtime, draft, stem)
+            )
+        except HTTPException as exc:
+            return _reply(history, str(exc.detail), item_id=item.id)
     with Session(runtime.engine, expire_on_commit=False) as session:
         task = runtime._task(session, state["task_id"])
         receipt = session.get(NodeReceipt, f"question:{state['task_id']}")
         initial = dict(receipt.result)
         item = session.get(Item, initial["item"])
-        item.stem = draft.stem or item.stem
+        # The old attempts and diagnoses describe the previous wording. Evidence rows stay
+        # append-only for history, but they no longer belong to the task's active chain.
+        superseded = list(task.evidence_ids)
+        task.evidence_ids = []
+        initial["superseded_evidence_ids"] = list(
+            dict.fromkeys([*initial.get("superseded_evidence_ids", []), *superseded])
+        )
+        initial["corrections"] = [
+            *initial.get("corrections", []),
+            {
+                "revision": initial.get("revision", 0),
+                "previous_stem": item.stem,
+                "previous_answer": item.answer,
+                "reason": review.reason,
+            },
+        ]
+        item.stem = stem
         item.knowledge_point_id = draft.knowledge_point_id or item.knowledge_point_id
         item.spec = draft.spec
         item.answer = draft.answer

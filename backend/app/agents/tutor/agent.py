@@ -694,12 +694,15 @@ class DiagnosticTutor:
             ),
             AnswerReview,
         )
-        if comparisons["correct"] is None:
+        correct_from_tool = comparisons["correct"] is not None
+        if not correct_from_tool:
             comparisons["correct"] = review.is_correct
         for mid in comparisons.keys() - {"correct"}:
             if comparisons[mid] is None:
                 comparisons[mid] = review.matches.get(mid)
-        judged_by = JudgedBy.MODEL
+        # Match provenance follows the correctness result: tool-computed correctness stays
+        # TOOL even when a prediction match had to be filled by the model.
+        judged_by = JudgedBy.TOOL if correct_from_tool else JudgedBy.MODEL
         reason += "；" + review.reason
         return review.intent, comparisons.pop("correct"), comparisons, judged_by, reason
 
