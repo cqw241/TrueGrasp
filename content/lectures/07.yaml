@@ -75,7 +75,7 @@ misconceptions:
   examples:
   - question: '写出 $y″-y=0$ 的通解，代回核验，并说明自由常数的个数。'
     wrong: 'y=Ce^x'
-    correct: '$y=C_1e^x+C_2e^{-x}$。求两次导数后 $y^{\prime^{\prime}}=y$，任意两实常数均成立；两解线性无关（朗斯基行列式为 $-2$），形成二阶齐次方程的通解。'
+    correct: '$y=C_1e^x+C_2e^{-x}$。求两次导数后 $y^{\prime\prime}=y$，任意两实常数均成立；两解线性无关（朗斯基行列式为 $-2$），形成二阶齐次方程的通解。'
   strategies:
   - c3.ode
   recurs_in:
@@ -149,7 +149,7 @@ misconceptions:
   examples:
   - question: '$y_1=1+\sin x,y_2=1+\cos x$ 均满足 y″+y=1。它们的和与差分别满足什么方程？说明理由。'
     wrong: '和与差都满足 y″+y=1。'
-    correct: '由线性性，和满足 $(y_1+y_2)^{\prime^{\prime}}+(y_1+y_2)=2$；差满足 $(y_1-y_2)^{\prime^{\prime}}+(y_1-y_2)=0$。同一非齐次方程两解之差是齐次解，和一般不是原方程的解。'
+    correct: '由线性性，和满足 $(y_1+y_2)^{\prime\prime}+(y_1+y_2)=2$；差满足 $(y_1-y_2)^{\prime\prime}+(y_1-y_2)=0$。同一非齐次方程两解之差是齐次解，和一般不是原方程的解。'
   strategies:
   - c3.ode
   recurs_in:
@@ -193,8 +193,8 @@ misconceptions:
   examples:
   - question: '在 x>0 上求 $x^2y″+xy′-y=0$ 的通解，并写出 t=ln x 下的导数关系。'
     wrong: '将方程化为 Y″+Y′−Y=0。'
-    correct: '设 $Y(t)=y(e^t)$，则 $xy^{\prime}=Y^{\prime}$，$x^2y^{\prime^{\prime}}=Y^{\prime^{\prime}}-Y^{\prime}$。方程化为
-      $Y^{\prime^{\prime}}-Y=0$，故 $Y=C_1e^t+C_2e^{-t}$，即 $y=C_1x+C_2/x$。'
+    correct: '设 $Y(t)=y(e^t)$，则 $xy^{\prime}=Y^{\prime}$，$x^2y^{\prime\prime}=Y^{\prime\prime}-Y^{\prime}$。方程化为
+      $Y^{\prime\prime}-Y=0$，故 $Y=C_1e^t+C_2e^{-t}$，即 $y=C_1x+C_2/x$。'
   strategies:
   - c3.ode
   recurs_in:
@@ -218,7 +218,7 @@ items:
   purpose: verification
   dimension: explanation
   stem: '写出 $y″-y=0$ 的通解，代回核验，并说明自由常数的个数。'
-  answer: '$y=C_1e^x+C_2e^{-x}$。求两次导数后 $y^{\prime^{\prime}}=y$，任意两实常数均成立；两解线性无关（朗斯基行列式为 $-2$），形成二阶齐次方程的通解。'
+  answer: '$y=C_1e^x+C_2e^{-x}$。求两次导数后 $y^{\prime\prime}=y$，任意两实常数均成立；两解线性无关（朗斯基行列式为 $-2$），形成二阶齐次方程的通解。'
   rubric:
   - 保留两个独立常数及 e^x、e^(-x) 两支。
   - 求导代回原方程。
@@ -270,7 +270,7 @@ items:
   purpose: verification
   dimension: explanation
   stem: '$y_1=1+\sin x,y_2=1+\cos x$ 均满足 y″+y=1。它们的和与差分别满足什么方程？说明理由。'
-  answer: '由线性性，和满足 $(y_1+y_2)^{\prime^{\prime}}+(y_1+y_2)=2$；差满足 $(y_1-y_2)^{\prime^{\prime}}+(y_1-y_2)=0$。同一非齐次方程两解之差是齐次解，和一般不是原方程的解。'
+  answer: '由线性性，和满足 $(y_1+y_2)^{\prime\prime}+(y_1+y_2)=2$；差满足 $(y_1-y_2)^{\prime\prime}+(y_1-y_2)=0$。同一非齐次方程两解之差是齐次解，和一般不是原方程的解。'
   rubric:
   - 分别处理右端 1+1 与 1−1。
   - 明确差是对应齐次方程的解。
@@ -301,8 +301,8 @@ items:
   purpose: verification
   dimension: explanation
   stem: '在 x>0 上求 $x^2y″+xy′-y=0$ 的通解，并写出 t=ln x 下的导数关系。'
-  answer: '设 $Y(t)=y(e^t)$，则 $xy^{\prime}=Y^{\prime}$，$x^2y^{\prime^{\prime}}=Y^{\prime^{\prime}}-Y^{\prime}$。方程化为
-    $Y^{\prime^{\prime}}-Y=0$，故 $Y=C_1e^t+C_2e^{-t}$，即 $y=C_1x+C_2/x$。'
+  answer: '设 $Y(t)=y(e^t)$，则 $xy^{\prime}=Y^{\prime}$，$x^2y^{\prime\prime}=Y^{\prime\prime}-Y^{\prime}$。方程化为
+    $Y^{\prime\prime}-Y=0$，故 $Y=C_1e^t+C_2e^{-t}$，即 $y=C_1x+C_2/x$。'
   rubric:
   - 正确写出 x²y″=Y″−Y′。
   - 化为 Y″−Y=0 并求出两支解。

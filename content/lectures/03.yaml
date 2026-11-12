@@ -105,7 +105,7 @@ misconceptions:
   examples:
   - question: '判断 $f(x)=x^2$ 在 (-1,0) 上的单调性，并解释 f″>0 的含义。'
     wrong: 'f″=2>0，所以函数递增。'
-    correct: '$f^{\prime}(x)=2x<0$，故严格递减；$f^{\prime^{\prime}}(x)=2>0$ 表示导数递增、图像向上弯曲，不表示函数值递增。'
+    correct: '$f^{\prime}(x)=2x<0$，故严格递减；$f^{\prime\prime}(x)=2>0$ 表示导数递增、图像向上弯曲，不表示函数值递增。'
   strategies:
   - c3.local_global
   recurs_in:
@@ -148,7 +148,7 @@ misconceptions:
   examples:
   - question: '求曲线 $y=3x^2$ 的曲率函数，并写明所用导数。'
     wrong: '6'
-    correct: '$y^{\prime}=6x,y^{\prime^{\prime}}=6$，所以 $\kappa(x)=|y^{\prime^{\prime}}|/(1+(y^{\prime})^2)^{3/2}=6/(1+36x^2)^{3/2}$。'
+    correct: '$y^{\prime}=6x,y^{\prime\prime}=6$，所以 $\kappa(x)=|y^{\prime\prime}|/(1+(y^{\prime})^2)^{3/2}=6/(1+36x^2)^{3/2}$。'
   strategies:
   - c3.derivative
   recurs_in:
@@ -208,7 +208,7 @@ items:
   purpose: verification
   dimension: explanation
   stem: '判断 $f(x)=x^2$ 在 (-1,0) 上的单调性，并解释 f″>0 的含义。'
-  answer: '$f^{\prime}(x)=2x<0$，故严格递减；$f^{\prime^{\prime}}(x)=2>0$ 表示导数递增、图像向上弯曲，不表示函数值递增。'
+  answer: '$f^{\prime}(x)=2x<0$，故严格递减；$f^{\prime\prime}(x)=2>0$ 表示导数递增、图像向上弯曲，不表示函数值递增。'
   rubric:
   - 用一阶导数判定递减。
   - 说明二阶导数控制斜率变化。
@@ -238,7 +238,7 @@ items:
   purpose: verification
   dimension: explanation
   stem: '求曲线 $y=3x^2$ 的曲率函数，并写明所用导数。'
-  answer: '$y^{\prime}=6x,y^{\prime^{\prime}}=6$，所以 $\kappa(x)=|y^{\prime^{\prime}}|/(1+(y^{\prime})^2)^{3/2}=6/(1+36x^2)^{3/2}$。'
+  answer: '$y^{\prime}=6x,y^{\prime\prime}=6$，所以 $\kappa(x)=|y^{\prime\prime}|/(1+(y^{\prime})^2)^{3/2}=6/(1+36x^2)^{3/2}$。'
   rubric:
   - 分别求出 y′ 与 y″。
   - 使用包含 (1+(y′)²)^(3/2) 的曲率公式。
