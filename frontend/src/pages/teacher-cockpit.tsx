@@ -2,6 +2,7 @@ import { api } from '@/api/client'
 import { EscalationsPanel } from '@/components/cockpit/escalations-panel'
 import { GoalPanel } from '@/components/cockpit/goal-panel'
 import { HeatmapPanel } from '@/components/cockpit/heatmap-panel'
+import { HomeworkPanel } from '@/components/cockpit/homework-panel'
 import { IssuesPanel } from '@/components/cockpit/issues-panel'
 import { OverviewPanel } from '@/components/cockpit/overview-panel'
 import { PendingMisconceptionsPanel } from '@/components/cockpit/pending-misconceptions-panel'
@@ -43,6 +44,9 @@ export default function TeacherCockpit() {
       />
       <Workspace>
         <div className="workspace-column workspace-left">
+          <WorkspaceModule id="homework" title="作业上传与解析">
+            <HomeworkPanel />
+          </WorkspaceModule>
           <WorkspaceModule id="goals" title="教学目标">
             <GoalPanel />
           </WorkspaceModule>
