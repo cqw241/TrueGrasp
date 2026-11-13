@@ -1,5 +1,6 @@
-"""OPT-01 acceptance: class ownership, rosters and object isolation."""
+"""OPT-01/02 acceptance: class ownership, rosters, credentials and isolation."""
 
+import hashlib
 from datetime import date
 
 import pytest
@@ -8,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.api.stream import visible
-from app.auth import COOKIE
+from app.auth import COOKIE, verify_password
 from app.class_migration import migrate_student
 from app.classroom import ClassMastery, Enrollment, StudentPlacement
 from app.config import get_settings
@@ -68,6 +69,13 @@ def add_student(client, class_id, name, number):
     return response.json()
 
 
+def issue_setup(client, class_id, student_id):
+    response = client.post(f"/api/classes/{class_id}/students/{student_id}/setup-link")
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    return payload, payload["setup_path"].rsplit("#", 1)[1]
+
+
 def teacher_id(store, username):
     with store.connect() as db:
         return db.execute(
@@ -108,6 +116,12 @@ def test_class_ownership_and_role_isolation(class_app):
     assert (
         client.delete(
             f"/api/classes/{class_a['class_id']}/students/{student_a['student_id']}"
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            f"/api/classes/{class_a['class_id']}/students/{student_a['student_id']}/setup-link"
         ).status_code
         == 404
     )
@@ -269,6 +283,94 @@ def test_roster_import_reports_conflicts_and_preserves_history(class_app):
         ).status_code
         == 201
     )
+
+
+def test_student_setup_reset_and_password_storage(class_app):
+    client, app, engine, store = class_app
+    login(client, "teacher-a", "teacher-a-pass")
+    group = create_class(client, "设置密码班")
+    student = add_student(client, group["class_id"], "甲同学", "001")
+    setup, token = issue_setup(client, group["class_id"], student["student_id"])
+    assert setup["username"]
+
+    with store.connect() as db:
+        row = db.execute(
+            "SELECT token_hash FROM student_setup WHERE student_id=?",
+            (student["student_id"],),
+        ).fetchone()
+        assert row[0] == hashlib.sha256(token.encode()).hexdigest()
+        assert row[0] != token
+
+    assert (
+        client.post(
+            "/api/auth/student-setup",
+            json={"token": token, "password": "initial-password"},
+            headers={"origin": "https://evil.test"},
+        ).status_code
+        == 403
+    )
+    first_password = "first-password-123"
+    completed = client.post(
+        "/api/auth/student-setup",
+        json={"token": token, "password": first_password},
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.headers["cache-control"] == "no-store"
+    assert completed.json()["username"] == setup["username"]
+    assert (
+        client.post(
+            "/api/auth/student-setup",
+            json={"token": token, "password": "another-password-123"},
+        ).status_code
+        == 404
+    )
+
+    with store.connect() as db:
+        stored = db.execute(
+            "SELECT password_hash FROM account WHERE username=?",
+            (setup["username"],),
+        ).fetchone()[0]
+        assert first_password not in stored
+        assert verify_password(first_password, stored)
+
+    login(client, setup["username"], first_password)
+    me = client.get("/api/auth/me").json()
+    assert me["student_id"] == student["student_id"]
+    assert client.get("/api/students").json()[0]["id"] == student["student_id"]
+
+    with Session(engine) as session:
+        own_task = Task(
+            type=TaskType.TUTORING,
+            student_id=student["student_id"],
+            knowledge_point_id=PENDING_KNOWLEDGE_POINT_ID,
+            class_id=group["class_id"],
+            created_on=date(2026, 11, 13),
+        )
+        session.add(own_task)
+        session.commit()
+        own_task_id = own_task.id
+    assert [task["id"] for task in client.get("/api/tasks").json()] == [own_task_id]
+    assert client.get("/api/tasks/9999").status_code == 404
+
+    login(client, "teacher-a", "teacher-a-pass")
+    reset, reset_token = issue_setup(client, group["class_id"], student["student_id"])
+    assert reset["username"] == setup["username"]
+    second_password = "second-password-456"
+    assert (
+        client.post(
+            "/api/auth/student-setup",
+            json={"token": reset_token, "password": second_password},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"username": setup["username"], "password": first_password},
+        ).status_code
+        == 401
+    )
+    login(client, setup["username"], second_password)
 
 
 def test_tasks_evidence_and_sse_are_class_scoped(class_app):

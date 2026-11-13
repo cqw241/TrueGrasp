@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Menu,
   Network,
+  Users,
   BookOpen,
   LogOut,
   type LucideIcon,
@@ -23,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/auth'
 
 const NAV: { to: string; label: string; icon: LucideIcon }[] = [
+  { to: '/classes', label: '班级管理', icon: Users },
   { to: '/teacher', label: '教师驾驶舱', icon: LayoutDashboard },
   { to: '/student', label: '学生辅导台', icon: GraduationCap },
   { to: '/decision', label: '决策证据视图', icon: Network },

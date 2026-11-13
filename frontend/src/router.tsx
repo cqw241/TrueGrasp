@@ -32,6 +32,12 @@ function Home() {
 export const router = createBrowserRouter([
   { path: '/login', Component: Login },
   {
+    path: '/student-setup',
+    lazy: async () => ({
+      Component: (await import('@/pages/student-setup')).default,
+    }),
+  },
+  {
     path: '/',
     Component: Guard,
     ErrorBoundary: RouteError,
@@ -48,6 +54,12 @@ export const router = createBrowserRouter([
                 path: 'teacher',
                 lazy: async () => ({
                   Component: (await import('@/pages/teacher-cockpit')).default,
+                }),
+              },
+              {
+                path: 'classes',
+                lazy: async () => ({
+                  Component: (await import('@/pages/class-roster')).default,
                 }),
               },
               {

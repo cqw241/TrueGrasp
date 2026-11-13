@@ -1,9 +1,9 @@
-"""Teacher-owned class rosters."""
+"""Teacher-owned class rosters and account setup."""
 
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
@@ -58,6 +58,12 @@ class RosterResult(BaseModel):
     status: Literal["added", "duplicate", "missing", "failed"]
     message: str
     student: MemberView | None = None
+
+
+class SetupLink(BaseModel):
+    username: str
+    setup_path: str
+    expires_in: int
 
 
 def fail(status: int, code: str, message: str) -> HTTPException:
@@ -258,6 +264,7 @@ def remove_member(class_id: str, student_id: str, request: Request) -> None:
         if row.status == "left":
             return
         row.status = "left"
+        request.app.state.auth_store.revoke_setup(student_id)
         for task in session.exec(
             select(Task).where(
                 Task.class_id == class_id,
@@ -271,3 +278,19 @@ def remove_member(class_id: str, student_id: str, request: Request) -> None:
             if control := session.get(TeacherTaskControl, task.id):
                 control.taken_over = False
         session.commit()
+
+
+@router.post("/{class_id}/students/{student_id}/setup-link", status_code=201)
+def issue_setup(class_id: str, student_id: str, request: Request, response: Response) -> SetupLink:
+    with session_for(request) as session:
+        write_lock(session)
+        classroom(session, request, class_id)
+        row = session.get(Enrollment, (class_id, student_id))
+        if row is None or row.status != "active":
+            raise fail(404, "student_not_found", "该班没有此在班学生")
+        try:
+            username, token = request.app.state.auth_store.issue_setup(student_id, class_id)
+        except ValueError as exc:
+            raise fail(409, "account_conflict", str(exc)) from exc
+    response.headers["Cache-Control"] = "no-store"
+    return SetupLink(username=username, setup_path=f"/student-setup#{token}", expires_in=86400)

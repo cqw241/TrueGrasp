@@ -72,6 +72,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/auth/student-setup': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Setup Student */
+    post: operations['setup_student_api_auth_student_setup_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/classes': {
     parameters: {
       query?: never
@@ -174,6 +191,23 @@ export interface paths {
     post?: never
     /** Remove Member */
     delete: operations['remove_member_api_classes__class_id__students__student_id__delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/classes/{class_id}/students/{student_id}/setup-link': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Issue Setup */
+    post: operations['issue_setup_api_classes__class_id__students__student_id__setup_link_post']
+    delete?: never
     options?: never
     head?: never
     patch?: never
@@ -1866,6 +1900,20 @@ export interface components {
       message: string
       student?: components['schemas']['MemberView'] | null
     }
+    /** SetupComplete */
+    SetupComplete: {
+      /** Username */
+      username: string
+    }
+    /** SetupLink */
+    SetupLink: {
+      /** Username */
+      username: string
+      /** Setup Path */
+      setup_path: string
+      /** Expires In */
+      expires_in: number
+    }
     /** SourceRef */
     SourceRef: {
       /** Source Id */
@@ -1890,6 +1938,13 @@ export interface components {
       name?: string | null
       /** Student Number */
       student_number?: string | null
+    }
+    /** StudentSetup */
+    StudentSetup: {
+      /** Token */
+      token: string
+      /** Password */
+      password: string
     }
     /** TakeoverRequest */
     TakeoverRequest: {
@@ -2208,9 +2263,12 @@ export type ResolveEscalation = components['schemas']['ResolveEscalation']
 export type RetrySources = components['schemas']['RetrySources']
 export type RosterImport = components['schemas']['RosterImport']
 export type RosterResult = components['schemas']['RosterResult']
+export type SetupComplete = components['schemas']['SetupComplete']
+export type SetupLink = components['schemas']['SetupLink']
 export type SourceRef = components['schemas']['SourceRef']
 export type Student = components['schemas']['Student']
 export type StudentAdd = components['schemas']['StudentAdd']
+export type StudentSetup = components['schemas']['StudentSetup']
 export type TakeoverRequest = components['schemas']['TakeoverRequest']
 export type Task = components['schemas']['Task']
 export type TaskChanged = components['schemas']['TaskChanged']
@@ -2317,6 +2375,39 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+    }
+  }
+  setup_student_api_auth_student_setup_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StudentSetup']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SetupComplete']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
       }
     }
   }
@@ -2549,6 +2640,38 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  issue_setup_api_classes__class_id__students__student_id__setup_link_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        class_id: string
+        student_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SetupLink']
+        }
       }
       /** @description Validation Error */
       422: {

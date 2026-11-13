@@ -4,8 +4,10 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
+from sqlmodel import Session
 
-from app.auth import COOKIE, check_origin, current_principal
+from app.auth import COOKIE, business_error, check_origin, current_principal, password_hash
+from app.classroom import active_class, write_lock
 from app.config import get_settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -57,3 +59,36 @@ def logout(request: Request, response: Response) -> None:
     response.delete_cookie(
         COOKIE, path="/", secure=get_settings().auth_cookie_secure, httponly=True, samesite="strict"
     )
+
+
+class StudentSetup(BaseModel):
+    token: str = Field(min_length=40, max_length=128)
+    password: str = Field(min_length=12, max_length=128)
+
+
+class SetupComplete(BaseModel):
+    username: str
+
+
+@router.post("/student-setup")
+def setup_student(body: StudentSetup, request: Request, response: Response) -> SetupComplete:
+    try:
+        check_origin(request)
+    except HTTPException as exc:
+        raise HTTPException(403, business_error("origin_forbidden", "请求来源不允许")) from exc
+    store = request.app.state.auth_store
+    invalid = HTTPException(404, business_error("invalid_setup", "链接无效或已失效，请联系教师"))
+    identity = store.setup_identity(body.token)
+    if identity is None:
+        raise invalid
+    student_id, class_id = identity
+    hashed = password_hash(body.password)
+    with Session(request.app.state.orchestrator.engine) as session:
+        write_lock(session)
+        if active_class(session, student_id) != class_id:
+            raise invalid
+        username = store.redeem_setup(body.token, hashed, student_id)
+    if username is None:
+        raise invalid
+    response.headers["Cache-Control"] = "no-store"
+    return SetupComplete(username=username)
