@@ -4,8 +4,9 @@ from collections import defaultdict
 
 from sqlmodel import Session, select
 
+from app.classroom import mastery_for
 from app.contracts.api import CommonIssue
-from app.contracts.entities import Evidence, Mastery, Misconception, Task
+from app.contracts.entities import Evidence, Misconception, Task
 from app.contracts.enums import EvidenceKind, TaskStatus, TaskType
 from app.contracts.values import SLIP
 from app.ledger.queries import RANK, confirmed_hypotheses
@@ -25,7 +26,7 @@ def homework_groups(session: Session, kp_ids: set[str]) -> dict:
     for row in latest.values():
         if row.is_correct is not False:
             continue
-        mastery = session.get(Mastery, (row.student_id, row.knowledge_point_id))
+        mastery = mastery_for(session, row.student_id, row.knowledge_point_id, row.class_id)
         if mastery and mastery.state in RANK:
             continue
         hypothesis = confirmed.get(row.id)

@@ -30,8 +30,10 @@ echarts.use([
 const LECTURES = Array.from({ length: 12 }, (_, i) => i + 1)
 const CELL = 28
 
-export function HeatmapPanel() {
-  const heatmap = api.useQuery('get', '/api/class/heatmap')
+export function HeatmapPanel({ classId }: { classId: string }) {
+  const heatmap = api.useQuery('get', '/api/class/heatmap', {
+    params: { query: { class_id: classId } },
+  })
   return (
     <Card>
       <CardHeader>

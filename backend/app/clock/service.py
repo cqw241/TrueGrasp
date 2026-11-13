@@ -8,9 +8,18 @@ from typing import Literal
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
-from app.clock.storage import DueNotification, LectureEntry, PrecheckContext, TeachingClockState
+from app.classroom import Classroom, ClassSession, mastery_rows, may_work, write_lock
+from app.clock.storage import (
+    ClassClock,
+    ClassLectureEntry,
+    ClassPrecheckContext,
+    DueNotification,
+    LectureEntry,
+    PrecheckContext,
+    TeachingClockState,
+)
 from app.contracts.api import ClockState
-from app.contracts.entities import Hypothesis, Mastery, Misconception, Student, Task
+from app.contracts.entities import Hypothesis, Misconception, Student, Task
 from app.contracts.enums import MasteryState, TaskStatus, TaskType
 from app.contracts.events import (
     ClockAdvanced,
@@ -52,6 +61,7 @@ class TeachingClock:
         self.publisher = publisher
         self.mode = mode
         self.today = today
+        self.initial_date = initial_date
         self.wake = wake
         self._lock = asyncio.Lock()
         with Session(engine) as session:
@@ -61,24 +71,37 @@ class TeachingClock:
                 )
                 session.commit()
 
-    def state(self) -> ClockState:
+    def state(self, class_id: str | None = None) -> ClockState:
         with Session(self.engine) as session:
-            row = session.get(TeachingClockState, 1)
+            row = (
+                session.get(ClassClock, class_id)
+                if class_id is not None
+                else session.get(TeachingClockState, 1)
+            )
             return ClockState(
-                teaching_date=self.today() if self.mode == "real" else row.teaching_date,
-                lecture=row.lecture,
+                teaching_date=self.today()
+                if self.mode == "real"
+                else (row.teaching_date if row else self.initial_date),
+                lecture=row.lecture if row else 1,
             )
 
     def needs_date_sync(self) -> bool:
         with Session(self.engine) as session:
             return session.get(TeachingClockState, 1).teaching_date != self.today()
 
-    def current_date(self) -> date:
-        return self.state().teaching_date
+    def current_date(self, class_id: str | None = None) -> date:
+        return self.state(class_id).teaching_date
 
     @staticmethod
-    def _event(session: Session, payload, when: date, student_id: str | None = None) -> int:
-        event = make_event(payload, when, student_id)
+    def _event(
+        session: Session,
+        payload,
+        when: date,
+        student_id: str | None = None,
+        *,
+        class_id: str | None = None,
+    ) -> int:
+        event = make_event(payload, when, student_id, class_id=class_id)
         session.add(event)
         session.flush()
         queue_work(session, f"event:{event.id}", {"dispatch": True})
@@ -94,29 +117,46 @@ class TeachingClock:
             )
         ).all()
         for task in tasks:
-            event_id = self._event(session, TaskDue(task_id=task.id), when, task.student_id)
+            if not may_work(session, task):
+                continue
+            event_id = self._event(
+                session, TaskDue(task_id=task.id), when, task.student_id, class_id=task.class_id
+            )
             session.add(DueNotification(task_id=task.id, event_id=event_id))
 
     async def scan(self) -> ClockState:
         """启动或真实日期跨日调用；重复调用不会重复通知。"""
+        with Session(self.engine) as session:
+            class_ids = list(session.exec(select(Classroom.id)))
+        for class_id in class_ids:
+            await self._change(class_id=class_id)
         return await self._change()
 
-    async def advance(self, days: int = 1) -> ClockState:
+    async def advance(self, days: int = 1, *, class_id: str | None = None) -> ClockState:
         if self.mode == "real":
             raise ClockError("真实日期模式不支持手动推进教学日期")
         if days < 1:
             raise ClockError("推进天数必须大于 0")
-        return await self._change(days=days)
+        return await self._change(days=days, class_id=class_id)
 
-    async def enter_lecture(self, lecture: int) -> ClockState:
+    async def enter_lecture(self, lecture: int, *, class_id: str | None = None) -> ClockState:
         if not 1 <= lecture <= 12:
             raise ClockError("讲次必须在 1 到 12 之间")
-        return await self._change(lecture=lecture)
+        return await self._change(lecture=lecture, class_id=class_id)
 
-    async def _change(self, *, days: int = 0, lecture: int | None = None) -> ClockState:
+    async def _change(
+        self, *, days: int = 0, lecture: int | None = None, class_id: str | None = None
+    ) -> ClockState:
         async with self._lock:
-            with Session(self.engine) as session:
-                row = session.get(TeachingClockState, 1)
+            with ClassSession(self.engine, class_id) as session:
+                write_lock(session)
+                if class_id is None:
+                    row = session.get(TeachingClockState, 1)
+                else:
+                    row = session.get(ClassClock, class_id)
+                    if row is None:
+                        row = ClassClock(class_id=class_id, teaching_date=self.initial_date)
+                        session.add(row)
                 previous = (row.teaching_date, row.lecture)
                 try:
                     row.teaching_date = (
@@ -130,11 +170,26 @@ class TeachingClock:
                 if lecture is not None:
                     row.lecture = lecture
                     created = self._prechecks(session, lecture, row.teaching_date)
-                    if session.get(LectureEntry, lecture) is None:
+                    entry = (
+                        session.get(ClassLectureEntry, (class_id, lecture))
+                        if class_id
+                        else session.get(LectureEntry, lecture)
+                    )
+                    if entry is None:
                         event_id = self._event(
-                            session, LectureEntered(lecture=lecture), row.teaching_date
+                            session,
+                            LectureEntered(lecture=lecture),
+                            row.teaching_date,
+                            class_id=class_id,
                         )
-                        session.add(LectureEntry(lecture=lecture, event_id=event_id))
+                        if class_id:
+                            session.add(
+                                ClassLectureEntry(
+                                    class_id=class_id, lecture=lecture, event_id=event_id
+                                )
+                            )
+                        else:
+                            session.add(LectureEntry(lecture=lecture, event_id=event_id))
                 self._scan_due(session, row.teaching_date)
                 state = ClockState(teaching_date=row.teaching_date, lecture=row.lecture)
                 changed = previous != (row.teaching_date, row.lecture)
@@ -151,14 +206,19 @@ class TeachingClock:
                         )
                     )
                 if changed:
-                    await self.publisher.publish(ClockAdvanced(**state.model_dump()))
+                    await self.publisher.publish(
+                        ClockAdvanced(class_id=class_id, **state.model_dump())
+                    )
                 return state
 
     def _prechecks(self, session: Session, lecture: int, when: date) -> list[Task]:
+        class_id = session.info.get("class_id")
+        model = ClassPrecheckContext if class_id else PrecheckContext
         targets = self.knowledge.lecture_points(lecture)
         students = session.exec(select(Student).order_by(Student.id)).all()
         mastery = {
-            (m.student_id, m.knowledge_point_id): m for m in session.exec(select(Mastery)).all()
+            (m.student_id, m.knowledge_point_id): m
+            for m in session.exec(mastery_rows(session)).all()
         }
         misconceptions = {m.id: m for m in session.exec(select(Misconception)).all()}
         confirmed: dict[str, list[tuple[Hypothesis, Misconception]]] = {}
@@ -166,9 +226,12 @@ class TeachingClock:
             mis = misconceptions.get(hypothesis.misconception_id)
             if mis is not None and mis.id != SLIP:
                 confirmed.setdefault(hypothesis.student_id, []).append((hypothesis, mis))
+        query = select(model).where(model.lecture == lecture)
+        if class_id:
+            query = query.where(model.class_id == class_id)
         existing = {
             (p.student_id, p.knowledge_point_id, p.context_knowledge_point_id)
-            for p in session.exec(select(PrecheckContext).where(PrecheckContext.lecture == lecture))
+            for p in session.exec(query)
         }
         created = []
         for target in targets:
@@ -203,6 +266,7 @@ class TeachingClock:
                         evidence_ids.add(hypothesis.error_evidence_id)
                     task = Task(
                         type=TaskType.PRECHECK,
+                        class_id=class_id,
                         student_id=student.id,
                         knowledge_point_id=old_id,
                         misconception_ids=sorted({m.id for _, m in relevant}),
@@ -214,7 +278,8 @@ class TeachingClock:
                     session.add(task)
                     session.flush()
                     session.add(
-                        PrecheckContext(
+                        model(
+                            **({"class_id": class_id} if class_id else {}),
                             lecture=lecture,
                             student_id=student.id,
                             knowledge_point_id=old_id,

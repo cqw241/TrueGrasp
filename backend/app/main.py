@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
 from app.agents.verifier import create_verifier
-from app.api import auth, decision, health, homework, stream, student, teacher
+from app.api import auth, classes, decision, health, homework, stream, student, teacher
 from app.auth import AuthStore, authorize
 from app.clock.service import TeachingClock
 from app.config import get_settings
@@ -101,6 +101,7 @@ def create_app(
                 initial_date=settings.teaching_clock_initial_date,
             )
             dependencies.setdefault("teaching_date", clock.current_date)
+            dependencies.setdefault("class_teaching_date", clock.current_date)
             app.state.clock = clock
             if settings.llm_api_key and "verifier" not in dependencies:
                 if llm is None:
@@ -167,7 +168,7 @@ def create_app(
 
     for module in (health, auth):
         app.include_router(module.router, prefix="/api")
-    for module in (teacher, student, decision, stream, homework):
+    for module in (classes, teacher, student, decision, stream, homework):
         app.include_router(module.router, prefix="/api", dependencies=[Depends(authorize)])
     return app
 

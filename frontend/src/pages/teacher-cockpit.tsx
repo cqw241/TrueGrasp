@@ -1,3 +1,5 @@
+import { Link, useSearchParams } from 'react-router'
+import { Button } from '@/components/ui/button'
 import { api } from '@/api/client'
 import { EscalationsPanel } from '@/components/cockpit/escalations-panel'
 import { GoalPanel } from '@/components/cockpit/goal-panel'
@@ -15,8 +17,61 @@ import { useStreamEvent } from '@/hooks/use-event-stream'
 import { lectureLabel } from '@/lib/labels'
 
 export default function TeacherCockpit() {
+  const groups = api.useQuery('get', '/api/classes')
+  const [search, setSearch] = useSearchParams()
+  const classId =
+    groups.data?.find((group) => group.class_id === search.get('class_id'))
+      ?.class_id ?? groups.data?.[0]?.class_id
+
+  return (
+    <QueryView query={groups}>
+      {(rows) =>
+        classId ? (
+          <div className="grid gap-4">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <label htmlFor="cockpit-class" className="text-sm">
+                当前班级
+              </label>
+              <select
+                id="cockpit-class"
+                value={classId}
+                className="rounded-md border bg-background p-2 text-sm"
+                onChange={(event) =>
+                  setSearch({ class_id: event.target.value })
+                }
+              >
+                {rows.map((row) => (
+                  <option key={row.class_id} value={row.class_id}>
+                    {row.name}
+                  </option>
+                ))}
+              </select>
+              <Button asChild variant="outline">
+                <Link to={`/classes?class_id=${classId}`}>管理名单</Link>
+              </Button>
+            </div>
+            <Cockpit key={classId} classId={classId} />
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            <PageHeader
+              title="教师驾驶舱"
+              description="创建班级并添加学生后，可在这里查看本班教学进度。"
+            />
+            <Button asChild className="justify-self-start">
+              <Link to="/classes">前往班级管理</Link>
+            </Button>
+          </div>
+        )
+      }
+    </QueryView>
+  )
+}
+
+function Cockpit({ classId }: { classId: string }) {
   const invalidate = useInvalidate()
   // 任务和证据变化后刷新驾驶舱；SSE 断线重连时 api/stream.ts 会让所有查询重新拉取。
+  useStreamEvent('clock_advanced', () => invalidate('/api/clock'))
   useStreamEvent('task_changed', () =>
     invalidate(
       '/api/tasks',
@@ -40,7 +95,7 @@ export default function TeacherCockpit() {
       <PageHeader
         title="教师驾驶舱"
         description="从发现问题到验证掌握，让每一次教学干预都有依据"
-        actions={<ClockPanel />}
+        actions={<ClockPanel classId={classId} />}
       />
       <Workspace>
         <div className="workspace-column workspace-left">
@@ -48,13 +103,13 @@ export default function TeacherCockpit() {
             <HomeworkPanel />
           </WorkspaceModule>
           <WorkspaceModule id="goals" title="教学目标">
-            <GoalPanel />
+            <GoalPanel classId={classId} />
           </WorkspaceModule>
           <WorkspaceModule id="issues" title="共性问题">
-            <IssuesPanel />
+            <IssuesPanel classId={classId} />
           </WorkspaceModule>
           <WorkspaceModule id="misconceptions" title="待审核错因">
-            <PendingMisconceptionsPanel />
+            <PendingMisconceptionsPanel classId={classId} />
           </WorkspaceModule>
         </div>
         <div className="workspace-column workspace-center">
@@ -63,18 +118,18 @@ export default function TeacherCockpit() {
             title="全书知识热力图"
             className="heatmap-module"
           >
-            <HeatmapPanel />
+            <HeatmapPanel classId={classId} />
           </WorkspaceModule>
           <WorkspaceModule id="plan" title="干预计划">
-            <PlanPanel />
+            <PlanPanel classId={classId} />
           </WorkspaceModule>
         </div>
         <div className="workspace-column workspace-right">
           <WorkspaceModule id="overview" title="班级达标情况">
-            <OverviewPanel />
+            <OverviewPanel classId={classId} />
           </WorkspaceModule>
           <WorkspaceModule id="escalations" title="教师接管与转交">
-            <EscalationsPanel />
+            <EscalationsPanel classId={classId} />
           </WorkspaceModule>
           <div className="evidence-note">
             <strong>以证据判断掌握</strong>
@@ -87,8 +142,10 @@ export default function TeacherCockpit() {
   )
 }
 
-function ClockPanel() {
-  const clock = api.useQuery('get', '/api/clock')
+function ClockPanel({ classId }: { classId: string }) {
+  const clock = api.useQuery('get', '/api/clock', {
+    params: { query: { class_id: classId } },
+  })
   return (
     <div className="teaching-clock">
       <span>教学进度</span>

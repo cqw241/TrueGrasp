@@ -78,6 +78,7 @@ class QuestionPhoto(SQLModel, table=True):
     student_id: str = Field(foreign_key="student.id", index=True)
     task_id: int | None = Field(default=None, foreign_key="task.id", index=True)
     data_url: str
+    class_id: str | None = Field(default=None, foreign_key="classroom.id", index=True)
     created_on: date
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -94,14 +95,20 @@ class ClassTaskOverride(SQLModel, table=True):
     teaching_date: date
 
 
-def teacher_has_student(session: Session, student_id: str | None) -> bool:
+def teacher_has_student(
+    session: Session, student_id: str | None, class_id: str | None = None
+) -> bool:
     if student_id is None:
         return False
     return (
         session.exec(
             select(TeacherTaskControl.task_id)
             .join(Task, TeacherTaskControl.task_id == Task.id)
-            .where(Task.student_id == student_id, TeacherTaskControl.taken_over)
+            .where(
+                Task.student_id == student_id,
+                Task.class_id == class_id,
+                TeacherTaskControl.taken_over,
+            )
         ).first()
         is not None
     )
@@ -160,18 +167,20 @@ def queue_work(
 def record_exposure(session: Session, student_id: str, task_id: int, item: Item) -> None:
     if item.fingerprint is None:
         return
+    task = session.get(Task, task_id)
+    fingerprint = f"{task.class_id}:{item.fingerprint}" if task.class_id else item.fingerprint
     result = session.execute(
         insert(ItemExposure)
         .values(
             student_id=student_id,
             task_id=task_id,
             item_id=item.id,
-            fingerprint=item.fingerprint,
+            fingerprint=fingerprint,
         )
         .on_conflict_do_nothing(index_elements=["student_id", "fingerprint"])
     )
     if result.rowcount == 0 and item.purpose == ItemPurpose.VERIFICATION:
-        exposure = session.get(ItemExposure, (student_id, item.fingerprint))
+        exposure = session.get(ItemExposure, (student_id, fingerprint))
         if exposure.task_id != task_id or exposure.item_id != item.id:
             raise VerificationExposureConflict("验证题的指纹与该学生已展示的题目重复")
 
@@ -182,6 +191,7 @@ def create_question_photo(
     data_url: str,
     *,
     task_id: int | None = None,
+    class_id: str | None = None,
     created_on: date | None = None,
 ) -> QuestionPhoto:
     photo = QuestionPhoto(
@@ -189,6 +199,7 @@ def create_question_photo(
         student_id=student_id,
         task_id=task_id,
         data_url=data_url,
+        class_id=class_id,
         created_on=created_on or date.today(),
     )
     session.add(photo)
@@ -201,9 +212,10 @@ def bind_question_photos(
 ) -> list[QuestionPhoto]:
     """Attach unbound photos to a task, rejecting missing or foreign photos."""
     photos = []
+    task = session.get(Task, task_id)
     for photo_id in dict.fromkeys(photo_ids):
         photo = session.get(QuestionPhoto, photo_id)
-        if photo is None or photo.student_id != student_id:
+        if photo is None or photo.student_id != student_id or photo.class_id != task.class_id:
             raise ValueError("题目图片不存在或不属于当前学生")
         if photo.task_id not in (None, task_id):
             raise ValueError("题目图片已用于其他提问")
@@ -222,9 +234,14 @@ def question_photo_urls(
     task_id: int | None = None,
 ) -> list[str]:
     urls = []
+    task = session.get(Task, task_id) if task_id is not None else None
     for photo_id in dict.fromkeys(photo_ids):
         photo = session.get(QuestionPhoto, photo_id)
-        if photo is None or photo.student_id != student_id:
+        if (
+            photo is None
+            or photo.student_id != student_id
+            or (task is not None and photo.class_id != task.class_id)
+        ):
             raise ValueError("题目图片不存在或不属于当前学生")
         if photo.task_id not in (None, task_id):
             raise ValueError("题目图片不属于当前题目")
@@ -238,12 +255,14 @@ def question_photo_urls(
 def task_question_photo_urls(
     session: Session, student_id: str, task_id: int, *, limit: int = 4
 ) -> list[str]:
+    task = session.get(Task, task_id)
     rows = list(
         session.exec(
             select(QuestionPhoto)
             .where(
                 QuestionPhoto.student_id == student_id,
                 QuestionPhoto.task_id == task_id,
+                QuestionPhoto.class_id == task.class_id,
             )
             .order_by(QuestionPhoto.created_at, QuestionPhoto.id)
         )

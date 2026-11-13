@@ -163,7 +163,7 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
                     )
                 ).first()
                 if recorded is None and current in used_fingerprints(
-                    session, task.student_id, state["shown_item_ids"]
+                    session, task.student_id, state["shown_item_ids"], task.class_id
                 ):
                     return {"stale_verification_item": True}
         try:

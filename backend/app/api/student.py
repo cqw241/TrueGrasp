@@ -13,7 +13,7 @@ from PIL import Image
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from app.api.stub import not_implemented
+from app.classroom import active_class, active_students, may_work, owned_classes, write_lock
 from app.config import get_settings
 from app.contracts.api import (
     Accepted,
@@ -72,14 +72,24 @@ class PhotoUploadError(BaseModel):
 def list_students(request: Request) -> list[Student]:
     with Session(request.app.state.orchestrator.engine) as session:
         query = select(Student).order_by(Student.id)
-        if request.state.principal.role == "student":
-            query = query.where(Student.id == request.state.principal.student_id)
+        principal = request.state.principal
+        if principal.role == "student":
+            query = query.where(Student.id == principal.student_id)
+        elif principal.teacher_id is not None:
+            query = query.where(
+                Student.id.in_(active_students(owned_classes(principal.teacher_id)))
+            )
+
         return list(session.exec(query).all())
 
 
 @router.get("/tasks/{task_id}")
-def get_task(task_id: int) -> Task:
-    not_implemented("T08")
+def get_task(task_id: int, request: Request) -> Task:
+    with Session(request.app.state.orchestrator.engine) as session:
+        task = session.get(Task, task_id)
+        if task is None:
+            raise HTTPException(404, "任务不存在")
+        return task
 
 
 @router.post("/tasks/{task_id}/start", status_code=status.HTTP_202_ACCEPTED)
@@ -241,6 +251,7 @@ async def transcribe_question_photo(student_id: str, request: Request) -> Questi
     with Session(engine) as session:
         if session.get(Student, student_id) is None:
             raise HTTPException(404, "学生不存在")
+        class_id = active_class(session, student_id)
     result, image = await _transcribe_upload(
         request,
         empty_detail="",
@@ -251,11 +262,15 @@ async def transcribe_question_photo(student_id: str, request: Request) -> Questi
         result.doubts = ["没有识别到清晰的题目，请补充文字或重新拍摄"]
     runtime = request.app.state.orchestrator
     with Session(engine) as session:
+        write_lock(session)
+        if active_class(session, student_id) != class_id:
+            raise HTTPException(409, "学生班级已变更，请重试")
         photo = create_question_photo(
             session,
             student_id,
             image,
-            created_on=runtime.teaching_date() if runtime.teaching_date else date.today(),
+            class_id=class_id,
+            created_on=runtime.task_date_for_class(class_id) or date.today(),
         )
         session.commit()
         photo_id = photo.id
@@ -301,12 +316,20 @@ async def transcribe_task_question_photo(task_id: int, request: Request) -> Ques
     if not result.latex.strip() and not result.doubts:
         result.doubts = ["没有识别到清晰的图片，请补充文字或重新拍摄"]
     with Session(runtime.engine) as session:
+        write_lock(session)
+        task = session.get(Task, task_id)
+        if not may_work(session, task) or task.status not in (
+            TaskStatus.PENDING,
+            TaskStatus.ACTIVE,
+        ):
+            raise HTTPException(409, "任务已结束或学生班级已变更")
         photo = create_question_photo(
             session,
             student_id,
             image,
             task_id=task_id,
-            created_on=runtime.teaching_date() if runtime.teaching_date else date.today(),
+            class_id=task.class_id,
+            created_on=runtime.task_date_for_class(task.class_id) or date.today(),
         )
         session.commit()
         photo_id = photo.id
@@ -325,7 +348,12 @@ async def ask_question(student_id: str, body: QuestionCreate, request: Request) 
     创建一条 ``question`` 任务，辅导 Agent 先请学生尝试。之后的分层提示与完整解答作为
     该任务的对话推送，由 ``ChatTurn.hint_level`` 与 ``ChatTurn.solution`` 标注。
     """
-    return await create_question(request.app.state.orchestrator, student_id, body)
+    return await create_question(
+        request.app.state.orchestrator,
+        student_id,
+        body,
+        teacher_id=request.state.principal.teacher_id,
+    )
 
 
 @router.post("/tasks/{task_id}/messages", status_code=status.HTTP_202_ACCEPTED)

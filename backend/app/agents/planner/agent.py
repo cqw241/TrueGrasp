@@ -15,11 +15,11 @@ from app.agents.planner.models import (
     TaskContext,
 )
 from app.agents.planner.queries import homework_groups
+from app.classroom import ClassSession, mastery_for, mastery_rows
 from app.contracts.agents import PlannedTask, PlannerInput
 from app.contracts.entities import (
     Event,
     Evidence,
-    Mastery,
     Misconception,
     Student,
     Task,
@@ -99,6 +99,9 @@ class TeachingPlanner:
                 raise InvalidPlanError("规划事件不存在或教学日期不一致")
             if event.processed:
                 return PlanningResult()
+            class_id = event.class_id
+        with ClassSession(self.engine, class_id) as session:
+            event = session.get(Event, inp.event_id)
             revision = goal_revision(session)
             candidates, cancelled, facts = self._discover(session, event)
         if not candidates:
@@ -254,7 +257,7 @@ class TeachingPlanner:
                     return
             goal = current_goal(session, root)
             students = list(session.exec(select(Student.id)))
-            mastery = list(session.exec(select(Mastery)))
+            mastery = list(session.exec(mastery_rows(session)))
             lookup = {(m.student_id, m.knowledge_point_id): m for m in mastery}
             actual = (
                 sum(
@@ -313,7 +316,7 @@ class TeachingPlanner:
                 and previous.type == TaskType.VERIFICATION
                 and root != previous.knowledge_point_id
             )
-            state = session.get(Mastery, (evidence.student_id, root))
+            state = mastery_for(session, evidence.student_id, root, event.class_id)
             if has_open_escalation(session, evidence.student_id, root):
                 return
             closed_at = last_escalation_closure(session, evidence.student_id, root)
@@ -658,7 +661,7 @@ class TeachingPlanner:
                     if target.id in self.knowledge.misconception(h.misconception_id).recurs_in
                 }
                 for kp in sorted(direct | recurrent):
-                    state = session.get(Mastery, (student_id, kp))
+                    state = mastery_for(session, student_id, kp, session.info.get("class_id"))
                     relevant = [
                         h
                         for h in known

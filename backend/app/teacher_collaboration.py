@@ -5,6 +5,7 @@ from datetime import date
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
+from app.classroom import ClassSession, may_work, write_lock
 from app.clock.storage import DueNotification
 from app.contracts.api import AdoptMisconception, Escalation, GoalCreate, TaskControl, TaskOverride
 from app.contracts.entities import (
@@ -34,24 +35,26 @@ from app.orchestration.storage import (
 OPEN = (TaskStatus.PENDING, TaskStatus.ACTIVE)
 
 
-def _date(runtime: Orchestrator) -> date:
-    return runtime.teaching_date() if runtime.teaching_date else date.today()
+def _date(runtime: Orchestrator, class_id: str | None = None) -> date:
+    return runtime.task_date_for_class(class_id) or date.today()
 
 
-def _queue_instruction(session, payload, today, student_id=None) -> None:
-    event = make_event(payload, today, student_id)
+def _queue_instruction(session, payload, today, student_id=None, *, class_id=None) -> None:
+    event = make_event(payload, today, student_id, class_id=class_id)
     session.add(event)
     session.flush()
     queue_work(session, f"event:{event.id}", {"dispatch": True})
 
 
-async def set_goal(runtime: Orchestrator, body: GoalCreate) -> TeachingGoal:
+async def set_goal(
+    runtime: Orchestrator, body: GoalCreate, *, class_id: str | None = None
+) -> TeachingGoal:
     point_ids = list(dict.fromkeys(body.knowledge_point_ids))
     if not point_ids or body.target_state not in RANK or PENDING_KNOWLEDGE_POINT_ID in point_ids:
         raise HTTPException(422, "请选择知识点及初步掌握、巩固或融会贯通目标")
-    today = _date(runtime)
+    today = _date(runtime, class_id)
     cancelled = []
-    with Session(runtime.engine, expire_on_commit=False) as session:
+    with ClassSession(runtime.engine, class_id, expire_on_commit=False) as session:
         existing = set(
             session.exec(select(KnowledgePoint.id).where(KnowledgePoint.id.in_(point_ids)))
         )
@@ -61,6 +64,7 @@ async def set_goal(runtime: Orchestrator, body: GoalCreate) -> TeachingGoal:
             **body.model_dump(exclude={"knowledge_point_ids"}),
             knowledge_point_ids=point_ids,
             created_on=today,
+            class_id=class_id,
         )
         session.add(goal)
         session.flush()
@@ -86,7 +90,9 @@ async def set_goal(runtime: Orchestrator, body: GoalCreate) -> TeachingGoal:
             if control := session.get(TeacherTaskControl, task.id):
                 control.taken_over = False
             cancelled.append(task)
-        _queue_instruction(session, TeacherInstruction(action="set_goal", ref_id=goal.id), today)
+        _queue_instruction(
+            session, TeacherInstruction(action="set_goal", ref_id=goal.id), today, class_id=class_id
+        )
         session.commit()
     for task in cancelled:
         await runtime._publish_task(task)
@@ -127,6 +133,7 @@ def _record(
             knowledge_point_id=task.knowledge_point_id,
             kind=EvidenceKind.TEACHER,
             task_id=task.id,
+            class_id=task.class_id,
             judged_by=JudgedBy.TEACHER,
             reason=reason,
             teaching_date=today,
@@ -157,11 +164,14 @@ async def resolve_escalation(runtime: Orchestrator, task_id: int, note: str) -> 
         raise HTTPException(422, "请填写处理说明")
     async with runtime._lock(f"task:{task_id}"):
         with Session(runtime.engine, expire_on_commit=False) as session:
+            write_lock(session)
             task = runtime._task(session, task_id)
+            if not may_work(session, task):
+                raise HTTPException(409, "学生已退出任务所属班级")
             if task.type != TaskType.ESCALATION:
                 raise HTTPException(409, "该任务不是教师转交")
             _assert_open(task)
-            today = _date(runtime)
+            today = _date(runtime, task.class_id)
             evidence = _record(session, task, today, f"教师处理转交：{note}")
             task.evidence_ids = [*task.evidence_ids, evidence.id]
             task.status = TaskStatus.DONE
@@ -170,6 +180,7 @@ async def resolve_escalation(runtime: Orchestrator, task_id: int, note: str) -> 
                 TeacherInstruction(action="resolve_escalation", ref_id=task.id, note=note),
                 today,
                 task.student_id,
+                class_id=task.class_id,
             )
             session.commit()
         await _publish_evidence(runtime, evidence)
@@ -183,9 +194,12 @@ async def override_task(runtime: Orchestrator, task_id: int, body: TaskOverride)
     key = f"task:{task_id}"
     async with runtime._lock(key):
         with Session(runtime.engine, expire_on_commit=False) as session:
+            write_lock(session)
             task = runtime._task(session, task_id)
+            if not may_work(session, task):
+                raise HTTPException(409, "学生已退出任务所属班级")
             _assert_open(task)
-            today = _date(runtime)
+            today = _date(runtime, task.class_id)
             control = session.get(TeacherTaskControl, task_id) or TeacherTaskControl(
                 task_id=task_id
             )
@@ -235,7 +249,10 @@ async def set_takeover(
     key = f"task:{task_id}"
     async with runtime._lock(key):
         with Session(runtime.engine, expire_on_commit=False) as session:
+            write_lock(session)
             task = runtime._task(session, task_id)
+            if not may_work(session, task):
+                raise HTTPException(409, "学生已退出任务所属班级")
             _assert_open(task)
             if task.type not in (TaskType.TUTORING, TaskType.QUESTION):
                 raise HTTPException(409, "只有辅导会话可以接管")
@@ -248,13 +265,14 @@ async def set_takeover(
                 session.exec(
                     select(Task).where(
                         Task.student_id == task.student_id,
+                        Task.class_id == task.class_id,
                         Task.status.in_(OPEN),
                         Task.type.in_(INTERACTIVE_TYPES),
                     )
                 )
             )
             if taken_over:
-                if teacher_has_student(session, task.student_id):
+                if teacher_has_student(session, task.student_id, task.class_id):
                     raise HTTPException(409, "该学生已有教师接管的会话")
                 for active in student_tasks:
                     active_key = f"task:{active.id}"
@@ -262,7 +280,7 @@ async def set_takeover(
                         active.id != task.id and runtime._lock(active_key).locked()
                     ):
                         raise HTTPException(409, "正在处理上一轮作答，请稍候再接管")
-            today = _date(runtime)
+            today = _date(runtime, task.class_id)
             control.taken_over = taken_over
             if note.strip():
                 control.note = note.strip()
@@ -307,6 +325,7 @@ async def adopt_misconception(
             select(Evidence)
             .where(
                 Evidence.matched_misconception_id == misconception_id,
+                Evidence.class_id == misconception.class_id,
                 Evidence.kind != EvidenceKind.TEACHER,
             )
             .order_by(Evidence.id)
@@ -317,13 +336,16 @@ async def adopt_misconception(
             evidence = _record(
                 session,
                 task,
-                _date(runtime),
+                _date(runtime, task.class_id),
                 f"教师采纳错因 {misconception.id}：{misconception.description}",
                 misconception.id,
             )
         session.commit()
-        knowledge.add_adopted_misconception(misconception)
-        if runtime.knowledge is not knowledge and isinstance(runtime.knowledge, NxKnowledgeGraph):
-            runtime.knowledge.add_adopted_misconception(misconception)
+        if misconception.class_id is None:
+            knowledge.add_adopted_misconception(misconception)
+            if runtime.knowledge is not knowledge and isinstance(
+                runtime.knowledge, NxKnowledgeGraph
+            ):
+                runtime.knowledge.add_adopted_misconception(misconception)
     await _publish_evidence(runtime, evidence)
     return misconception

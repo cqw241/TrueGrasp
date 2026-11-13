@@ -15,7 +15,8 @@ from langgraph.types import Command
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
-from app.clock.storage import PrecheckContext
+from app.classroom import mastery_for, may_work, write_lock
+from app.clock.storage import ClassPrecheckContext, PrecheckContext
 from app.contracts.agents import (
     Judgement,
     Planner,
@@ -28,12 +29,13 @@ from app.contracts.agents import (
     Verifier,
 )
 from app.contracts.api import AnswerTarget, ChatTurn, MessageCreate
-from app.contracts.entities import Event, Evidence, Item, Mastery, Task
+from app.contracts.entities import Event, Evidence, Item, Task
 from app.contracts.enums import (
     Dimension,
     EventType,
     EvidenceKind,
     ItemPurpose,
+    ItemSource,
     TaskStatus,
     TaskType,
     TutorOutcome,
@@ -103,6 +105,7 @@ class Orchestrator:
         knowledge: KnowledgeGraph | None = None,
         evidence_writer: Callable[[Session, Evidence], Evidence] = append_evidence,
         teaching_date: Callable[[], date] | None = None,
+        class_teaching_date: Callable[[str], date] | None = None,
         pending_poll_interval: float | None = 0.25,
     ) -> None:
         if pending_poll_interval is not None and pending_poll_interval <= 0:
@@ -116,6 +119,7 @@ class Orchestrator:
         self.knowledge = knowledge
         self.evidence_writer = evidence_writer
         self.teaching_date = teaching_date
+        self.class_teaching_date = class_teaching_date
         self.graph = build_graph(self, checkpointer)
         self._locks: dict[str, asyncio.Lock] = {}
         self._jobs: dict[str, asyncio.Task] = {}
@@ -161,14 +165,28 @@ class Orchestrator:
             raise OrchestrationError(404, f"任务不存在：{task_id}")
         return task
 
+    def task_date_for_class(self, class_id: str | None) -> date | None:
+        if class_id is not None and self.class_teaching_date:
+            return self.class_teaching_date(class_id)
+        return self.teaching_date() if self.teaching_date else None
+
+    def working_task(self, session: Session, task_id: int) -> Task:
+        write_lock(session)
+        task = self._task(session, task_id)
+        if not may_work(session, task):
+            raise OrchestrationError(409, "学生已退出任务所属班级")
+        return task
+
     def _check_task(self, task_id: int, *, recovering: bool = False) -> Task:
         with Session(self.engine) as session:
             task = self._task(session, task_id)
+            if not may_work(session, task):
+                raise OrchestrationError(409, "学生已退出任务所属班级")
             if task.status in (TaskStatus.DONE, TaskStatus.CANCELLED) and not recovering:
                 raise OrchestrationError(409, f"任务已结束：{task.status}")
             if task.type not in INTERACTIVE_TYPES or task.student_id is None:
                 raise OrchestrationError(409, "该任务不接受学生交互")
-            if teacher_has_student(session, task.student_id):
+            if teacher_has_student(session, task.student_id, task.class_id):
                 raise OrchestrationError(409, "教师接管中，辅导暂时暂停")
             if task.type in (TaskType.TUTORING, TaskType.QUESTION):
                 self._require("planner", "tutor", "verifier", "knowledge")
@@ -199,7 +217,9 @@ class Orchestrator:
             return work.payload if work and work.pending and "reply" in work.payload else None
 
     def _persist_question_reply(self, key, snapshot, body, teaching_date=None) -> dict:
-        today = teaching_date or (self.teaching_date() if self.teaching_date else None)
+        with Session(self.engine) as session:
+            task = self._task(session, int(key.split(":")[1]))
+        today = teaching_date or self.task_date_for_class(task.class_id)
         payload = {
             "teaching_date": today.isoformat() if today else snapshot.values["teaching_date"],
             "reply": body.model_dump(mode="json"),
@@ -256,7 +276,6 @@ class Orchestrator:
         """只恢复事务中已登记的工作；缺少真实 Agent 时保留待办，不生成模拟结果。"""
         if self._closed:
             return
-        today = self.teaching_date() if self.teaching_date else None
         with Session(self.engine) as session:
             work_items = session.exec(select(PendingWork).where(PendingWork.pending)).all()
             for work in work_items:
@@ -267,6 +286,9 @@ class Orchestrator:
                     continue
                 if kind == "task":
                     task = self._task(session, int(target))
+                    if not may_work(session, task):
+                        continue
+                    today = self.task_date_for_class(task.class_id)
                     if (
                         task.status in (TaskStatus.PENDING, TaskStatus.ACTIVE)
                         and task.due_date is not None
@@ -274,7 +296,7 @@ class Orchestrator:
                         and task.due_date > today
                     ):
                         continue
-                    if teacher_has_student(session, task.student_id):
+                    if teacher_has_student(session, task.student_id, task.class_id):
                         continue
                     if self.verifier is None or (
                         task.type in (TaskType.TUTORING, TaskType.QUESTION)
@@ -304,7 +326,7 @@ class Orchestrator:
             if kind == "task":
                 with Session(self.engine) as session:
                     task = self._task(session, int(target))
-                    if teacher_has_student(session, task.student_id):
+                    if teacher_has_student(session, task.student_id, task.class_id):
                         return
             if self._pending(key):
                 raise
@@ -407,8 +429,9 @@ class Orchestrator:
                 ):
                     dimensions = [Dimension.CORRECTNESS]
                 if task.type == TaskType.PRECHECK:
+                    model = ClassPrecheckContext if task.class_id else PrecheckContext
                     clock_context = session.exec(
-                        select(PrecheckContext).where(PrecheckContext.task_id == task_id)
+                        select(model).where(model.task_id == task_id)
                     ).first()
                     if dimensions is None and (context is not None or clock_context is not None):
                         dimensions = [Dimension.CROSS_CHAPTER]
@@ -433,8 +456,8 @@ class Orchestrator:
             await self._run_task(key, None if snapshot.next else initial)
 
     def _task_date(self, task: Task, snapshot) -> date:
-        if self.teaching_date:
-            return self.teaching_date()
+        if today := self.task_date_for_class(task.class_id):
+            return today
         value = snapshot.values.get("teaching_date")
         return date.fromisoformat(value) if value else task.created_on
 
@@ -488,7 +511,9 @@ class Orchestrator:
                 payload = self._persist_question_reply(key, snapshot, body, teaching_date)
                 await self._run_task(key, self._reply_command(payload))
                 return
-            current_date = teaching_date or (self.teaching_date() if self.teaching_date else None)
+            with Session(self.engine) as session:
+                task = self._task(session, task_id)
+            current_date = teaching_date or self.task_date_for_class(task.class_id)
             await self._run_task(
                 key,
                 Command(
@@ -573,7 +598,7 @@ class Orchestrator:
             task = self._task(session, task_id)
             if task.status in (TaskStatus.DONE, TaskStatus.CANCELLED):
                 return AnswerTarget(phase="closed")
-            if teacher_has_student(session, task.student_id):
+            if teacher_has_student(session, task.student_id, task.class_id):
                 return AnswerTarget(phase="idle", prompt="教师接管中，辅导暂时暂停。")
             if task.due_date is not None and task.due_date > self._task_date(task, snapshot):
                 return AnswerTarget(phase="idle", prompt=f"任务将在 {task.due_date} 开放。")
@@ -648,6 +673,7 @@ class Orchestrator:
         plan = PlannerOutput.model_validate(state["plan"])
         changed = []
         with Session(self.engine) as session:
+            write_lock(session)
             receipt_key = f"event:{state['event_id']}:save_plan"
             if receipt := session.get(NodeReceipt, receipt_key):
                 return receipt.result
@@ -655,12 +681,14 @@ class Orchestrator:
             if event.processed:
                 return {"task_ids": state.get("task_ids", [])}
             revision = state["plan"].get("goal_revision")
-            if revision is not None and revision != goal_revision(session):
+            if revision is not None and revision != goal_revision(session, event.class_id):
                 # Reconsider every decision, including retries that a newly
                 # lowered round limit turns into escalations.
                 return self._refresh_plan(state)
             for task_id in plan.cancel_task_ids:
                 task = self._task(session, task_id)
+                if task.class_id != event.class_id:
+                    raise ValueError("不能取消其他班级的任务")
                 if (control := session.get(TeacherTaskControl, task_id)) and (
                     control.overridden or control.taken_over
                 ):
@@ -678,7 +706,7 @@ class Orchestrator:
                 session.exec(
                     select(Task)
                     .join(TeacherTaskControl, TeacherTaskControl.task_id == Task.id)
-                    .where(TeacherTaskControl.overridden)
+                    .where(TeacherTaskControl.overridden, Task.class_id == event.class_id)
                 )
             )
             contexts = state["plan"].get("contexts", [])
@@ -689,7 +717,18 @@ class Orchestrator:
                     raise ValueError("只有课上讲解建议的 student_id 可以为空")
                 if planned.round < 1:
                     raise ValueError("任务轮次必须大于 0")
-                task = Task(**planned.model_dump(), created_on=event.teaching_date)
+                task = Task(
+                    **planned.model_dump(), created_on=event.teaching_date, class_id=event.class_id
+                )
+                if not may_work(session, task):
+                    continue
+                if any(
+                    (row := session.get(Evidence, eid)) is None
+                    or row.class_id != event.class_id
+                    or (task.student_id is not None and row.student_id != task.student_id)
+                    for eid in task.evidence_ids
+                ):
+                    raise ValueError("任务引用了无权使用的证据")
                 context = contexts[index] if contexts else None
                 if any(matches_teacher_override(session, old, task, context) for old in overridden):
                     continue
@@ -698,6 +737,7 @@ class Orchestrator:
                     active = session.exec(
                         select(Task).where(
                             Task.student_id == planned.student_id,
+                            Task.class_id == event.class_id,
                             Task.status == TaskStatus.ACTIVE,
                             Task.type != TaskType.QUESTION,
                         )
@@ -716,6 +756,7 @@ class Orchestrator:
                 existing = session.exec(
                     select(Task).where(
                         Task.student_id == planned.student_id,
+                        Task.class_id == event.class_id,
                         Task.knowledge_point_id == planned.knowledge_point_id,
                         Task.type == planned.type,
                         Task.round == planned.round,
@@ -782,8 +823,9 @@ class Orchestrator:
             task_ids = [task.id for task in created]
             payload = read_payload(event)
             if isinstance(payload, TaskDue) and payload.task_id not in task_ids:
-                self._task(session, payload.task_id)
-                task_ids.append(payload.task_id)
+                due = self._task(session, payload.task_id)
+                if due.class_id == event.class_id and may_work(session, due):
+                    task_ids.append(due.id)
             changed.extend(created)
             dispatch = state.get("dispatch", True)
             result = {"task_ids": task_ids}
@@ -812,10 +854,11 @@ class Orchestrator:
 
     async def _publish_mastery(self, task: Task) -> None:
         with Session(self.engine) as session:
-            mastery = session.get(Mastery, (task.student_id, task.knowledge_point_id))
+            mastery = mastery_for(session, task.student_id, task.knowledge_point_id, task.class_id)
             if mastery is not None:
                 await self.bus.publish(
                     MasteryChanged(
+                        class_id=task.class_id,
                         student_id=mastery.student_id,
                         knowledge_point_id=mastery.knowledge_point_id,
                         state=mastery.state,
@@ -834,7 +877,7 @@ class Orchestrator:
 
     async def activate(self, state: RunState) -> dict:
         with Session(self.engine) as session:
-            task = self._task(session, state["task_id"])
+            task = self.working_task(session, state["task_id"])
             if task.status == TaskStatus.CANCELLED:
                 # A goal update can cancel queued work after start was accepted.
                 return {"phase": "cancelled_before_start"}
@@ -860,6 +903,7 @@ class Orchestrator:
                 .where(Evidence.id.in_(task.evidence_ids), Evidence.is_correct == False)  # noqa: E712
                 .where(
                     Evidence.student_id == task.student_id,
+                    Evidence.class_id == task.class_id,
                     Evidence.knowledge_point_id == task.knowledge_point_id,
                 )
                 .order_by(Evidence.id.desc())
@@ -890,10 +934,12 @@ class Orchestrator:
         item = None
         shown = state["shown_item_ids"]
         with Session(self.engine) as session:
-            task = self._task(session, state["task_id"])
+            task = self.working_task(session, state["task_id"])
             if turn.awaiting_item_id is not None:
                 item = session.get(Item, turn.awaiting_item_id)
-                if item is None:
+                if item is None or (
+                    item.class_id != task.class_id and item.source != ItemSource.SEED
+                ):
                     raise ValueError(f"辅导 Agent 返回的题目不存在：{turn.awaiting_item_id}")
                 record_exposure(session, task.student_id, task.id, item)
                 shown = list(dict.fromkeys([*shown, item.id]))
@@ -937,6 +983,7 @@ class Orchestrator:
                 confirmed_misconception_ids=task.misconception_ids,
                 shown_item_ids=state["shown_item_ids"],
                 context_knowledge_point_id=state.get("context_knowledge_point_id"),
+                class_id=task.class_id,
             )
         return {"phase": "verifying", "verifier_input": inp.model_dump(mode="json")}
 
@@ -948,7 +995,10 @@ class Orchestrator:
             raise ValueError("验证题不能为空")
         fingerprints = set(state["verifier_input"]["used_fingerprints"])
         with Session(self.engine) as session:
+            task = self.working_task(session, state["task_id"])
             for item in items:
+                if item.source != ItemSource.SEED:
+                    item.class_id = task.class_id
                 if item.purpose != ItemPurpose.VERIFICATION:
                     raise ValueError("验证 Agent 返回了非验证题")
                 if item.fingerprint is None or item.fingerprint in fingerprints:
@@ -965,7 +1015,7 @@ class Orchestrator:
     def present_item(self, state: RunState) -> dict:
         item = Item.model_validate(state["verification_items"][state["item_index"]])
         with Session(self.engine) as session:
-            task = self._task(session, state["task_id"])
+            task = self.working_task(session, state["task_id"])
             record_exposure(session, task.student_id, task.id, item)
             self._queue_task(session, state)
             session.commit()
@@ -993,7 +1043,7 @@ class Orchestrator:
         item = Item.model_validate(state["verification_items"][state["item_index"]])
         judgement = Judgement.model_validate(state["judgement"])
         with Session(self.engine) as session:
-            task = self._task(session, state["task_id"])
+            task = self.working_task(session, state["task_id"])
             # 同一任务的一道验证题只接受一次作答，也让失败节点重试不重复追加。
             evidence = session.exec(
                 select(Evidence).where(
@@ -1030,6 +1080,7 @@ class Orchestrator:
                     AnswerSubmitted(task_id=task.id, evidence_id=evidence.id),
                     evidence.teaching_date,
                     task.student_id,
+                    class_id=task.class_id,
                 )
                 session.add(event)
             session.flush()
@@ -1056,7 +1107,7 @@ class Orchestrator:
             receipt_key = f"task:{state['task_id']}:finish"
             if receipt := session.get(NodeReceipt, receipt_key):
                 return receipt.result
-            task = self._task(session, state["task_id"])
+            task = self.working_task(session, state["task_id"])
             task.status = TaskStatus.DONE
             result = {"awaiting_item_id": None, "incoming_message": None}
             if (
@@ -1068,6 +1119,7 @@ class Orchestrator:
                     AnswerSubmitted(task_id=task.id, evidence_id=task.evidence_ids[0]),
                     date.fromisoformat(state["teaching_date"]),
                     task.student_id,
+                    class_id=task.class_id,
                 )
                 session.add(event)
                 session.flush()
@@ -1088,7 +1140,7 @@ class Orchestrator:
             receipt_key = f"task:{state['task_id']}:replan"
             if receipt := session.get(NodeReceipt, receipt_key):
                 return receipt.result
-            task = self._task(session, state["task_id"])
+            task = self.working_task(session, state["task_id"])
             task.status = TaskStatus.CANCELLED
             task.reason = f"{task.reason}\n重规划：{reason}"
             # 这是现有任务到期/待调度信号；原因保存在任务中，规划 Agent 可直接读取。
@@ -1096,6 +1148,7 @@ class Orchestrator:
                 TaskDue(task_id=task.id),
                 date.fromisoformat(state["teaching_date"]),
                 task.student_id,
+                class_id=task.class_id,
             )
             session.add(event)
             session.flush()
