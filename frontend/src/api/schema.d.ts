@@ -699,6 +699,92 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/homework-drafts': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Drafts */
+    get: operations['list_drafts_api_homework_drafts_get']
+    put?: never
+    /** Create Draft */
+    post: operations['create_draft_api_homework_drafts_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-drafts/{draft_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Draft */
+    get: operations['get_draft_api_homework_drafts__draft_id__get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-drafts/{draft_id}/parse-retries': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Retry Sources */
+    post: operations['retry_sources_api_homework_drafts__draft_id__parse_retries_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-drafts/{draft_id}/sources': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Add Sources */
+    post: operations['add_sources_api_homework_drafts__draft_id__sources_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-drafts/{draft_id}/sources/{source_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Source */
+    get: operations['get_source_api_homework_drafts__draft_id__sources__source_id__get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -761,6 +847,25 @@ export interface components {
        * @default false
        */
       accepts_question_photo: boolean
+    }
+    /** Body_add_sources_api_homework_drafts__draft_id__sources_post */
+    Body_add_sources_api_homework_drafts__draft_id__sources_post: {
+      /** Files */
+      files: string[]
+      /** Expected Revision */
+      expected_revision: number
+    }
+    /** Body_create_draft_api_homework_drafts_post */
+    Body_create_draft_api_homework_drafts_post: {
+      /** Files */
+      files?: string[] | null
+      /**
+       * Title
+       * @default 作业解析
+       */
+      title: string
+      /** Prompt Text */
+      prompt_text?: string | null
     }
     /** Body_import_homework_api_homework_post */
     Body_import_homework_api_homework_post: {
@@ -899,6 +1004,62 @@ export interface components {
       /** Evidence Id */
       evidence_id: number | null
     }
+    /** DraftApiError */
+    DraftApiError: {
+      /** Detail */
+      detail:
+        | string
+        | {
+            [key: string]: unknown
+          }
+        | {
+            [key: string]: unknown
+          }[]
+    }
+    /** DraftSource */
+    DraftSource: {
+      /** Source Id */
+      source_id: string
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: 'file' | 'text'
+      /** Filename */
+      filename: string
+      /** Mime Type */
+      mime_type: string
+      /** Size Bytes */
+      size_bytes: number
+      /** Sha256 */
+      sha256: string
+      /** Page Count */
+      page_count: number | null
+    }
+    /** DraftSummary */
+    DraftSummary: {
+      /** Draft Id */
+      draft_id: string
+      /** Title */
+      title: string
+      /** Revision */
+      revision: number
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'parsing' | 'review' | 'parse_failed'
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string
+    }
     /** EnterLecture */
     EnterLecture: {
       /** Lecture */
@@ -986,6 +1147,13 @@ export interface components {
      * @enum {string}
      */
     ExamTag: 'math1' | 'math2' | 'math3'
+    /** Extraction */
+    Extraction: {
+      /** Questions */
+      questions: components['schemas']['Question'][]
+      /** Records */
+      records: components['schemas']['Record'][]
+    }
     /** GoalCreate */
     GoalCreate: {
       /** Knowledge Point Ids */
@@ -1033,6 +1201,53 @@ export interface components {
       /** Misconception Students */
       misconception_students: number
     }
+    /** HomeworkDraft */
+    HomeworkDraft: {
+      /** Questions */
+      questions: components['schemas']['Question'][]
+      /** Records */
+      records: components['schemas']['Record'][]
+      /**
+       * Schema Version
+       * @default 0.1
+       * @constant
+       */
+      schema_version: '0.1'
+      /** Draft Id */
+      draft_id: string
+      /** Class Id */
+      class_id: string | null
+      /** Created By Username */
+      created_by_username: string
+      /** Title */
+      title: string
+      /**
+       * Revision
+       * @default 1
+       */
+      revision: number
+      /**
+       * Status
+       * @default parsing
+       * @enum {string}
+       */
+      status: 'parsing' | 'review' | 'parse_failed'
+      /** Sources */
+      sources: components['schemas']['DraftSource'][]
+      /** Parse Errors */
+      parse_errors: components['schemas']['ParseError'][]
+      original_extraction: components['schemas']['Extraction'] | null
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string
+    }
     /** HomeworkImportResult */
     HomeworkImportResult: {
       /** Event Id */
@@ -1077,6 +1292,39 @@ export interface components {
       status: components['schemas']['HypothesisStatus']
       /** Unmodeled */
       unmodeled: boolean
+    }
+    /** IdentityMatch */
+    IdentityMatch: {
+      /** Observed Name */
+      observed_name: string | null
+      /** Observed Student Id */
+      observed_student_id: string | null
+      /** Student Number */
+      student_number: string | null
+      /** Student Id */
+      student_id: string | null
+      /** Candidate Student Ids */
+      candidate_student_ids: string[]
+      /**
+       * Status
+       * @default unmatched
+       * @constant
+       */
+      status: 'unmatched'
+    }
+    /** Issue */
+    Issue: {
+      /** Code */
+      code: string
+      /** Field */
+      field: string
+      /** Message */
+      message: string
+      /**
+       * Blocking
+       * @default true
+       */
+      blocking: boolean
     }
     /** Item */
     Item: {
@@ -1149,6 +1397,16 @@ export interface components {
      * @enum {string}
      */
     JudgedBy: 'tool' | 'model' | 'teacher'
+    /** KnowledgeCandidate */
+    KnowledgeCandidate: {
+      /** Id */
+      id: string
+      /**
+       * Reason
+       * @default
+       */
+      reason: string
+    }
     /** KnowledgePoint */
     KnowledgePoint: {
       /** Id */
@@ -1290,6 +1548,22 @@ export interface components {
       | 'definite_integral'
       | 'double_integral'
       | 'limit'
+    /** ParseError */
+    ParseError: {
+      /** Source Id */
+      source_id: string
+      /** Page */
+      page: number | null
+      /** Code */
+      code: string
+      /** Message */
+      message: string
+      /**
+       * Retryable
+       * @default true
+       */
+      retryable: boolean
+    }
     /** PhotoUploadError */
     PhotoUploadError: {
       /** Detail */
@@ -1330,6 +1604,29 @@ export interface components {
       matched_misconception_id: string | null
       judged_by: components['schemas']['JudgedBy'] | null
     }
+    /** Question */
+    Question: {
+      /** Question Id */
+      question_id: string
+      /** Number */
+      number: string | null
+      /** Item Id */
+      item_id: string | null
+      /** Stem */
+      stem: string | null
+      /** Correct Answer */
+      correct_answer: string | null
+      /** Rubric */
+      rubric: string[]
+      /** Knowledge Point Id */
+      knowledge_point_id: string | null
+      /** Knowledge Candidates */
+      knowledge_candidates: components['schemas']['KnowledgeCandidate'][]
+      /** Source Refs */
+      source_refs: components['schemas']['SourceRef'][]
+      /** Issues */
+      issues: components['schemas']['Issue'][]
+    }
     /**
      * QuestionCreate
      * @description 学生主动提问：题目文字/LaTeX 或题图，可附上自己的尝试或卡住的位置。
@@ -1365,10 +1662,53 @@ export interface components {
       /** Photo Id */
       photo_id: string
     }
+    /** Record */
+    Record: {
+      /** Record Id */
+      record_id: string
+      /** Question Id */
+      question_id: string
+      identity: components['schemas']['IdentityMatch']
+      /** Student Answer */
+      student_answer: string | null
+      /**
+       * Answer Kind
+       * @default unknown
+       * @enum {string}
+       */
+      answer_kind:
+        'expression' | 'steps' | 'text' | 'proof' | 'mixed' | 'unknown'
+      /** Source Refs */
+      source_refs: components['schemas']['SourceRef'][]
+      /** Issues */
+      issues: components['schemas']['Issue'][]
+      /**
+       * Review Status
+       * @default pending
+       * @constant
+       */
+      review_status: 'pending'
+    }
     /** ResolveEscalation */
     ResolveEscalation: {
       /** Note */
       note: string
+    }
+    /** RetrySources */
+    RetrySources: {
+      /** Expected Revision */
+      expected_revision: number
+      /** Source Ids */
+      source_ids: string[]
+    }
+    /** SourceRef */
+    SourceRef: {
+      /** Source Id */
+      source_id: string
+      /** Page */
+      page: number | null
+      /** Row */
+      row: number | null
     }
     /** Student */
     Student: {
@@ -1623,6 +1963,10 @@ export type Accepted = components['schemas']['Accepted']
 export type AdoptMisconception = components['schemas']['AdoptMisconception']
 export type AdvanceClock = components['schemas']['AdvanceClock']
 export type AnswerTarget = components['schemas']['AnswerTarget']
+export type BodyAddSourcesApiHomeworkDraftsDraftIdSourcesPost =
+  components['schemas']['Body_add_sources_api_homework_drafts__draft_id__sources_post']
+export type BodyCreateDraftApiHomeworkDraftsPost =
+  components['schemas']['Body_create_draft_api_homework_drafts_post']
 export type BodyImportHomeworkApiHomeworkPost =
   components['schemas']['Body_import_homework_api_homework_post']
 export type Bound = components['schemas']['Bound']
@@ -1635,24 +1979,32 @@ export type ContentSource = components['schemas']['ContentSource']
 export type DiagnosisView = components['schemas']['DiagnosisView']
 export type Dimension = components['schemas']['Dimension']
 export type DimensionResult = components['schemas']['DimensionResult']
+export type DraftApiError = components['schemas']['DraftApiError']
+export type DraftSource = components['schemas']['DraftSource']
+export type DraftSummary = components['schemas']['DraftSummary']
 export type EnterLecture = components['schemas']['EnterLecture']
 export type Escalation = components['schemas']['Escalation']
 export type Evidence = components['schemas']['Evidence']
 export type EvidenceAdded = components['schemas']['EvidenceAdded']
 export type EvidenceKind = components['schemas']['EvidenceKind']
 export type ExamTag = components['schemas']['ExamTag']
+export type Extraction = components['schemas']['Extraction']
 export type GoalCreate = components['schemas']['GoalCreate']
 export type HttpValidationError = components['schemas']['HTTPValidationError']
 export type HeatCell = components['schemas']['HeatCell']
+export type HomeworkDraft = components['schemas']['HomeworkDraft']
 export type HomeworkImportResult = components['schemas']['HomeworkImportResult']
 export type HypothesisStatus = components['schemas']['HypothesisStatus']
 export type HypothesisUpdated = components['schemas']['HypothesisUpdated']
 export type HypothesisView = components['schemas']['HypothesisView']
+export type IdentityMatch = components['schemas']['IdentityMatch']
+export type Issue = components['schemas']['Issue']
 export type Item = components['schemas']['Item']
 export type ItemPurpose = components['schemas']['ItemPurpose']
 export type ItemSource = components['schemas']['ItemSource']
 export type ItemSpec = components['schemas']['ItemSpec']
 export type JudgedBy = components['schemas']['JudgedBy']
+export type KnowledgeCandidate = components['schemas']['KnowledgeCandidate']
 export type KnowledgePoint = components['schemas']['KnowledgePoint']
 export type Login = components['schemas']['Login']
 export type Mastery = components['schemas']['Mastery']
@@ -1663,12 +2015,17 @@ export type MessageDone = components['schemas']['MessageDone']
 export type Misconception = components['schemas']['Misconception']
 export type MisconceptionExample = components['schemas']['MisconceptionExample']
 export type Operation = components['schemas']['Operation']
+export type ParseError = components['schemas']['ParseError']
 export type PhotoUploadError = components['schemas']['PhotoUploadError']
 export type Prediction = components['schemas']['Prediction']
 export type ProbeRecord = components['schemas']['ProbeRecord']
+export type Question = components['schemas']['Question']
 export type QuestionCreate = components['schemas']['QuestionCreate']
 export type QuestionPhotoResult = components['schemas']['QuestionPhotoResult']
+export type Record = components['schemas']['Record']
 export type ResolveEscalation = components['schemas']['ResolveEscalation']
+export type RetrySources = components['schemas']['RetrySources']
+export type SourceRef = components['schemas']['SourceRef']
 export type Student = components['schemas']['Student']
 export type TakeoverRequest = components['schemas']['TakeoverRequest']
 export type Task = components['schemas']['Task']
@@ -3000,6 +3357,527 @@ export interface operations {
         }
         content: {
           'text/event-stream': unknown
+        }
+      }
+    }
+  }
+  list_drafts_api_homework_drafts_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftSummary'][]
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  create_draft_api_homework_drafts_post: {
+    parameters: {
+      query?: never
+      header: {
+        'Idempotency-Key': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'multipart/form-data': components['schemas']['Body_create_draft_api_homework_drafts_post']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HomeworkDraft']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  get_draft_api_homework_drafts__draft_id__get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        draft_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HomeworkDraft']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  retry_sources_api_homework_drafts__draft_id__parse_retries_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        draft_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RetrySources']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HomeworkDraft']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  add_sources_api_homework_drafts__draft_id__sources_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        draft_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'multipart/form-data': components['schemas']['Body_add_sources_api_homework_drafts__draft_id__sources_post']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HomeworkDraft']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  get_source_api_homework_drafts__draft_id__sources__source_id__get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        draft_id: string
+        source_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': unknown
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
         }
       }
     }
