@@ -17,6 +17,7 @@ from app.contracts.values import SLIP, ItemSpec, Prediction
 from app.contracts.verify import MathTools
 from app.llm.client import LLMOutputError
 from app.llm.math_tools import math_tools
+from app.verify.execution import AsyncMathTools
 
 MAX_ATTEMPTS = 3
 
@@ -105,6 +106,7 @@ class IndependentVerifier:
     def __init__(self, llm: LLMClient, tools: MathTools, knowledge: KnowledgeGraph) -> None:
         self.llm = llm
         self.tools = tools
+        self.math = AsyncMathTools(tools)
         self.knowledge = knowledge
 
     def _rubric(self, inp: VerifierInput) -> list[str]:
@@ -139,13 +141,13 @@ class IndependentVerifier:
         allowed = confirmed | {m["id"] for m in possible}
         if len(ids) != len(set(ids)) or set(ids) - allowed:
             return "预测答案含重复或白名单之外的错因"
-        check = self.tools.verify_item(item.spec, item.answer) if item.spec else None
+        check = await self.math.verify_item(item.spec, item.answer) if item.spec else None
         if check is not None and check.ok is False:
             return f"标准答案未通过工具核验：{check.detail}"
         if item.predictions or dimension == Dimension.DISTRACTOR:
             if item.spec is None:
                 return "预测区分度必须有工具可核验的 spec"
-            distinct = self.tools.check_distinct(item.spec, item.answer, item.predictions)
+            distinct = await self.math.check_distinct(item.spec, item.answer, item.predictions)
             if distinct.ok is not True:
                 return f"预测没有通过区分度检查：{distinct.detail}"
             if dimension == Dimension.DISTRACTOR:
@@ -156,7 +158,7 @@ class IndependentVerifier:
         if dimension == Dimension.EXPLANATION and not item.rubric:
             return "解释题缺少策略卡评分要点"
         fingerprint = (
-            self.tools.fingerprint(item.spec)
+            await self.math.fingerprint(item.spec)
             if item.spec
             else hashlib.sha256(
                 "".join(unicodedata.normalize("NFKC", item.stem).casefold().split()).encode()
@@ -372,7 +374,7 @@ class IndependentVerifier:
         unresolved = []
         known_nonmatches = set()
         if item.spec is not None and not explanation:
-            result = self.tools.check_equivalent(
+            result = await self.math.check_equivalent(
                 student_answer, item.answer, item.spec.answer_mode, item.spec.variables
             )
             correct = result.equivalent
@@ -381,7 +383,7 @@ class IndependentVerifier:
                 for prediction in item.predictions:
                     if prediction.misconception_id == SLIP:
                         continue
-                    result = self.tools.check_equivalent(
+                    result = await self.math.check_equivalent(
                         student_answer,
                         prediction.answer,
                         item.spec.answer_mode,
@@ -454,16 +456,17 @@ class IndependentVerifier:
                 if p.misconception_id in allowed
                 and p.misconception_id != candidate.misconception_id
             ]
-            if not alternatives or (
-                item.spec is not None
-                and all(
-                    self.tools.check_equivalent(
+            separated = False
+            if item.spec is not None:
+                separated = True
+                for p in alternatives:
+                    result = await self.math.check_equivalent(
                         candidate.answer, p.answer, item.spec.answer_mode, item.spec.variables
-                    ).equivalent
-                    is False
-                    for p in alternatives
-                )
-            ):
+                    )
+                    if result.equivalent is not False:
+                        separated = False
+                        break
+            if not alternatives or separated:
                 matched = candidate.misconception_id
             else:
                 details.append("模型命中的预测与其他候选无法区分")

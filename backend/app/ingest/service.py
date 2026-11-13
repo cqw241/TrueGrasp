@@ -28,6 +28,7 @@ from app.ingest.models import (
 )
 from app.llm.vision import transcribe_answer
 from app.orchestration.storage import init_storage, queue_work
+from app.verify.execution import AsyncMathTools
 from app.verify.parsing import parse_answer
 from app.verify.tools import SympyMathTools
 
@@ -130,7 +131,7 @@ class HomeworkImporter:
 
             evidence_writer = append_evidence
         self.evidence_writer = evidence_writer
-        self.math = SympyMathTools()
+        self.math = AsyncMathTools(SympyMathTools())
         init_storage(engine)
 
     async def import_csv(self, data: bytes, teaching_date: date) -> HomeworkImportResult:
@@ -287,7 +288,7 @@ class HomeworkImporter:
                 if comparison_spec is None and analysis.spec is not None:
                     # 模型提取的题目描述先重算标准答案，核验通过后才用于判错。
                     answer = item.answer if item is not None else row.correct_answer
-                    if self.math.verify_item(analysis.spec, answer).ok is True:
+                    if (await self.math.verify_item(analysis.spec, answer)).ok is True:
                         comparison_spec = analysis.spec
                 if item is None:
                     item = Item(
@@ -299,9 +300,11 @@ class HomeworkImporter:
                         stem=row.stem,
                         answer=row.correct_answer,
                         spec=comparison_spec,
-                        fingerprint=self.math.fingerprint(comparison_spec)
-                        if comparison_spec is not None
-                        else None,
+                        fingerprint=(
+                            await self.math.fingerprint(comparison_spec)
+                            if comparison_spec is not None
+                            else None
+                        ),
                     )
                 items[item.id] = item
                 correct, judged_by, reason = analysis.is_correct, JudgedBy.MODEL, analysis.reason
@@ -313,7 +316,7 @@ class HomeworkImporter:
                 variables = (
                     comparison_spec.variables if comparison_spec is not None else analysis.variables
                 )
-                result = self.math.check_equivalent(
+                result = await self.math.check_equivalent(
                     row.student_answer, item.answer, mode, variables
                 )
                 # 没有核验过的题型时，只采纳等价的正向结果。expr 的不等价

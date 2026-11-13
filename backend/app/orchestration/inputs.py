@@ -9,12 +9,14 @@ from app.contracts.entities import Evidence, Item, Misconception, Task
 from app.contracts.enums import Dimension
 from app.contracts.values import SLIP
 from app.orchestration.storage import ItemExposure
+from app.verify.execution import AsyncMathTools
 from app.verify.tools import SympyMathTools
 
 
-def used_fingerprints(
+def _fingerprint_inputs(
     session: Session, student_id: str, shown_item_ids: list[str], class_id: str | None = None
-) -> set[str]:
+) -> tuple[set[str], list]:
+    """Read stored fingerprints and the specs that still need recomputing."""
     answered_ids = session.exec(
         select(Evidence.item_id).where(
             Evidence.student_id == student_id, Evidence.class_id == class_id
@@ -32,14 +34,35 @@ def used_fingerprints(
         fingerprints.add(
             exposure.fingerprint.removeprefix(f"{class_id}:") if class_id else exposure.fingerprint
         )
-    tools = SympyMathTools()
+    specs = []
     for item in session.exec(select(Item).where(Item.id.in_(item_ids))):
         if item.fingerprint is not None:
             fingerprints.add(item.fingerprint)
         if item.spec is not None:
             # Existing evidence retains its stored fingerprint across the algorithm change.
-            with suppress(ValueError, SyntaxError, TypeError, ArithmeticError, NotImplementedError):
-                fingerprints.add(tools.fingerprint(item.spec))
+            specs.append(item.spec)
+    return fingerprints, specs
+
+
+def used_fingerprints(
+    session: Session, student_id: str, shown_item_ids: list[str], class_id: str | None = None
+) -> set[str]:
+    fingerprints, specs = _fingerprint_inputs(session, student_id, shown_item_ids, class_id)
+    tools = SympyMathTools()
+    for spec in specs:
+        with suppress(ValueError, SyntaxError, TypeError, ArithmeticError, NotImplementedError):
+            fingerprints.add(tools.fingerprint(spec))
+    return fingerprints
+
+
+async def used_fingerprints_async(
+    session: Session, student_id: str, shown_item_ids: list[str], class_id: str | None = None
+) -> set[str]:
+    """Async request path: keep DB reads here, time-bound each SymPy fingerprint."""
+    fingerprints, specs = _fingerprint_inputs(session, student_id, shown_item_ids, class_id)
+    math = AsyncMathTools(SympyMathTools())
+    for spec in specs:
+        fingerprints.add(await math.fingerprint(spec))
     return fingerprints
 
 

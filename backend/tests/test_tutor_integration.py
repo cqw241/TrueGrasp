@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from collections import Counter
 from datetime import timedelta
 from io import BytesIO
 
@@ -224,6 +225,114 @@ async def test_unstructured_question_starts_with_clarification(setup, tmp_path):
         assert "积分上限看不清" in messages[-1]["content"]
         assert "可导的定义" in messages[-1]["content"]
         assert (await client.get(f"/api/tasks/{task_id}/answer-target")).json()["accepts_text"]
+
+
+async def test_simple_questions_use_merged_replies_and_lazy_spec_confirmation(setup, tmp_path):
+    engine, knowledge, _ = setup
+
+    def key(output):
+        return f"{output.__module__}.{output.__name__}"
+
+    class EfficientModel(CombinedModel):
+        def __init__(self):
+            super().__init__()
+            self.counts = Counter()
+
+        async def generate(self, messages, output, tools=None):
+            self.counts[key(output)] += 1
+            if output is QuestionDraft:
+                payload = json.loads(messages[-1].content)
+                if "为什么" in payload["problem"]:
+                    return QuestionDraft(
+                        knowledge_point_id=POINT,
+                        answer="",
+                        opening="可导必连续：可导意味着差商极限存在。",
+                    )
+                return QuestionDraft(
+                    knowledge_point_id=POINT,
+                    spec={"operation": "derivative", "expr": "sin(8*x)", "variables": ["x"]},
+                    answer="8*cos(8*x)",
+                    opening="先写出链式法则。",
+                )
+            if output is QuestionInterpretation:
+                return QuestionInterpretation(
+                    spec={"operation": "derivative", "expr": "sin(8*x)", "variables": ["x"]}
+                )
+            if output is AttemptReview:
+                payload = json.loads(messages[-1].content)
+                if payload["attempt"] == "那连续一定可导吗？":
+                    return AttemptReview(
+                        intent="concept_question",
+                        reply="不一定，例如绝对值函数在 0 处连续但不可导。",
+                    )
+                return AttemptReview(final_answer="8*cos(8*x)")
+            return await super().generate(messages, output, tools)
+
+    model = EfficientModel()
+    app = create_app(
+        engine=engine,
+        checkpoint_path=str(tmp_path / "efficient.db"),
+        orchestration_dependencies={
+            "tutor": create_tutor(llm=model, knowledge=knowledge, engine=engine),
+            "verifier": create_verifier(llm=model, knowledge=knowledge),
+            "planner": create_planner(engine=engine, llm=PlanningModel(), knowledge=knowledge),
+            "questions": StudentQuestions(model, knowledge),
+        },
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        runtime = app.state.orchestrator
+        created = await client.post(
+            "/api/students/A/questions", json={"content": "为什么可导一定连续？"}
+        )
+        assert created.status_code == 202
+        question_id = created.json()["id"]
+        await runtime.wait_idle()
+        messages = (await client.get(f"/api/tasks/{question_id}/messages")).json()
+        assert "可导必连续" in messages[-1]["content"]
+        assert model.counts[key(QuestionDraft)] == 1
+        assert model.counts[key(Guidance)] == 0
+        assert model.counts[key(QuestionInterpretation)] == 0
+
+        target = await runtime.get_answer_target(question_id)
+        follow_up = await client.post(
+            f"/api/tasks/{question_id}/messages",
+            params={"expected_turn": target.turn},
+            json={"content": "那连续一定可导吗？", "answering_item_id": target.item_id},
+        )
+        assert follow_up.status_code == 202
+        await runtime.wait_idle()
+        messages = (await client.get(f"/api/tasks/{question_id}/messages")).json()
+        assert "不一定" in messages[-1]["content"]
+        assert model.counts[key(AttemptReview)] == 1
+        assert model.counts[key(Guidance)] == 0
+        assert model.counts[key(QuestionInterpretation)] == 0
+
+        # The independent transcription of a structured question waits for the first
+        # attempt instead of delaying the opening reply.
+        created = await client.post(
+            "/api/students/A/questions", json={"content": "求 sin(8x) 的导数"}
+        )
+        assert created.status_code == 202
+        structured_id = created.json()["id"]
+        await runtime.wait_idle()
+        assert model.counts[key(QuestionInterpretation)] == 0
+        target = await runtime.get_answer_target(structured_id)
+        attempt = await client.post(
+            f"/api/tasks/{structured_id}/messages",
+            params={"expected_turn": target.turn},
+            json={"content": "8*cos(8*x)", "answering_item_id": target.item_id},
+        )
+        assert attempt.status_code == 202
+        await runtime.wait_idle()
+        assert model.counts[key(QuestionInterpretation)] == 1
+        with Session(engine) as session:
+            receipt = session.get(NodeReceipt, f"question:{structured_id}")
+            assert receipt.result["spec_confirmed"] is True
+        messages = (await client.get(f"/api/tasks/{structured_id}/messages")).json()
+        assert "通过了核验" in messages[-1]["content"]
 
 
 async def test_question_photo_is_saved_and_used_for_interpretation(setup, tmp_path):

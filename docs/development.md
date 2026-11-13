@@ -173,7 +173,10 @@ shadcn/ui 组件用 `npx shadcn@latest add <组件>` 添加到 `components/ui/`�
 - `POST /api/students/{id}/questions`，请求体 `QuestionCreate {content, attempt, photo_ids}`。先创建 `Task(type=question)` 和占位题目，模型理解/归类放到任务第一轮；暂时无法归类时使用 `pending.unclassified`，证明、微分方程等没有可重算 `ItemSpec` 的题目照常进入对话。图片模糊或条件缺失时直接回复具体疑问，不因结构化失败返回 422。
 - `POST /api/students/{id}/question-photo` 识别题目照片并保存原图，返回 `QuestionPhotoResult {latex, doubts, requires_confirmation, photo_id}`；识别为空也返回 200 和具体 `doubts`。`POST /api/tasks/{id}/question-photo` 为进行中的提问补图。后续消息用 `MessageCreate {content, answering_item_id, photo_ids}`，模型会读取原图。
 - 普通追问、解释上一条提示、补图或更正条件不写作答证据、不推进提示层级；只有实际尝试按 `AttemptReview.intent` 进入判分。工具能重算时优先用工具，否则按 rubric 由模型评阅并记录 `judged_by=model`；第 4 层完整解答后仍由独立验证 Agent 出新题。
+- 首轮回复随 `interpret` 的 `opening` 一起生成，概念追问的回复随 `AttemptReview.reply` 一起生成；只有回复为空时才调用 `discuss`。独立转写延后到首次判分（或第 4 层解答/题意更正），结果记入 `question:{task_id}` receipt 的 `spec_confirmed`；未确认的 spec 不用于工具判分或“核验结果”标签。
 - `AnswerTarget.accepts_question_photo` 只在原题阶段为真，此时上传按题目图片保存并交给模型理解；进入 `question_diagnosis` 或练习后为假，上传仍走作答照片并交给辅导判分。更正题意后，旧作答证据从任务的当前证据链移除，原记录只保留在账本和更正 receipt 中。
+
+数学工具在请求链上通过 `app.verify.execution` 的异步门面执行：同步 SymPy 调用放在独立 daemon 线程中等待，超过 `MATH_TOOL_TIMEOUT`（默认 8 秒）时返回“不确定”，由模型继续解释或评阅；LLM 工具调用超时/失败也会把错误回传给模型，不中断整次回复。
 
 ## T12 教师驾驶舱
 

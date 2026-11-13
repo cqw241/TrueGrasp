@@ -14,6 +14,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.config import Settings
 from app.contracts.llm import ChatMessage, Tool
+from app.verify.execution import run_with_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -120,9 +121,24 @@ class OpenAICompatClient:
                                 "error": "Unknown tool or invalid arguments; use its JSON schema"
                             }
                         else:
-                            result = tool.handler(args)
-                            if inspect.isawaitable(result):
-                                result = await result
+                            try:
+                                result = await run_with_timeout(
+                                    tool.handler,
+                                    args,
+                                    timeout=self.settings.math_tool_timeout,
+                                )
+                                if inspect.isawaitable(result):
+                                    result = await result
+                            except TimeoutError:
+                                logger.warning("tool timed out name=%s", tool.name)
+                                result = {"error": "工具超时；不要重复调用，改用文字继续解释"}
+                            except Exception as exc:
+                                logger.warning(
+                                    "tool failed name=%s error=%s",
+                                    tool.name,
+                                    type(exc).__name__,
+                                )
+                                result = {"error": "工具执行失败；不要重复调用，改用文字继续解释"}
                         content = (
                             result.model_dump_json()
                             if isinstance(result, BaseModel)

@@ -42,8 +42,9 @@ from app.ledger.queries import current_goal
 from app.llm.client import LLMOutputError
 from app.llm.math_tools import math_tools
 from app.orchestration.context import current_teaching_date
-from app.orchestration.inputs import used_fingerprints
+from app.orchestration.inputs import used_fingerprints_async
 from app.orchestration.storage import record_exposure
+from app.verify.execution import AsyncMathTools
 from app.verify.tools import stem_fingerprint
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,7 @@ class DiagnosticTutor:
         teaching_date: Callable[[], date] | None = None,
     ):
         self.llm, self.tools, self.knowledge = llm, tools, knowledge
+        self.math = AsyncMathTools(tools)
         self.engine, self.teaching_date = engine, teaching_date
         SQLModel.metadata.create_all(
             engine, tables=[TutorSession.__table__, TutorReceipt.__table__]
@@ -381,7 +383,9 @@ class DiagnosticTutor:
             self._stage(session, task, state, key + ":candidates")
             await self._publish_state(task.id, publish)
 
-            used = used_fingerprints(session, task.student_id, state.probe_item_ids, task.class_id)
+            used = await used_fingerprints_async(
+                session, task.student_id, state.probe_item_ids, task.class_id
+            )
             sources = (
                 [state.confirmed_id]
                 if state.confirmed_id
@@ -488,11 +492,13 @@ class DiagnosticTutor:
             for prediction in original.predictions:
                 if (
                     prediction.misconception_id in allowed
-                    and self.tools.check_equivalent(
-                        error.student_answer,
-                        prediction.answer,
-                        original.spec.answer_mode,
-                        original.spec.variables,
+                    and (
+                        await self.math.check_equivalent(
+                            error.student_answer,
+                            prediction.answer,
+                            original.spec.answer_mode,
+                            original.spec.variables,
+                        )
                     ).equivalent
                     is True
                 ):
@@ -619,10 +625,10 @@ class DiagnosticTutor:
                 return "无可核验 spec 的练习需要非空答案和评分要点"
             fingerprint = stem_fingerprint(item.stem)
         else:
-            check = self.tools.verify_item(item.spec, item.answer)
+            check = await self.math.verify_item(item.spec, item.answer)
             if check.ok is not True:
                 return "标准答案未通过独立验算：" + check.detail
-            fingerprint = self.tools.fingerprint(item.spec)
+            fingerprint = await self.math.fingerprint(item.spec)
             if state.phase == "diagnosis":
                 ids = [p.misconception_id for p in item.predictions]
                 if len(ids) != len(set(ids)) or set(ids) != set(state.candidate_ids):
@@ -630,13 +636,18 @@ class DiagnosticTutor:
                 slip = next((p for p in item.predictions if p.misconception_id == SLIP), None)
                 if (
                     slip
-                    and self.tools.check_equivalent(
-                        slip.answer, item.answer, item.spec.answer_mode, item.spec.variables
+                    and (
+                        await self.math.check_equivalent(
+                            slip.answer,
+                            item.answer,
+                            item.spec.answer_mode,
+                            item.spec.variables,
+                        )
                     ).equivalent
                     is not True
                 ):
                     return "slip 必须预测正确答案"
-                distinct = self.tools.check_distinct(item.spec, item.answer, item.predictions)
+                distinct = await self.math.check_distinct(item.spec, item.answer, item.predictions)
                 active_groups = [
                     g
                     for g in distinct.groups
@@ -696,13 +707,17 @@ class DiagnosticTutor:
             )
             return review.intent, review.is_correct, review.matches, JudgedBy.MODEL, review.reason
         comparisons = {
-            "correct": self.tools.check_equivalent(
-                answer, item.answer, item.spec.answer_mode, item.spec.variables
+            "correct": (
+                await self.math.check_equivalent(
+                    answer, item.answer, item.spec.answer_mode, item.spec.variables
+                )
             ).equivalent
         }
         for p in item.predictions:
-            comparisons[p.misconception_id] = self.tools.check_equivalent(
-                answer, p.answer, item.spec.answer_mode, item.spec.variables
+            comparisons[p.misconception_id] = (
+                await self.math.check_equivalent(
+                    answer, p.answer, item.spec.answer_mode, item.spec.variables
+                )
             ).equivalent
         judged_by = JudgedBy.TOOL
         reason = "逐项工具比对：" + json.dumps(comparisons, ensure_ascii=False)

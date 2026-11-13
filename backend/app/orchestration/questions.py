@@ -26,6 +26,7 @@ from app.orchestration.storage import (
     record_exposure,
     task_question_photo_urls,
 )
+from app.verify.execution import AsyncMathTools
 from app.verify.tools import stem_fingerprint
 
 SOLUTION_LEVEL = 4
@@ -81,16 +82,53 @@ def _ensure_pending_point(session: Session) -> None:
         session.flush()
 
 
-def _item_fingerprint(runtime, item: Item) -> str:
-    if item.spec is not None:
-        return runtime.questions.tools.fingerprint(item.spec)
-    return stem_fingerprint(item.stem)
+def _async_math(questions):
+    """Use the async facade; lightweight test doubles only expose sync ``tools``."""
+    math = getattr(questions, "math", None)
+    if math is not None:
+        return math
+    return AsyncMathTools(questions.tools)
 
 
-def _draft_fingerprint(runtime, draft, stem: str) -> str:
-    if draft.spec is not None:
-        return runtime.questions.tools.fingerprint(draft.spec)
+async def _fingerprint(runtime, spec, stem: str) -> str:
+    if spec is not None:
+        return await _async_math(runtime.questions).fingerprint(spec)
     return stem_fingerprint(stem)
+
+
+async def _reveals_answer(questions, item: Item, text: str) -> bool:
+    check = getattr(questions, "reveals_answer", None)
+    if check is None:
+        return False
+    return await check(item, text)
+
+
+async def _confirm_spec(runtime, state, item: Item, images) -> bool:
+    """Confirm the independent transcription once and persist it with the item."""
+    task_id = state["task_id"]
+    with Session(runtime.engine) as session:
+        receipt = session.get(NodeReceipt, f"question:{task_id}")
+        initial = dict(receipt.result)
+        decided = initial.get("spec_confirmed")
+        if decided is not None:
+            if decided is False:
+                item.spec = None
+            return bool(decided)
+    confirm = getattr(runtime.questions, "confirm_spec", None)
+    confirmed = True if confirm is None else await confirm(item.spec, item.stem, images)
+    with Session(runtime.engine, expire_on_commit=False) as session:
+        receipt = session.get(NodeReceipt, f"question:{task_id}")
+        initial = dict(receipt.result)
+        if not confirmed:
+            stored = session.get(Item, item.id)
+            if stored is not None:
+                stored.spec = None
+            item.spec = None
+        initial["spec_confirmed"] = confirmed
+        receipt.result = initial
+        session.add(receipt)
+        session.commit()
+    return confirmed
 
 
 async def create_question(
@@ -177,6 +215,10 @@ async def _interpret(runtime, state, task_id: int) -> tuple[Item, list[str], str
         student_id = task.student_id
         content = initial.get("content", "")
         history = state.get("messages", [])
+        if not history and initial.get("attempt"):
+            # The attempt is part of the first message; let interpretation see it and
+            # skip generating an opening reply that `question_turn` will not use.
+            history = [{"role": "user", "content": initial["attempt"]}]
         images = task_question_photo_urls(session, student_id, task_id)
         interpreted = initial.get("interpreted", False)
         clarifications = list(initial.get("clarifications", []))
@@ -185,6 +227,7 @@ async def _interpret(runtime, state, task_id: int) -> tuple[Item, list[str], str
     if interpreted:
         return item, clarifications, blocked
     draft = await runtime.questions.interpret(content, images, history)
+    fingerprint = await _fingerprint(runtime, draft.spec, draft.stem or item.stem)
     with Session(runtime.engine, expire_on_commit=False) as session:
         task = runtime.working_task(session, task_id)
         receipt = session.get(NodeReceipt, f"question:{task_id}")
@@ -195,7 +238,7 @@ async def _interpret(runtime, state, task_id: int) -> tuple[Item, list[str], str
         item.spec = draft.spec
         item.answer = draft.answer
         item.rubric = draft.rubric
-        item.fingerprint = _item_fingerprint(runtime, item)
+        item.fingerprint = fingerprint
         task.knowledge_point_id = item.knowledge_point_id
         blocked = None
         try:
@@ -205,6 +248,7 @@ async def _interpret(runtime, state, task_id: int) -> tuple[Item, list[str], str
             # unanswered verification item. Keep the input but do not tutor it.
             blocked = str(exc.detail)
         initial["interpreted"] = True
+        initial["opening"] = draft.opening
         initial["clarifications"] = list(draft.clarifications)
         initial["blocked"] = blocked
         receipt.result = initial
@@ -239,6 +283,35 @@ async def _interpret(runtime, state, task_id: int) -> tuple[Item, list[str], str
         return item, list(draft.clarifications), blocked
 
 
+async def _reply_or_discuss(
+    runtime,
+    item,
+    message,
+    review,
+    *,
+    images,
+    history,
+    level,
+    last_hint,
+    solution_shown: bool = False,
+):
+    """Use the reply the review model already wrote; fall back to a separate call."""
+    reply = review.reply.strip()
+    if reply and (solution_shown or not await _reveals_answer(runtime.questions, item, reply)):
+        return _reply(history, reply, item_id=item.id)
+    text = await runtime.questions.discuss(
+        item,
+        message,
+        review.intent,
+        images=images,
+        history=history,
+        level=level,
+        last_hint=last_hint,
+        solution_shown=solution_shown,
+    )
+    return _reply(history, text, item_id=item.id)
+
+
 async def question_turn(runtime, state) -> dict:
     task_id = state["task_id"]
     incoming = state.get("incoming_message")
@@ -260,9 +333,15 @@ async def question_turn(runtime, state) -> dict:
     if first_turn and not attempt:
         # Let the model decide how to open: explain a concept directly, or frame the
         # problem and invite an attempt. Clarifications from interpretation stay visible.
-        text = await runtime.questions.discuss(
-            item, item.stem, "opening", images=images, history=history
-        )
+        opening = str(initial.get("opening", "")).strip()
+        if opening and not await _reveals_answer(runtime.questions, item, opening):
+            text = opening
+        elif opening:
+            text = "请先写下你的尝试，或说说你卡在哪一步。"
+        else:
+            text = await runtime.questions.discuss(
+                item, item.stem, "opening", images=images, history=history
+            )
         prompt = " ".join([*clarifications, text]) if clarifications else text
         return _reply(history, prompt, item_id=item.id)
 
@@ -283,7 +362,13 @@ async def question_turn(runtime, state) -> dict:
         "",
     )
     review = await runtime.questions.review(
-        item, message, images=images, history=history, level=level, last_hint=last_hint
+        item,
+        message,
+        images=images,
+        history=history,
+        level=level,
+        last_hint=last_hint,
+        solution_shown=solution_shown,
     )
 
     if review.intent == "correction":
@@ -295,17 +380,17 @@ async def question_turn(runtime, state) -> dict:
         return _reply(history, READY_MESSAGE, finished=True)
 
     if solution_shown and review.intent != "attempt":
-        text = await runtime.questions.discuss(
+        return await _reply_or_discuss(
+            runtime,
             item,
             message,
-            review.intent,
+            review,
             images=images,
             history=history,
             level=level,
             last_hint=last_hint,
             solution_shown=True,
         )
-        return _reply(history, text, item_id=item.id)
 
     if review.intent == "hint_request":
         return await _next_hint(
@@ -320,16 +405,16 @@ async def question_turn(runtime, state) -> dict:
         )
 
     if review.intent != "attempt":
-        text = await runtime.questions.discuss(
+        return await _reply_or_discuss(
+            runtime,
             item,
             message,
-            review.intent,
+            review,
             images=images,
             history=history,
             level=level,
             last_hint=last_hint,
         )
-        return _reply(history, text, item_id=item.id)
 
     if not message.strip() and review.is_correct is None:
         text = await runtime.questions.discuss(
@@ -337,7 +422,9 @@ async def question_turn(runtime, state) -> dict:
         )
         return _reply(history, text, item_id=item.id)
 
-    check, judged_by = _decide(runtime, item, review)
+    if item.spec is not None:
+        await _confirm_spec(runtime, state, item, images)
+    check, judged_by = await _decide(runtime, item, review)
     if check is True:
         _record_attempt(
             runtime,
@@ -441,10 +528,10 @@ async def question_turn(runtime, state) -> dict:
     return _reply(history, text, item_id=item.id)
 
 
-def _decide(runtime, item: Item, review) -> tuple[bool | None, JudgedBy]:
+async def _decide(runtime, item: Item, review) -> tuple[bool | None, JudgedBy]:
     if review.final_answer:
         if item.spec is not None:
-            result = runtime.questions.tools.check_equivalent(
+            result = await _async_math(runtime.questions).check_equivalent(
                 review.final_answer, item.answer, item.spec.answer_mode, item.spec.variables
             )
             if result.equivalent is not None:
@@ -465,6 +552,12 @@ async def _next_hint(runtime, state, item, history, attempt, observation, confir
     with Session(runtime.engine) as session:
         task = runtime._task(session, state["task_id"])
         images = task_question_photo_urls(session, task.student_id, state["task_id"])
+        receipt = session.get(NodeReceipt, f"question:{state['task_id']}")
+        spec_confirmed = bool(dict(receipt.result).get("spec_confirmed"))
+    if next_level >= SOLUTION_LEVEL and item.spec is not None and not spec_confirmed:
+        # Only a spec confirmed by the independent transcription may be labelled
+        # as a tool-verified result in the full solution.
+        spec_confirmed = await _confirm_spec(runtime, state, item, images)
     text = await runtime.questions.guide(
         item,
         attempt,
@@ -474,6 +567,7 @@ async def _next_hint(runtime, state, item, history, attempt, observation, confir
         images=images,
         history=history,
         last_hint=last_hint,
+        verified=spec_confirmed,
     )
     if next_level >= SOLUTION_LEVEL:
         label = (
@@ -498,14 +592,19 @@ async def _next_hint(runtime, state, item, history, attempt, observation, confir
 async def _correct(runtime, state, item, history, message, review, images) -> dict:
     draft = await runtime.questions.interpret(message, images, history)
     stem = draft.stem or item.stem
+    confirm = getattr(runtime.questions, "confirm_spec", None)
+    spec_confirmed = True
+    if draft.spec is not None and confirm is not None:
+        spec_confirmed = await confirm(draft.spec, stem, images)
+        if not spec_confirmed:
+            draft = draft.model_copy(update={"spec": None})
+    fingerprint = await _fingerprint(runtime, draft.spec, stem)
     # A correction must not turn an unanswered verification item into a tutored question:
     # the level-4 hint would then reveal that item's answer.
     with Session(runtime.engine) as session:
         task = runtime._task(session, state["task_id"])
         try:
-            _reject_open_verification(
-                session, task.student_id, stem, _draft_fingerprint(runtime, draft, stem)
-            )
+            _reject_open_verification(session, task.student_id, stem, fingerprint)
         except HTTPException as exc:
             return _reply(history, str(exc.detail), item_id=item.id)
     with Session(runtime.engine, expire_on_commit=False) as session:
@@ -534,10 +633,11 @@ async def _correct(runtime, state, item, history, message, review, images) -> di
         item.spec = draft.spec
         item.answer = draft.answer
         item.rubric = draft.rubric
-        item.fingerprint = _item_fingerprint(runtime, item)
+        item.fingerprint = fingerprint
         task.knowledge_point_id = item.knowledge_point_id
         initial["revision"] = initial.get("revision", 0) + 1
         initial["clarifications"] = list(draft.clarifications)
+        initial["spec_confirmed"] = spec_confirmed
         receipt.result = initial
         session.add(receipt)
         record_exposure(session, task.student_id, task.id, item)
