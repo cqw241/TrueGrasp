@@ -37,8 +37,10 @@ import { useInvalidate, usePointNames } from './shared'
 
 const TARGET_STATES: MasteryState[] = ['initial', 'consolidated', 'integrated']
 
-export function GoalPanel() {
-  const goals = api.useQuery('get', '/api/goals')
+export function GoalPanel({ classId }: { classId: string }) {
+  const goals = api.useQuery('get', '/api/goals', {
+    params: { query: { class_id: classId } },
+  })
   const pointName = usePointNames()
   const [open, setOpen] = useState(false)
 
@@ -55,7 +57,7 @@ export function GoalPanel() {
               </Button>
             </SheetTrigger>
             <SheetContent className="overflow-y-auto">
-              <GoalForm onDone={() => setOpen(false)} />
+              <GoalForm classId={classId} onDone={() => setOpen(false)} />
             </SheetContent>
           </Sheet>
         </CardAction>
@@ -112,7 +114,13 @@ function GoalSummary({
   )
 }
 
-function GoalForm({ onDone }: { onDone: () => void }) {
+function GoalForm({
+  onDone,
+  classId,
+}: {
+  onDone: () => void
+  classId: string
+}) {
   const points = api.useQuery('get', '/api/knowledge/points')
   const create = api.useMutation('post', '/api/goals')
   const invalidate = useInvalidate()
@@ -140,6 +148,7 @@ function GoalForm({ onDone }: { onDone: () => void }) {
     event.preventDefault()
     create.mutate(
       {
+        params: { query: { class_id: classId } },
         body: {
           knowledge_point_ids: [...selected],
           target_state: targetState,

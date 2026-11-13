@@ -15,7 +15,8 @@ from httpx2 import ASGITransport, AsyncClient
 from sqlmodel import Session
 
 from app.api.stream import events, visible
-from app.auth import COOKIE, Principal
+from app.auth import COOKIE, AuthStore, Principal
+from app.classroom import Classroom, Enrollment, StudentPlacement
 from app.config import get_settings
 from app.contracts.entities import Evidence, KnowledgePoint, Mastery, Student, Task
 from app.contracts.enums import EvidenceKind, JudgedBy, TaskType
@@ -31,11 +32,33 @@ from tests.test_tutor import setup as setup
 def app_client(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTH_DB_PATH", str(tmp_path / "auth.db"))
     get_settings.cache_clear()
+    auth_store = AuthStore(str(tmp_path / "auth.db"))
+    auth_store.put_account("teacher", "teacher-pass", "teacher", None)
+    with auth_store.connect() as auth_db:
+        teacher_id = auth_db.execute(
+            "SELECT teacher_id FROM account WHERE username='teacher'"
+        ).fetchone()[0]
     engine = make_engine(f"sqlite:///{tmp_path / 'business.db'}")
     init_db(engine)
     today = date(2026, 9, 7)
     with Session(engine) as db:
-        db.add_all([Student(id="A", name="A"), Student(id="B", name="B")])
+        db.add_all(
+            [
+                Classroom(id="cls_a", teacher_id=teacher_id, name="班级 A"),
+                Classroom(id="cls_b", teacher_id=teacher_id, name="班级 B"),
+                Student(id="A", name="A"),
+                Student(id="B", name="B"),
+            ]
+        )
+        db.flush()
+        db.add_all(
+            [
+                Enrollment(class_id="cls_a", student_id="A"),
+                Enrollment(class_id="cls_b", student_id="B"),
+                StudentPlacement(student_id="A", teacher_id=teacher_id),
+                StudentPlacement(student_id="B", teacher_id=teacher_id),
+            ]
+        )
         db.add(KnowledgePoint(id="kp", name="KP", lecture=1, section=1))
         db.flush()
         db.add_all(
@@ -45,6 +68,7 @@ def app_client(tmp_path, monkeypatch):
                     type=TaskType.TUTORING,
                     student_id="A",
                     knowledge_point_id="kp",
+                    class_id="cls_a",
                     created_on=today,
                 ),
                 Task(
@@ -52,6 +76,7 @@ def app_client(tmp_path, monkeypatch):
                     type=TaskType.TUTORING,
                     student_id="B",
                     knowledge_point_id="kp",
+                    class_id="cls_b",
                     created_on=today,
                 ),
             ]
@@ -62,6 +87,7 @@ def app_client(tmp_path, monkeypatch):
                     id=1,
                     student_id="A",
                     knowledge_point_id="kp",
+                    class_id="cls_a",
                     kind=EvidenceKind.HOMEWORK,
                     judged_by=JudgedBy.TOOL,
                     teaching_date=today,
@@ -70,6 +96,7 @@ def app_client(tmp_path, monkeypatch):
                     id=2,
                     student_id="B",
                     knowledge_point_id="kp",
+                    class_id="cls_b",
                     kind=EvidenceKind.HOMEWORK,
                     judged_by=JudgedBy.TOOL,
                     teaching_date=today,
@@ -80,7 +107,6 @@ def app_client(tmp_path, monkeypatch):
     app = create_app(engine=engine, checkpoint_path=str(tmp_path / "cp.db"))
     with TestClient(app) as client:
         store = app.state.auth_store
-        store.put_account("teacher", "teacher-pass", "teacher", None)
         store.put_account("alice", "alice-pass", "student", "A")
         store.put_account("bob", "bob-pass", "student", "B")
         yield client, app, engine
@@ -185,6 +211,7 @@ def test_teacher_goals_and_escalation_keep_the_original_evidence(app_client, mon
             type=TaskType.ESCALATION,
             student_id="A",
             knowledge_point_id="kp",
+            class_id="cls_a",
             evidence_ids=[1],
             reason="请单独检查换元过程",
             created_on=date(2026, 9, 7),
@@ -200,14 +227,17 @@ def test_teacher_goals_and_escalation_keep_the_original_evidence(app_client, mon
 
     demo.DemoAPI(client, 20).login("teacher", "teacher-pass")
     assert (
-        client.post("/api/goals", json={**goal, "knowledge_point_ids": ["missing"]}).status_code
+        client.post(
+            "/api/goals?class_id=cls_a",
+            json={**goal, "knowledge_point_ids": ["missing"]},
+        ).status_code
         == 422
     )
-    created = client.post("/api/goals", json=goal)
+    created = client.post("/api/goals?class_id=cls_a", json=goal)
     assert created.status_code == 200
-    assert client.get("/api/goals").json() == [created.json()]
-    assert client.get("/api/class/overview").json()["escalated"] == 1
-    escalation = client.get("/api/escalations").json()[0]
+    assert client.get("/api/goals?class_id=cls_a").json() == [created.json()]
+    assert client.get("/api/class/overview?class_id=cls_a").json()["escalated"] == 1
+    escalation = client.get("/api/escalations?class_id=cls_a").json()[0]
     assert escalation["student_name"] == "A"
     assert escalation["suggestion"] == "请单独检查换元过程"
     assert escalation["evidence"] == [old]
@@ -216,12 +246,12 @@ def test_teacher_goals_and_escalation_keep_the_original_evidence(app_client, mon
     assert client.post(url, json={"note": " "}).status_code == 422
     assert client.post(url, json={"note": "已面谈，安排课后答疑"}).json()["status"] == "done"
     assert client.post(url, json={"note": "重复处理"}).status_code == 409
-    resolved = client.get("/api/escalations").json()[0]
+    resolved = client.get("/api/escalations?class_id=cls_a").json()[0]
     assert resolved["evidence"][0] == old
     assert len(resolved["evidence"]) == 2
     assert resolved["evidence"][1]["kind"] == "teacher"
     assert "已面谈" in resolved["evidence"][1]["reason"]
-    assert client.get("/api/class/overview").json()["escalated"] == 0
+    assert client.get("/api/class/overview?class_id=cls_a").json()["escalated"] == 0
     with Session(engine) as session:
         assert session.get(Mastery, ("A", "kp")).state == "escalated"
 
@@ -257,9 +287,11 @@ def test_demo_cli_password_stdin_and_logout(monkeypatch, capsys):
 
 
 def test_event_visibility(app_client):
-    _, _, engine = app_client
+    client, app, engine = app_client
+    assert login(client, "teacher", "teacher-pass").status_code == 200
+    teacher = app.state.auth_store.principal(client.cookies.get(COOKIE))
+    assert teacher is not None
     alice = Principal("alice", "student", "A")
-    teacher = Principal("teacher", "teacher", None)
     assert visible(TokenDelta(task_id=1, text="private"), alice, engine)
     assert not visible(TokenDelta(task_id=2, text="private"), alice, engine)
     assert not visible(MessageDone(task_id=999), alice, engine)
@@ -319,6 +351,54 @@ async def test_t13_t26_teacher_view_updates_after_student_answer(setup, tmp_path
     monkeypatch.setenv("AUTH_DB_PATH", str(tmp_path / "integration-auth.db"))
     get_settings.cache_clear()
     engine, knowledge, task = setup
+    auth_path = tmp_path / "integration-auth.db"
+    auth_store = AuthStore(str(auth_path))
+    auth_store.put_account("teacher", "teacher-pass", "teacher", None)
+    with auth_store.connect() as auth_db:
+        teacher_id = auth_db.execute(
+            "SELECT teacher_id FROM account WHERE username='teacher'"
+        ).fetchone()[0]
+    with Session(engine) as db:
+        db.add_all(
+            [
+                Classroom(
+                    id="cls_integration",
+                    teacher_id=teacher_id,
+                    name="集成测试班",
+                ),
+                Enrollment(class_id="cls_integration", student_id="A"),
+                StudentPlacement(student_id="A", teacher_id=teacher_id),
+            ]
+        )
+        db.flush()
+        error = Evidence(
+            student_id="A",
+            knowledge_point_id=task.knowledge_point_id,
+            class_id="cls_integration",
+            kind=EvidenceKind.HOMEWORK,
+            student_answer="2*sin(3*x)*cos(3*x)",
+            is_correct=False,
+            judged_by=JudgedBy.TOOL,
+            teaching_date=TODAY,
+        )
+        db.add(error)
+        db.flush()
+        scoped_task = Task(
+            type=TaskType.TUTORING,
+            student_id="A",
+            knowledge_point_id=task.knowledge_point_id,
+            class_id="cls_integration",
+            evidence_ids=[error.id],
+            created_on=TODAY,
+        )
+        db.add(scoped_task)
+        db.commit()
+        task = task.model_copy(
+            update={
+                "task_id": scoped_task.id,
+                "error_evidence_id": error.id,
+            }
+        )
     model = Model()
     tutor = create_tutor(llm=model, knowledge=knowledge, engine=engine)
     app = create_app(
@@ -333,7 +413,6 @@ async def test_t13_t26_teacher_view_updates_after_student_answer(setup, tmp_path
     )
     async with app.router.lifespan_context(app):
         store = app.state.auth_store
-        store.put_account("teacher", "teacher-pass", "teacher", None)
         store.put_account("alice", "alice-pass", "student", "A")
         store.put_account("bob", "bob-pass", "student", "B")
         transport = ASGITransport(app=app)

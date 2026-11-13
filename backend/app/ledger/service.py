@@ -2,9 +2,10 @@
 
 from datetime import date
 
-from sqlalchemy import Engine, text
+from sqlalchemy import Connection, Engine, text
 from sqlmodel import Session, select
 
+from app.classroom import ClassMastery, mastery_for
 from app.contracts.entities import Evidence, Hypothesis, Mastery, Misconception, Task
 from app.contracts.enums import (
     ContentSource,
@@ -21,21 +22,25 @@ from app.ledger.queries import current_goal, has_open_escalation, last_escalatio
 def protect_evidence(engine: Engine) -> None:
     """Protect the ledger even from bulk SQL and other sessions."""
     with engine.begin() as connection:
+        install_evidence_guards(connection)
+
+
+def install_evidence_guards(connection: Connection) -> None:
+    connection.execute(
+        text(
+            "CREATE TRIGGER IF NOT EXISTS evidence_no_replace BEFORE INSERT ON evidence "
+            "WHEN EXISTS (SELECT 1 FROM evidence WHERE id = NEW.id) BEGIN "
+            "SELECT RAISE(ABORT, 'evidence is append-only'); END"
+        )
+    )
+    for operation in ("UPDATE", "DELETE"):
         connection.execute(
             text(
-                "CREATE TRIGGER IF NOT EXISTS evidence_no_replace BEFORE INSERT ON evidence "
-                "WHEN EXISTS (SELECT 1 FROM evidence WHERE id = NEW.id) BEGIN "
+                f"CREATE TRIGGER IF NOT EXISTS evidence_no_{operation.lower()} "
+                f"BEFORE {operation} ON evidence BEGIN "
                 "SELECT RAISE(ABORT, 'evidence is append-only'); END"
             )
         )
-        for operation in ("UPDATE", "DELETE"):
-            connection.execute(
-                text(
-                    f"CREATE TRIGGER IF NOT EXISTS evidence_no_{operation.lower()} "
-                    f"BEFORE {operation} ON evidence BEGIN "
-                    "SELECT RAISE(ABORT, 'evidence is append-only'); END"
-                )
-            )
 
 
 def _set_state(
@@ -45,11 +50,15 @@ def _set_state(
     state: MasteryState,
     teaching_date: date,
     evidence_ids: list[int],
-) -> Mastery:
-    mastery = session.get(Mastery, (student_id, kp_id))
+    class_id: str | None = None,
+) -> Mastery | ClassMastery:
+    mastery = mastery_for(session, student_id, kp_id, class_id)
     if mastery is None:
-        mastery = Mastery(
+        fields = dict(
             student_id=student_id, knowledge_point_id=kp_id, state=state, updated_on=teaching_date
+        )
+        mastery = (
+            ClassMastery(class_id=class_id, **fields) if class_id is not None else Mastery(**fields)
         )
     elif teaching_date < mastery.updated_on:
         return mastery
@@ -63,7 +72,7 @@ def _set_state(
 
 def start_tutoring(session: Session, task: Task, teaching_date: date) -> None:
     if task.type == TaskType.TUTORING and not has_open_escalation(
-        session, task.student_id, task.knowledge_point_id
+        session, task.student_id, task.knowledge_point_id, task.class_id
     ):
         _set_state(
             session,
@@ -72,26 +81,31 @@ def start_tutoring(session: Session, task: Task, teaching_date: date) -> None:
             MasteryState.TUTORING,
             teaching_date,
             task.evidence_ids,
+            task.class_id,
         )
 
 
 def escalation_is_eligible(session: Session, task: Task, *, basis: str | None = None) -> bool:
     if task.type != TaskType.ESCALATION or task.student_id is None:
         return False
-    goal = current_goal(session, task.knowledge_point_id)
+    goal = current_goal(session, task.knowledge_point_id, class_id=task.class_id)
     round_limit = goal is not None and task.round >= goal.max_rounds
     if basis == "round_limit":
         return round_limit
     unknown_ids = {
         m.id
         for m in session.exec(
-            select(Misconception).where(Misconception.source == ContentSource.UNMODELED)
+            select(Misconception).where(
+                Misconception.source == ContentSource.UNMODELED,
+                Misconception.class_id == task.class_id,
+            )
         ).all()
     }
     unmodeled = bool(unknown_ids.intersection(task.misconception_ids)) and any(
         (e := session.get(Evidence, eid)) is not None
         and e.is_correct is None
         and e.kind != EvidenceKind.TEACHER
+        and e.class_id == task.class_id
         and e.student_id == task.student_id
         and e.knowledge_point_id == task.knowledge_point_id
         for eid in task.evidence_ids
@@ -112,6 +126,7 @@ def escalate(session: Session, task: Task, teaching_date: date) -> None:
         MasteryState.ESCALATED,
         teaching_date,
         task.evidence_ids,
+        task.class_id,
     )
 
 
@@ -119,23 +134,35 @@ def append_evidence(session: Session, evidence: Evidence) -> Evidence:
     """Append and derive mastery; never commit, never trust a supplied mastery label."""
     if evidence.id is not None:
         raise ValueError("Only new evidence may be appended")
+    task = session.get(Task, evidence.task_id) if evidence.task_id is not None else None
+    if task is not None:
+        evidence.class_id = task.class_id
     session.add(evidence)
     session.flush()
     if evidence.kind == EvidenceKind.TEACHER:
         return evidence
-    if has_open_escalation(session, evidence.student_id, evidence.knowledge_point_id):
+    if has_open_escalation(
+        session, evidence.student_id, evidence.knowledge_point_id, evidence.class_id
+    ):
         return evidence
-    closed_at = last_escalation_closure(session, evidence.student_id, evidence.knowledge_point_id)
+    closed_at = last_escalation_closure(
+        session, evidence.student_id, evidence.knowledge_point_id, evidence.class_id
+    )
     if closed_at and (evidence.teaching_date, evidence.id) <= closed_at:
         return evidence
-    mastery = session.get(Mastery, (evidence.student_id, evidence.knowledge_point_id))
+    mastery = mastery_for(
+        session, evidence.student_id, evidence.knowledge_point_id, evidence.class_id
+    )
     if mastery is not None and evidence.teaching_date < mastery.updated_on:
         return evidence
     state = None
     basis = [evidence.id]
     confirmed = (
         session.exec(
-            select(Hypothesis).where(
+            select(Hypothesis)
+            .join(Task, Task.id == Hypothesis.task_id)
+            .where(
+                Task.class_id == evidence.class_id,
                 Hypothesis.student_id == evidence.student_id,
                 Hypothesis.misconception_id == evidence.matched_misconception_id,
                 Hypothesis.status == HypothesisStatus.SUPPORTED,
@@ -144,7 +171,6 @@ def append_evidence(session: Session, evidence: Evidence) -> Evidence:
         if evidence.matched_misconception_id not in (None, SLIP)
         else None
     )
-    task = session.get(Task, evidence.task_id) if evidence.task_id is not None else None
     recurring = confirmed is not None or (
         task is not None
         and evidence.matched_misconception_id not in (None, SLIP)
@@ -205,6 +231,7 @@ def append_evidence(session: Session, evidence: Evidence) -> Evidence:
                     Evidence.is_correct == False,  # noqa: E712
                     Evidence.kind != EvidenceKind.TEACHER,
                     Evidence.id < evidence.id,
+                    Evidence.class_id == evidence.class_id,
                 )
             ).all()
             cutoff = max(
@@ -255,5 +282,6 @@ def append_evidence(session: Session, evidence: Evidence) -> Evidence:
             state,
             evidence.teaching_date,
             basis,
+            evidence.class_id,
         )
     return evidence

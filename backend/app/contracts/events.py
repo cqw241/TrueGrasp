@@ -62,10 +62,17 @@ EventPayload = Annotated[
 _payload_adapter: TypeAdapter[EventPayload] = TypeAdapter(EventPayload)
 
 
-def make_event(payload: EventPayload, teaching_date: date, student_id: str | None = None) -> Event:
+def make_event(
+    payload: EventPayload,
+    teaching_date: date,
+    student_id: str | None = None,
+    *,
+    class_id: str | None = None,
+) -> Event:
     return Event(
         type=payload.type,
         student_id=student_id,
+        class_id=class_id,
         payload=payload.model_dump(mode="json"),
         teaching_date=teaching_date,
     )
@@ -110,6 +117,7 @@ class EvidenceAdded(BaseModel):
 
 
 class MasteryChanged(BaseModel):
+    class_id: str | None = None
     type: Literal["mastery_changed"] = "mastery_changed"
     student_id: str
     knowledge_point_id: str
@@ -125,6 +133,7 @@ class TaskChanged(BaseModel):
 
 
 class ClockAdvanced(BaseModel):
+    class_id: str | None = None
     type: Literal["clock_advanced"] = "clock_advanced"
     teaching_date: date
     lecture: int

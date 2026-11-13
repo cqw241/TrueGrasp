@@ -17,8 +17,10 @@ import { dimensionLabel, evidenceKindLabel, judgedByLabel } from '@/lib/labels'
 import { MutationError } from './mutation-error'
 import { useInvalidate, usePointNames } from './shared'
 
-export function EscalationsPanel() {
-  const escalations = api.useQuery('get', '/api/escalations')
+export function EscalationsPanel({ classId }: { classId: string }) {
+  const escalations = api.useQuery('get', '/api/escalations', {
+    params: { query: { class_id: classId } },
+  })
   return (
     <Card>
       <CardHeader>

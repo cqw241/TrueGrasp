@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
+from app.classroom import ClassSession, active_class, write_lock
 from app.contracts.api import HomeworkImportResult
 from app.contracts.entities import Evidence, Item, KnowledgePoint, Misconception, Student
 from app.contracts.enums import EquivalenceMode, EvidenceKind, ItemPurpose, ItemSource, JudgedBy
@@ -134,7 +135,7 @@ class HomeworkImporter:
         )
 
     async def import_rows(
-        self, rows: Sequence[HomeworkRow], teaching_date: date
+        self, rows: Sequence[HomeworkRow], teaching_date: date, *, class_id: str | None = None
     ) -> HomeworkImportResult:
         if not rows or len(rows) > MAX_ROWS:
             raise IngestError(f"作业需包含 1 到 {MAX_ROWS} 份作答")
@@ -142,7 +143,7 @@ class HomeworkImporter:
         if len(keys) != len(set(keys)):
             raise IngestError("同批次学生和题目组合重复")
         # 模型调用前不写业务数据；任何行失败都不留下半批导入。
-        with Session(self.engine) as session:
+        with ClassSession(self.engine, class_id) as session:
             points = {
                 point.id: point
                 for point in session.exec(select(KnowledgePoint)).all()
@@ -157,6 +158,8 @@ class HomeworkImporter:
             students: dict[str, Student] = {}
             evidence = []
             for row in rows:
+                if class_id is not None and active_class(session, row.student_id) != class_id:
+                    raise IngestError("名单中存在不属于该班的学生")
                 student = students.get(row.student_id) or session.get(Student, row.student_id)
                 if student is None:
                     if not row.student_name:
@@ -234,6 +237,7 @@ class HomeworkImporter:
                 if item is None:
                     item = Item(
                         id=row.item_id,
+                        class_id=class_id,
                         knowledge_point_id=point_id,
                         purpose=ItemPurpose.HOMEWORK,
                         source=ItemSource.HOMEWORK,
@@ -267,6 +271,7 @@ class HomeworkImporter:
                 evidence.append(
                     Evidence(
                         student_id=row.student_id,
+                        class_id=class_id,
                         knowledge_point_id=point_id,
                         item_id=item.id,
                         student_answer=row.student_answer,
@@ -280,6 +285,12 @@ class HomeworkImporter:
                         teaching_date=teaching_date,
                     )
                 )
+            # Revalidate membership after model calls, while holding the writer lock.
+            write_lock(session)
+            if class_id is not None and any(
+                active_class(session, student_id) != class_id for student_id in students
+            ):
+                raise IngestError("导入期间班级名单已变更，请重新核对")
             for student in students.values():
                 session.add(student)
             session.flush()
@@ -299,6 +310,7 @@ class HomeworkImporter:
                     evidence_ids=ids,
                 ),
                 teaching_date,
+                class_id=class_id,
             )
             session.add(event)
             session.flush()

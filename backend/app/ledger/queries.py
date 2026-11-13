@@ -6,12 +6,12 @@ from datetime import date
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from app.classroom import mastery_rows
 from app.contracts.api import ClassOverview, DimensionResult, HeatCell, TimelineEntry
 from app.contracts.entities import (
     Evidence,
     Hypothesis,
     KnowledgePoint,
-    Mastery,
     Student,
     Task,
     TeachingGoal,
@@ -43,23 +43,39 @@ def confirmed_hypotheses(session: Session) -> list[Hypothesis]:
     return result
 
 
-def current_goal(session: Session, kp_id: str | None = None) -> TeachingGoal | None:
-    goals = session.exec(select(TeachingGoal).order_by(TeachingGoal.id.desc())).all()
+def current_goal(
+    session: Session, kp_id: str | None = None, *, class_id: str | None = None
+) -> TeachingGoal | None:
+    goals = session.exec(
+        select(TeachingGoal)
+        .where(TeachingGoal.class_id == (class_id or session.info.get("class_id")))
+        .order_by(TeachingGoal.id.desc())
+    ).all()
     return next(
         (goal for goal in goals if kp_id is None or kp_id in goal.knowledge_point_ids), None
     )
 
 
-def goal_revision(session: Session) -> int:
+def goal_revision(session: Session, class_id: str | None = None) -> int:
     """Teacher goals are append-only; their latest id versions planning policy."""
-    return session.exec(select(func.max(TeachingGoal.id))).one() or 0
+    return (
+        session.exec(
+            select(func.max(TeachingGoal.id)).where(
+                TeachingGoal.class_id == (class_id or session.info.get("class_id"))
+            )
+        ).one()
+        or 0
+    )
 
 
-def has_open_escalation(session: Session, student_id: str, kp_id: str) -> bool:
+def has_open_escalation(
+    session: Session, student_id: str, kp_id: str, class_id: str | None = None
+) -> bool:
     return (
         session.exec(
             select(Task.id).where(
                 Task.student_id == student_id,
+                Task.class_id == (class_id or session.info.get("class_id")),
                 Task.knowledge_point_id == kp_id,
                 Task.type == TaskType.ESCALATION,
                 Task.status.in_((TaskStatus.PENDING, TaskStatus.ACTIVE)),
@@ -70,7 +86,7 @@ def has_open_escalation(session: Session, student_id: str, kp_id: str) -> bool:
 
 
 def last_escalation_closure(
-    session: Session, student_id: str, kp_id: str
+    session: Session, student_id: str, kp_id: str, class_id: str | None = None
 ) -> tuple[date, int] | None:
     # A teacher's resolution/cancellation is the last control record for a
     # closed escalation. Adoption records are associated with a misconception.
@@ -81,6 +97,7 @@ def last_escalation_closure(
             Evidence.student_id == student_id,
             Evidence.knowledge_point_id == kp_id,
             Evidence.kind == EvidenceKind.TEACHER,
+            Evidence.class_id == (class_id or session.info.get("class_id")),
             Evidence.matched_misconception_id == None,  # noqa: E711
             Task.type == TaskType.ESCALATION,
             Task.status.in_((TaskStatus.DONE, TaskStatus.CANCELLED)),
@@ -93,7 +110,7 @@ def last_escalation_closure(
 def class_overview(session: Session) -> ClassOverview:
     students = session.exec(select(Student)).all()
     goal = current_goal(session)
-    rows = session.exec(select(Mastery)).all()
+    rows = session.exec(mastery_rows(session)).all()
     lookup = {(row.student_id, row.knowledge_point_id): row.state for row in rows}
     goal_met = 0
     states = Counter()
@@ -136,7 +153,7 @@ def heatmap(session: Session) -> list[HeatCell]:
         .where(KnowledgePoint.id != PENDING_KNOWLEDGE_POINT_ID)
         .order_by(KnowledgePoint.lecture, KnowledgePoint.section, KnowledgePoint.id)
     ).all()
-    rows = session.exec(select(Mastery)).all()
+    rows = session.exec(mastery_rows(session)).all()
     hypotheses = session.exec(
         select(Hypothesis).where(Hypothesis.status == HypothesisStatus.SUPPORTED)
     ).all()

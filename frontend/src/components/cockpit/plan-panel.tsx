@@ -54,12 +54,13 @@ const PLAN_TYPES: TaskType[] = [
   'precheck',
 ]
 
-export function PlanPanel() {
+export function PlanPanel({ classId }: { classId: string }) {
   const [type, setType] = useState<TaskType | typeof ALL>(ALL)
   const [status, setStatus] = useState<TaskStatus | 'open' | typeof ALL>('open')
   const tasks = api.useQuery('get', '/api/tasks', {
     params: {
       query: {
+        class_id: classId,
         type: type === ALL ? undefined : type,
         status: status === ALL || status === 'open' ? undefined : status,
       },
@@ -69,7 +70,7 @@ export function PlanPanel() {
   const controls = api.useQuery(
     'get',
     '/api/tasks/controls',
-    {},
+    { params: { query: { class_id: classId } } },
     { retry: false },
   )
   const controlOf = new Map(controls.data?.map((c) => [c.task_id, c]))

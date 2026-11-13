@@ -9,21 +9,29 @@ from fastapi.sse import EventSourceResponse
 from sqlmodel import Session
 
 from app.auth import COOKIE, Principal
-from app.contracts.entities import Task
+from app.classroom import Classroom, can_see, owned_classes
+from app.contracts.entities import Evidence, Task
 from app.contracts.events import StreamEvent
 
 router = APIRouter(tags=["stream"])
 
 
 def visible(event: StreamEvent, principal: Principal, engine) -> bool:
-    if principal.role == "teacher":
-        return True
-    if event.type in {"token", "message_done"}:
-        with Session(engine) as session:
-            task = session.get(Task, event.task_id)
-            return task is not None and task.student_id == principal.student_id
-    if event.type in {"hypothesis_updated", "evidence_added", "mastery_changed", "task_changed"}:
-        return event.student_id is not None and event.student_id == principal.student_id
+    with Session(engine) as session:
+        if hasattr(event, "task_id"):
+            return can_see(session, principal, session.get(Task, event.task_id))
+        if event.type == "evidence_added":
+            return can_see(session, principal, session.get(Evidence, event.evidence_id))
+        if event.type == "mastery_changed" and principal.role == "student":
+            return event.student_id == principal.student_id
+        if event.type in {"clock_advanced", "mastery_changed"} and principal.role == "teacher":
+            return (
+                event.class_id is not None
+                and session.exec(
+                    owned_classes(principal.teacher_id).where(Classroom.id == event.class_id)
+                ).first()
+                is not None
+            )
     return False
 
 

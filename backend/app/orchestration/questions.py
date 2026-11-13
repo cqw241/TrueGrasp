@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
+from app.classroom import StudentPlacement, active_class, write_lock
 from app.contracts.api import ChatTurn, QuestionCreate
 from app.contracts.entities import Evidence, Item, KnowledgePoint, Student, Task
 from app.contracts.enums import (
@@ -88,7 +89,9 @@ def _draft_fingerprint(runtime, draft, stem: str) -> str:
     return stem_fingerprint(stem)
 
 
-async def create_question(runtime, student_id: str, body: QuestionCreate) -> Task:
+async def create_question(
+    runtime, student_id: str, body: QuestionCreate, *, teacher_id: str | None = None
+) -> Task:
     content, attempt = body.content.strip(), body.attempt.strip()
     if max(len(content), len(attempt)) > 8000:
         raise HTTPException(422, "题目和尝试均不得超过 8000 字")
@@ -100,11 +103,19 @@ async def create_question(runtime, student_id: str, body: QuestionCreate) -> Tas
         if content:
             _reject_open_verification(session, student_id, content)
     runtime._require("questions", "tutor", "planner", "verifier", "knowledge")
-    today = runtime.teaching_date() if runtime.teaching_date else date.today()
     with Session(runtime.engine, expire_on_commit=False) as session:
+        write_lock(session)
+        class_id = active_class(session, student_id)
+        placement = session.get(StudentPlacement, student_id)
+        if teacher_id is not None and (
+            placement is None or placement.teacher_id != teacher_id or class_id is None
+        ):
+            raise HTTPException(404, "学生不存在")
+        today = runtime.task_date_for_class(class_id) or date.today()
         _ensure_pending_point(session)
         task = Task(
             type=TaskType.QUESTION,
+            class_id=class_id,
             student_id=student_id,
             knowledge_point_id=PENDING_KNOWLEDGE_POINT_ID,
             reason="学生主动提问",
@@ -114,6 +125,7 @@ async def create_question(runtime, student_id: str, body: QuestionCreate) -> Tas
         session.flush()
         item = Item(
             id=f"student-question.{uuid4().hex}",
+            class_id=class_id,
             knowledge_point_id=PENDING_KNOWLEDGE_POINT_ID,
             purpose=ItemPurpose.PRACTICE,
             source=ItemSource.GENERATED,
@@ -170,7 +182,7 @@ async def _interpret(runtime, state, task_id: int) -> tuple[Item, list[str], str
         return item, clarifications, blocked
     draft = await runtime.questions.interpret(content, images, history)
     with Session(runtime.engine, expire_on_commit=False) as session:
-        task = runtime._task(session, task_id)
+        task = runtime.working_task(session, task_id)
         receipt = session.get(NodeReceipt, f"question:{task_id}")
         initial = dict(receipt.result)
         item = session.get(Item, initial["item"])
@@ -441,7 +453,7 @@ async def _correct(runtime, state, item, history, message, review, images) -> di
         except HTTPException as exc:
             return _reply(history, str(exc.detail), item_id=item.id)
     with Session(runtime.engine, expire_on_commit=False) as session:
-        task = runtime._task(session, state["task_id"])
+        task = runtime.working_task(session, state["task_id"])
         receipt = session.get(NodeReceipt, f"question:{state['task_id']}")
         initial = dict(receipt.result)
         item = session.get(Item, initial["item"])
@@ -498,7 +510,7 @@ async def _correct(runtime, state, item, history, message, review, images) -> di
 
 def _record_attempt(runtime, state, item, answer, *, correct, judged_by, observation=""):
     with Session(runtime.engine) as session:
-        task = runtime._task(session, state["task_id"])
+        task = runtime.working_task(session, state["task_id"])
         revision = _revision(session, task.id)
         suffix = {True: "correct_attempt", False: "first_attempt", None: "stuck_attempt"}[correct]
         key = f"question:{task.id}:{item.id}:{revision}:{suffix}"
@@ -506,6 +518,7 @@ def _record_attempt(runtime, state, item, answer, *, correct, judged_by, observa
             return receipt.result["evidence_id"]
         evidence = Evidence(
             student_id=task.student_id,
+            class_id=task.class_id,
             knowledge_point_id=task.knowledge_point_id,
             task_id=task.id,
             item_id=item.id,

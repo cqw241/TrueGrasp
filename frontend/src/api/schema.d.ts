@@ -72,6 +72,113 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/classes': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Classes */
+    get: operations['list_classes_api_classes_get']
+    put?: never
+    /** Create Class */
+    post: operations['create_class_api_classes_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/classes/{class_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    /** Rename Class */
+    patch: operations['rename_class_api_classes__class_id__patch']
+    trace?: never
+  }
+  '/api/classes/{class_id}/students': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Members */
+    get: operations['list_members_api_classes__class_id__students_get']
+    put?: never
+    /** Enroll */
+    post: operations['enroll_api_classes__class_id__students_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/classes/available-students': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Available Students
+     * @description Candidates are unassigned to an active class and explicitly managed by this teacher.
+     */
+    get: operations['available_students_api_classes_available_students_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/classes/{class_id}/students/import': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Import Roster */
+    post: operations['import_roster_api_classes__class_id__students_import_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/classes/{class_id}/students/{student_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** Remove Member */
+    delete: operations['remove_member_api_classes__class_id__students__student_id__delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/clock': {
     parameters: {
       query?: never
@@ -905,6 +1012,11 @@ export interface components {
        */
       solution: boolean
     }
+    /** ClassName */
+    ClassName: {
+      /** Name */
+      name: string
+    }
     /** ClassOverview */
     ClassOverview: {
       /** Students */
@@ -920,8 +1032,19 @@ export interface components {
         [key: string]: number
       }
     }
+    /** ClassView */
+    ClassView: {
+      /** Name */
+      name: string
+      /** Class Id */
+      class_id: string
+      /** Teacher Id */
+      teacher_id: string
+    }
     /** ClockAdvanced */
     ClockAdvanced: {
+      /** Class Id */
+      class_id?: string | null
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
@@ -1080,6 +1203,8 @@ export interface components {
      * @description 证据账本，只追加、不修改。教师处理也记为一条单独的证据。
      */
     Evidence: {
+      /** Class Id */
+      class_id?: string | null
       /** Id */
       id?: number | null
       /** Student Id */
@@ -1328,6 +1453,8 @@ export interface components {
     }
     /** Item */
     Item: {
+      /** Class Id */
+      class_id?: string | null
       /** Id */
       id: string
       /** Knowledge Point Id */
@@ -1446,6 +1573,8 @@ export interface components {
     }
     /** MasteryChanged */
     MasteryChanged: {
+      /** Class Id */
+      class_id?: string | null
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
@@ -1470,6 +1599,22 @@ export interface components {
       | 'integrated'
       | 'relapsed'
       | 'escalated'
+    /** MemberView */
+    MemberView: {
+      /** Class Id */
+      class_id: string
+      /** Student Id */
+      student_id: string
+      /** Name */
+      name: string
+      /** Student Number */
+      student_number: string | null
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'active' | 'left'
+    }
     /** MessageCreate */
     MessageCreate: {
       /**
@@ -1500,6 +1645,8 @@ export interface components {
      * @description 错因。ID 全书统一，跨章节跟进靠它匹配。
      */
     Misconception: {
+      /** Class Id */
+      class_id?: string | null
       /** Id */
       id: string
       /** Knowledge Point Id */
@@ -1701,6 +1848,24 @@ export interface components {
       /** Source Ids */
       source_ids: string[]
     }
+    /** RosterImport */
+    RosterImport: {
+      /** Rows */
+      rows: string[][]
+    }
+    /** RosterResult */
+    RosterResult: {
+      /** Row */
+      row: number
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'added' | 'duplicate' | 'missing' | 'failed'
+      /** Message */
+      message: string
+      student?: components['schemas']['MemberView'] | null
+    }
     /** SourceRef */
     SourceRef: {
       /** Source Id */
@@ -1717,6 +1882,15 @@ export interface components {
       /** Name */
       name: string
     }
+    /** StudentAdd */
+    StudentAdd: {
+      /** Student Id */
+      student_id?: string | null
+      /** Name */
+      name?: string | null
+      /** Student Number */
+      student_number?: string | null
+    }
     /** TakeoverRequest */
     TakeoverRequest: {
       /**
@@ -1730,6 +1904,8 @@ export interface components {
      * @description 由规划 Agent 创建，教学时钟检查是否到期。
      */
     Task: {
+      /** Class Id */
+      class_id?: string | null
       /** Id */
       id?: number | null
       type: components['schemas']['TaskType']
@@ -1832,6 +2008,8 @@ export interface components {
      * @description 教师设定的目标，如“周五前 90% 初步掌握、两轮不通过转人工”。
      */
     TeachingGoal: {
+      /** Class Id */
+      class_id?: string | null
       /** Id */
       id?: number | null
       /** Knowledge Point Ids */
@@ -1971,7 +2149,9 @@ export type BodyImportHomeworkApiHomeworkPost =
   components['schemas']['Body_import_homework_api_homework_post']
 export type Bound = components['schemas']['Bound']
 export type ChatTurn = components['schemas']['ChatTurn']
+export type ClassName = components['schemas']['ClassName']
 export type ClassOverview = components['schemas']['ClassOverview']
+export type ClassView = components['schemas']['ClassView']
 export type ClockAdvanced = components['schemas']['ClockAdvanced']
 export type ClockState = components['schemas']['ClockState']
 export type CommonIssue = components['schemas']['CommonIssue']
@@ -2010,6 +2190,7 @@ export type Login = components['schemas']['Login']
 export type Mastery = components['schemas']['Mastery']
 export type MasteryChanged = components['schemas']['MasteryChanged']
 export type MasteryState = components['schemas']['MasteryState']
+export type MemberView = components['schemas']['MemberView']
 export type MessageCreate = components['schemas']['MessageCreate']
 export type MessageDone = components['schemas']['MessageDone']
 export type Misconception = components['schemas']['Misconception']
@@ -2025,8 +2206,11 @@ export type QuestionPhotoResult = components['schemas']['QuestionPhotoResult']
 export type Record = components['schemas']['Record']
 export type ResolveEscalation = components['schemas']['ResolveEscalation']
 export type RetrySources = components['schemas']['RetrySources']
+export type RosterImport = components['schemas']['RosterImport']
+export type RosterResult = components['schemas']['RosterResult']
 export type SourceRef = components['schemas']['SourceRef']
 export type Student = components['schemas']['Student']
+export type StudentAdd = components['schemas']['StudentAdd']
 export type TakeoverRequest = components['schemas']['TakeoverRequest']
 export type Task = components['schemas']['Task']
 export type TaskChanged = components['schemas']['TaskChanged']
@@ -2136,9 +2320,252 @@ export interface operations {
       }
     }
   }
-  get_clock_api_clock_get: {
+  list_classes_api_classes_get: {
     parameters: {
       query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClassView'][]
+        }
+      }
+    }
+  }
+  create_class_api_classes_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClassName']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClassView']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  rename_class_api_classes__class_id__patch: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        class_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClassName']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClassView']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_members_api_classes__class_id__students_get: {
+    parameters: {
+      query?: {
+        include_left?: boolean
+      }
+      header?: never
+      path: {
+        class_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MemberView'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  enroll_api_classes__class_id__students_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        class_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StudentAdd']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MemberView']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  available_students_api_classes_available_students_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Student'][]
+        }
+      }
+    }
+  }
+  import_roster_api_classes__class_id__students_import_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        class_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RosterImport']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RosterResult'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  remove_member_api_classes__class_id__students__student_id__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        class_id: string
+        student_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_clock_api_clock_get: {
+    parameters: {
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2154,11 +2581,22 @@ export interface operations {
           'application/json': components['schemas']['ClockState']
         }
       }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
     }
   }
   advance_clock_api_clock_advance_post: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2191,7 +2629,9 @@ export interface operations {
   }
   enter_lecture_api_clock_lecture_post: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2224,7 +2664,9 @@ export interface operations {
   }
   list_goals_api_goals_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2240,11 +2682,22 @@ export interface operations {
           'application/json': components['schemas']['TeachingGoal'][]
         }
       }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
     }
   }
   create_goal_api_goals_post: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2277,7 +2730,9 @@ export interface operations {
   }
   import_homework_api_homework_post: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2310,7 +2765,9 @@ export interface operations {
   }
   class_overview_api_class_overview_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2326,11 +2783,22 @@ export interface operations {
           'application/json': components['schemas']['ClassOverview']
         }
       }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
     }
   }
   class_heatmap_api_class_heatmap_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2346,11 +2814,22 @@ export interface operations {
           'application/json': components['schemas']['HeatCell'][]
         }
       }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
     }
   }
   class_issues_api_class_issues_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2366,6 +2845,15 @@ export interface operations {
           'application/json': components['schemas']['CommonIssue'][]
         }
       }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
     }
   }
   list_tasks_api_tasks_get: {
@@ -2374,6 +2862,7 @@ export interface operations {
         student_id?: string | null
         type?: components['schemas']['TaskType'] | null
         status?: components['schemas']['TaskStatus'] | null
+        class_id?: string | null
       }
       header?: never
       path?: never
@@ -2403,7 +2892,9 @@ export interface operations {
   }
   list_task_controls_api_tasks_controls_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2417,6 +2908,15 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['TaskControl'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }
@@ -2555,7 +3055,9 @@ export interface operations {
   }
   list_pending_misconceptions_api_misconceptions_pending_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2569,6 +3071,15 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Misconception'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }
@@ -2610,7 +3121,9 @@ export interface operations {
   }
   list_escalations_api_escalations_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2624,6 +3137,15 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Escalation'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }
