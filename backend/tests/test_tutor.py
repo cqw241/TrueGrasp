@@ -225,7 +225,7 @@ async def test_abc_diagnosis(setup, student, answers, confirmed, strategy):
     assert any(e.type == "evidence_added" for e in publisher.events)
 
 
-async def test_no_progress_requests_allowed_backtrack(setup):
+async def test_no_progress_adapts_teaching_with_allowed_backtrack(setup):
     engine, knowledge, task = setup
     model, pub = Model(), Publisher()
     tutor = create_tutor(llm=model, knowledge=knowledge, engine=engine)
@@ -233,8 +233,11 @@ async def test_no_progress_requests_allowed_backtrack(setup):
     turn = await tutor.turn(input_for(task, "cos(3*x)", turn.awaiting_item_id), pub)
     for _ in range(2):
         turn = await tutor.turn(input_for(task, "0", turn.awaiting_item_id), pub)
-    assert turn.outcome == TutorOutcome.REQUEST_REPLAN
-    assert task.allowed_backtrack_ids[0] in turn.replan_reason
+    # Without a teacher round limit, repeated failures keep tutoring with a new approach.
+    assert turn.outcome == TutorOutcome.AWAIT_STUDENT and turn.awaiting_item_id
+    taught = [p for kind, p in model.calls if kind == "stream"][-1]
+    assert taught["failures"] == 2
+    assert task.allowed_backtrack_ids[0] in taught["backtrack_path"]
     with Session(engine) as session:
         assert session.get(Mastery, ("A", POINT)).state == MasteryState.TUTORING
 
@@ -483,23 +486,43 @@ async def test_spec_null_probe_is_rejected(setup):
     assert "spec" in failure
 
 
-async def test_three_round_budget_survives_reproposal_and_recreation(setup):
+async def test_undetermined_after_three_probes_continues_tentatively(setup):
     engine, knowledge, task = setup
     model, pub = Model(), Publisher()
     tutor = create_tutor(llm=model, knowledge=knowledge, engine=engine)
     turn = await tutor.turn(input_for(task), pub)
-    for index in range(3):
+    for _ in range(3):
         tutor = create_tutor(llm=model, knowledge=knowledge, engine=engine)
         turn = await tutor.turn(input_for(task, "12345", turn.awaiting_item_id), pub)
-        if index < 2:
-            assert turn.outcome == TutorOutcome.AWAIT_STUDENT
-    assert turn.outcome == TutorOutcome.REQUEST_REPLAN
-    assert "三轮" in turn.replan_reason
+        assert turn.outcome == TutorOutcome.AWAIT_STUDENT
     with Session(engine) as session:
         state = TeachingState.model_validate(session.get(TutorSession, task.task_id).state)
-        assert state.probe_count == 3
-        assert len(state.probe_item_ids) == 3
-        assert len(session.exec(select(ItemExposure)).all()) == 3
+        assert state.probe_count == 3 and len(state.probe_item_ids) == 3
+        # The budget survives recreation; afterwards teaching continues with practice
+        # while the cause stays undetermined instead of being forced or cancelled.
+        assert state.phase == "practice" and state.confirmed_id is None
+        assert session.get(Item, turn.awaiting_item_id).purpose == ItemPurpose.PRACTICE
+        assert session.get(Task, task.task_id).status != "cancelled"
+        assert len(session.exec(select(ItemExposure)).all()) == 4
+
+
+async def test_off_library_candidate_ids_do_not_abort_tutoring(setup):
+    engine, knowledge, task = setup
+
+    class OffLibrary(Model):
+        async def generate(self, messages, output, tools=None):
+            if output is CandidateSelection:
+                return CandidateSelection(
+                    misconception_ids=[MISS, "invented.cause"], reason="部分库外"
+                )
+            return await super().generate(messages, output, tools)
+
+    tutor = create_tutor(llm=OffLibrary(), knowledge=knowledge, engine=engine)
+    turn = await tutor.turn(input_for(task), Publisher())
+    assert turn.outcome == TutorOutcome.AWAIT_STUDENT
+    with Session(engine) as session:
+        state = TeachingState.model_validate(session.get(TutorSession, task.task_id).state)
+        assert MISS in state.candidate_ids and "invented.cause" not in state.candidate_ids
 
 
 async def test_generation_exhaustion_does_not_leak_bad_question(setup):

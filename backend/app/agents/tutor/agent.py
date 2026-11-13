@@ -253,13 +253,14 @@ class DiagnosticTutor:
                                 )
                             state.phase = "practice"
                         elif state.probe_count >= 3:
-                            return self._commit(
-                                session,
-                                task,
-                                state,
-                                key,
-                                self._replan("累计三轮追问仍无法确诊；证据：" + str(evidence.id)),
-                            )
+                            # Mixed or still-undetermined causes: keep the uncertainty in the
+                            # hypotheses and teach against the remaining candidates instead of
+                            # cancelling the session or forcing a single diagnosis.
+                            state.phase = "practice"
+                            state.confirmed_id = None
+                            state.candidate_ids = [
+                                h.misconception_id for h in active if h.misconception_id != SLIP
+                            ]
                         elif not active:
                             state.candidate_ids = []
                     else:
@@ -278,23 +279,18 @@ class DiagnosticTutor:
                             )
                         state.practice_failures += 1
                         goal = current_goal(session, task.knowledge_point_id)
-                        if state.practice_failures >= 2:
-                            reason = "连续两次练习无进展；"
-                            if goal and task.round >= goal.max_rounds:
-                                reason += "达到教师轮次上限，请转交教师；"
-                            else:
-                                paths = [
-                                    self.knowledge.path(pre, task.knowledge_point_id)
-                                    for pre in inp.task.allowed_backtrack_ids
-                                ]
-                                path = next((p for p in paths if p), [])
-                                reason += "建议回溯路径：" + " → ".join(p.id for p in path)
+                        if state.practice_failures >= 2 and goal and task.round >= goal.max_rounds:
+                            # The teacher's round limit stays binding; other repeated
+                            # failures continue with an adapted teaching approach.
                             return self._commit(
                                 session,
                                 task,
                                 state,
                                 key,
-                                self._replan(reason + "；证据：" + str(evidence.id)),
+                                self._replan(
+                                    "连续两次练习无进展；达到教师轮次上限，请转交教师；证据："
+                                    + str(evidence.id)
+                                ),
                             )
                 elif inp.student_message is not None:
                     raise ValueError("没有等待中的辅导题")
@@ -386,7 +382,14 @@ class DiagnosticTutor:
             await self._publish_state(task.id, publish)
 
             used = used_fingerprints(session, task.student_id, state.probe_item_ids, task.class_id)
-            cards = self.knowledge.strategies(state.confirmed_id) if state.confirmed_id else []
+            sources = (
+                [state.confirmed_id]
+                if state.confirmed_id
+                else [mid for mid in state.candidate_ids if mid != SLIP]
+            )
+            cards = list(
+                {c.id: c for mid in sources for c in self.knowledge.strategies(mid)}.values()
+            )
             state.strategy_ids = [c.id for c in cards]
             question_receipt = session.get(TutorReceipt, key + ":question")
             if question_receipt:
@@ -421,6 +424,7 @@ class DiagnosticTutor:
                     slope_conflict(session.get(Item, error.item_id), error)
                     if "numeric_slope_conflict" in state.strategy_ids
                     else "",
+                    self._backtrack(inp, task) if state.practice_failures >= 2 else [],
                 )
             )
             session.add(item)
@@ -452,8 +456,9 @@ class DiagnosticTutor:
         selection = await self.llm.generate(
             messages(
                 "选择最能解释原始错误或具体卡点及追问表现的至多两个候选错因。"
-                "卡点不等于错答，不要直接当确诊。"
-                "仅使用 pool 中 ID；没有合适的库内错因时填写未建模描述与族。偶发失误由程序添加。",
+                "卡点不等于错答，不要直接当确诊；可能同时存在多个错因。"
+                "仅使用 pool 中 ID；没有合适的库内错因，或库内错因只能部分解释时，"
+                "填写未建模描述与族。不确定时如实保留不确定。偶发失误由程序添加。",
                 {
                     "error": error.model_dump(mode="json"),
                     "problem": original.stem
@@ -466,9 +471,17 @@ class DiagnosticTutor:
             ),
             CandidateSelection,
         )
-        ids = selection.misconception_ids
-        if len(ids) != len(set(ids)) or set(ids) - {m.id for m in pool}:
-            raise ValueError("候选错因包含重复或库外 ID")
+        allowed_ids = {m.id for m in pool}
+        ids = list(dict.fromkeys(i for i in selection.misconception_ids if i in allowed_ids))
+        if ids != selection.misconception_ids:
+            # An off-library guess must not abort tutoring; unmodeled_description keeps
+            # the model's free-form explanation for teacher review.
+            logger.warning(
+                "Dropped duplicate or off-library misconception ids task=%s ids=%s",
+                task.id,
+                selection.misconception_ids,
+            )
+            selection.misconception_ids = ids
         matching = []
         if original and original.spec:
             allowed = {m.id for m in pool}
@@ -749,20 +762,34 @@ class DiagnosticTutor:
             raise LLMOutputError("辅导模型返回空回复")
         return text
 
-    async def _teach(self, inp, state, cards, item, publish, streamed, conflict):
+    def _backtrack(self, inp, task):
+        paths = [
+            self.knowledge.path(pre, task.knowledge_point_id)
+            for pre in inp.task.allowed_backtrack_ids
+        ]
+        return [p.id for p in next((p for p in paths if p), [])]
+
+    async def _teach(self, inp, state, cards, item, publish, streamed, conflict, backtrack=()):
         prompt = messages(
-            "你是一对一数学辅导老师。按策略卡原则与禁用做法，给简短、有针对性的引导。"
-            "漏层采用分层拆解，公式代换采用数值斜率冲突与变化率解释。"
+            "你是一对一数学辅导老师。根据学生的作答历史和表现，自主选择解释、追问、举例、"
+            "换一种讲法或回顾前置知识，给简短、有针对性的引导；策略卡是参考原则，"
+            "遵守其禁用做法。漏层可分层拆解，公式代换可用数值斜率冲突与变化率解释。"
+            "confirmed_id 为空时错因尚未确诊，tentative_candidates 只是可能原因，"
+            "不要当作确诊告诉学生。failures 较多时换一种方式，backtrack_path 可用于回顾前置知识。"
             "latest_answer 属于上一道已作答题，不是新练习的答案，不得用新练习批评上一题作答。"
             "不要透露待答练习的标准答案，不宣称已掌握；让学生自己计算。",
             {
                 "history": [m.model_dump(mode="json") for m in inp.history],
                 "latest_answer": inp.student_message,
                 "confirmed_id": state.confirmed_id,
+                "tentative_candidates": []
+                if state.confirmed_id
+                else [mid for mid in state.candidate_ids if mid != SLIP],
                 "strategies": [c.model_dump(mode="json") for c in cards],
                 "practice_stem": item.stem,
                 "original_slope_conflict": conflict,
                 "failures": state.practice_failures,
+                "backtrack_path": list(backtrack),
             },
         )
         parts = []

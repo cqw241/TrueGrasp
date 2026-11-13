@@ -190,8 +190,10 @@ async def test_unstructured_question_starts_with_clarification(setup, tmp_path):
         async def guide(self, *args, **kwargs):
             raise AssertionError("unstructured question must not enter hints")
 
-        async def discuss(self, *args, **kwargs):
-            raise AssertionError("unstructured question must not enter discussion")
+        async def discuss(self, item, message, intent, **kwargs):
+            # The model opens the conversation itself; no attempt is required first.
+            assert intent == "opening"
+            return "这是证明题，可以先回忆可导的定义。"
 
     app = create_app(
         engine=engine,
@@ -220,6 +222,7 @@ async def test_unstructured_question_starts_with_clarification(setup, tmp_path):
             assert task.knowledge_point_id == "pending.unclassified"
         messages = (await client.get(f"/api/tasks/{task_id}/messages")).json()
         assert "积分上限看不清" in messages[-1]["content"]
+        assert "可导的定义" in messages[-1]["content"]
         assert (await client.get(f"/api/tasks/{task_id}/answer-target")).json()["accepts_text"]
 
 
@@ -390,6 +393,9 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
             if output is AttemptReview:
                 assert "verified_answer" not in payload
                 return AttemptReview(
+                    intent={"内层为什么要乘 8？": "concept_question", "我懂了": "ready"}.get(
+                        payload["attempt"], "attempt"
+                    ),
                     final_answer={
                         "cos(x)": "cos(x)",
                         "还是不会": "8*cos(8*x)",  # An invented answer must not finish the task.
@@ -398,6 +404,11 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
                     observation="需要检查内层导数",
                     stuck_step="卡在内层求导" if "卡在内层求导" in payload["attempt"] else "",
                 )
+            if output is Guidance and "intent" in payload:
+                # Free discussion. The opening reply leaks the answer and must be replaced.
+                if payload["intent"] == "opening":
+                    return Guidance(text=r"答案是 $8\cos(8x)$。")
+                return Guidance(text="内层 8x 的导数是 8，所以要再乘 8。")
             if output is Guidance:
                 guidance.append(payload)
                 if payload["verified_answer"]:
@@ -525,13 +536,15 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
             for _ in range(3):
                 assert (await runtime.get_answer_target(task_id)).item_id
                 await reply("???")
+            # Three undetermined probes no longer cancel the question: tutoring returns to
+            # the original problem with a tentative approach and no forced diagnosis.
+            assert (await runtime.get_messages(task_id))[-1].hint_level == 1
+            assert (await runtime.get_answer_target(task_id)).phase == "waiting"
             with Session(engine) as session:
-                task = session.get(Task, task_id)
-                assert task.status == "cancelled" and "重规划：" in task.reason
-                event = session.exec(
-                    select(Event).where(Event.student_id == "A").order_by(Event.id.desc())
+                assert session.get(Task, task_id).status == "active"
+                assert not session.exec(
+                    select(Event).where(Event.student_id == "A", Event.type == "task_due")
                 ).first()
-                assert event.type == "task_due" and event.processed
             return
         await reply("cos(3*x)")
         assert guidance[-1]["strategy_cards"][0]["id"] == "numeric_slope_conflict"
@@ -553,6 +566,13 @@ async def test_student_question_diagnosis_hints_and_independent_followup(
             await runtime.wait_idle()
         last = (await runtime.get_messages(task_id))[-1]
         assert last.solution and "8*cos(8*x)" in last.content
+        # The full solution keeps the conversation open for follow-up questions.
+        await reply("内层为什么要乘 8？")
+        assert "再乘 8" in (await runtime.get_messages(task_id))[-1].content
+        with Session(engine) as session:
+            assert session.get(Task, task_id).status == "active"
+            assert not session.exec(select(Task).where(Task.type == TaskType.VERIFICATION)).all()
+        await reply("我懂了")
         assert (await runtime.get_answer_target(task_id)).phase == "closed"
         with Session(engine) as session:
             intake = session.get(NodeReceipt, f"question:{task_id}:intake")
