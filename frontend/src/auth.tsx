@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { queryClient } from '@/api/client'
+import { fetchClient, queryClient } from '@/api/client'
 import { eventStream } from '@/api/stream'
 
 export type AuthUser = {
@@ -18,6 +18,7 @@ type Auth = {
   user: AuthUser | null
   loading: boolean
   login: (username: string, password: string) => Promise<void>
+  registerTeacher: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -50,16 +51,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [clear])
 
-  async function login(username: string, password: string) {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+  async function authenticate(
+    path: '/api/auth/login' | '/api/auth/register',
+    username: string,
+    password: string,
+  ) {
+    const { data } = await fetchClient.POST(path, {
+      body: { username, password },
     })
-    if (!response.ok) throw new Error('账号或密码错误')
-    const next = (await response.json()) as AuthUser
+    if (!data) throw new Error('未收到登录结果，请重试')
     clear()
-    setUser(next)
+    setUser(data)
+  }
+
+  async function login(username: string, password: string) {
+    await authenticate('/api/auth/login', username, password)
+  }
+
+  async function registerTeacher(username: string, password: string) {
+    await authenticate('/api/auth/register', username, password)
   }
 
   async function logout() {
@@ -71,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Context.Provider value={{ user, loading, login, logout }}>
+    <Context.Provider value={{ user, loading, login, registerTeacher, logout }}>
       {children}
     </Context.Provider>
   )

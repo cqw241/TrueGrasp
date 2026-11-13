@@ -133,9 +133,7 @@ export function HomeworkReview({
     <div className="space-y-4">
       {!draft.class_id && (
         <div className="space-y-2 rounded-lg border p-3 text-sm">
-          <p>
-            这是原有个人草稿。先绑定当前班级，再从名单中核对学生；原始材料会保留。
-          </p>
+          <p>请先将这份个人草稿绑定到当前班级。</p>
           <Button
             variant="outline"
             disabled={working}
@@ -186,10 +184,7 @@ export function HomeworkReview({
         </Button>
       )}
       <div className="space-y-2 border-t pt-3">
-        <p className="text-sm">
-          本次将发布 {selected.length}{' '}
-          份已核对作答。待核对和跳过的记录继续保留。
-        </p>
+        <p className="text-sm">本次将发布 {selected.length} 份已核对作答。</p>
         <Button
           className="min-h-11"
           disabled={
@@ -238,8 +233,8 @@ export function HomeworkReview({
               {publication.data.workflow.state === 'planned'
                 ? `Agent 规划已完成，本次关联 ${publication.data.workflow.task_ids.length} 个任务。`
                 : publication.data.workflow.state === 'failed'
-                  ? '作业已导入，Agent 规划待恢复，无需重复发布。'
-                  : '作业已导入，等待 Agent 规划；无需重复发布。'}
+                  ? '教学规划失败，等待恢复。'
+                  : '等待教学规划。'}
             </p>
           )}
           {publication.data.error && (
@@ -409,11 +404,6 @@ function RecordEditor({
                 </option>
               ))}
             </select>
-            {record.identity.status !== 'confirmed' && (
-              <p className="text-xs text-muted-foreground">
-                材料中的姓名/学号仅供匹配，请确认名单选择正确。
-              </p>
-            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={fieldId('stem')}>题目</Label>
@@ -462,12 +452,12 @@ function RecordEditor({
                   change('itemId', e.target.checked ? null : question.item_id)
                 }
               />
-              作为新题发布（不修改已有题目）
+              作为新题发布
             </label>
           )}
           {frozen && (
             <p className="text-xs text-muted-foreground">
-              题目已有发布引用，题干、参考答案和知识点保持只读。
+              此题已发布，需要修改时请新建作业。
             </p>
           )}
           <div className="space-y-1.5">
@@ -478,15 +468,10 @@ function RecordEditor({
               value={values.studentAnswer}
               onChange={(e) => change('studentAnswer', e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              校正识别内容，保留学生原有错误与步骤。
-            </p>
           </div>
           {issues.length > 0 && (
             <div className="space-y-2 text-xs">
-              <p className="font-medium">
-                待确认项：缺失字段补齐后自动解除；识别疑点可修正内容或明确核对。
-              </p>
+              <p className="font-medium">待确认项</p>
               {issues.map((issue) => (
                 <label
                   key={issue.issue_id}
@@ -551,7 +536,7 @@ function RecordEditor({
         <MutationError error={save.error} />
         {edited && values.revision !== draft.revision && (
           <p role="alert" className="text-xs text-destructive">
-            草稿版本已更新。请保留需要的内容，重新加载后核对。
+            草稿已更新，请重新加载后核对。
           </p>
         )}
         {edited && (

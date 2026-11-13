@@ -468,3 +468,74 @@ async def test_t13_t26_teacher_view_updates_after_student_answer(setup, tmp_path
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+def test_teacher_registration_logs_in_with_new_class_ownership(app_client):
+    client, app, _ = app_client
+    assert login(client, "alice", "alice-pass").status_code == 200
+    previous = client.cookies.get(COOKIE)
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "username": "  new-teacher  ",
+            "password": "teacher-new-pass",
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json() == {"username": "new-teacher", "role": "teacher", "student_id": None}
+    assert "HttpOnly" in response.headers["set-cookie"]
+    assert "SameSite=strict" in response.headers["set-cookie"]
+    assert app.state.auth_store.principal(previous) is None
+    assert client.get("/api/auth/me").json() == response.json()
+    assert client.get("/api/classes").json() == []
+    assert client.get("/api/tasks/1").status_code == 404
+    principal = app.state.auth_store.principal(client.cookies.get(COOKIE))
+    assert principal.teacher_id.startswith("tch_")
+    group = client.post("/api/classes", json={"name": "新教师的班级"})
+    assert group.status_code == 201, group.text
+    assert group.json()["teacher_id"] == principal.teacher_id
+    with app.state.auth_store.connect() as db:
+        stored = db.execute(
+            "SELECT password_hash FROM account WHERE username='new-teacher'"
+        ).fetchone()[0]
+    assert stored != "teacher-new-pass"
+    assert client.post("/api/auth/logout").status_code == 204
+    assert login(client, "new-teacher", "teacher-new-pass").status_code == 200
+    assert (
+        app.state.auth_store.principal(client.cookies.get(COOKIE)).teacher_id
+        == principal.teacher_id
+    )
+
+
+def test_teacher_registration_rejects_duplicates_and_invalid_requests(app_client):
+    client, app, _ = app_client
+    assert login(client, "teacher", "teacher-pass").status_code == 200
+    token = client.cookies.get(COOKIE)
+    principal = app.state.auth_store.principal(token)
+    for username, old_password in (("teacher", "teacher-pass"), ("alice", "alice-pass")):
+        response = client.post(
+            "/api/auth/register",
+            json={
+                "username": username,
+                "password": "another-password",
+            },
+        )
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"]["code"] == "username_taken"
+        assert app.state.auth_store.principal(token) == principal
+        assert app.state.auth_store.login(username, old_password, 60) is not None
+        assert app.state.auth_store.login(username, "another-password", 60) is None
+    body = {"username": "blocked", "password": "new-teacher-pass"}
+    assert (
+        client.post(
+            "/api/auth/register", json=body, headers={"origin": "https://other.test"}
+        ).status_code
+        == 403
+    )
+    for invalid in (
+        {**body, "password": "short"},
+        {**body, "username": "   "},
+        {**body, "role": "student"},
+    ):
+        assert client.post("/api/auth/register", json=invalid).status_code == 422
+    assert app.state.auth_store.login("blocked", body["password"], 60) is None

@@ -148,7 +148,7 @@ function ResolveForm({ taskId }: { taskId: number }) {
         required
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        placeholder="处理说明，作为一条单独的教师证据写入账本"
+        placeholder="填写处理方式和后续安排"
       />
       <MutationError error={resolve.error} />
       <Button type="submit" size="sm" disabled={resolve.isPending}>

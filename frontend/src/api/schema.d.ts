@@ -38,6 +38,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/auth/register': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Register Teacher */
+    post: operations['register_teacher_api_auth_register_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/auth/me': {
     parameters: {
       query?: never
@@ -2308,6 +2325,13 @@ export interface components {
       | 'escalation'
       | 'class_review'
       | 'question'
+    /** TeacherRegistration */
+    TeacherRegistration: {
+      /** Username */
+      username: string
+      /** Password */
+      password: string
+    }
     /**
      * TeachingGoal
      * @description 教师设定的目标，如“周五前 90% 初步掌握、两轮不通过转人工”。
@@ -2552,6 +2576,7 @@ export type TaskControl = components['schemas']['TaskControl']
 export type TaskOverride = components['schemas']['TaskOverride']
 export type TaskStatus = components['schemas']['TaskStatus']
 export type TaskType = components['schemas']['TaskType']
+export type TeacherRegistration = components['schemas']['TeacherRegistration']
 export type TeachingGoal = components['schemas']['TeachingGoal']
 export type TimelineEntry = components['schemas']['TimelineEntry']
 export type TimelineKind = components['schemas']['TimelineKind']
@@ -2599,6 +2624,39 @@ export interface operations {
     responses: {
       /** @description Successful Response */
       200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['User']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  register_teacher_api_auth_register_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TeacherRegistration']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
         headers: {
           [name: string]: unknown
         }

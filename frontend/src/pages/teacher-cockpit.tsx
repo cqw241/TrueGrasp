@@ -134,7 +134,6 @@ function Cockpit({ classId }: { classId: string }) {
           <div className="evidence-note">
             <strong>以证据判断掌握</strong>
             <p>诊断 → 针对性辅导 → 独立验证 → 延迟复测</p>
-            <span>尚无评估记录的知识点保留为“未评估”。</span>
           </div>
         </div>
       </Workspace>

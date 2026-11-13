@@ -286,10 +286,7 @@ function DraftView({
           {draft.questions.length} 题 · {draft.records.length} 份作答
         </span>
       </div>
-      <p className="text-xs text-muted-foreground">
-        核对本班学生、题目与原始作答后发布；未核对或跳过的记录不会导入。
-        {parsing && '正在逐页处理，已完成内容会持续保留。'}
-      </p>
+      {parsing && <p className="text-xs text-muted-foreground">正在解析…</p>}
       <div className="flex flex-wrap items-center gap-2">
         {draft.sources.map((source) => (
           <a
@@ -310,7 +307,7 @@ function DraftView({
           className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"
           role="alert"
         >
-          <p className="font-medium">部分材料未能解析，已完成内容已保留</p>
+          <p className="font-medium">部分材料解析失败</p>
           <ul className="list-disc space-y-1 pl-4">
             {draft.parse_errors.map((error, index) => (
               <li key={index}>
