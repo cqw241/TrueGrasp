@@ -103,6 +103,47 @@
         }
       }
     },
+    "/api/auth/student-setup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Setup Student",
+        "operationId": "setup_student_api_auth_student_setup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudentSetup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupComplete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/classes": {
       "get": {
         "tags": [
@@ -477,6 +518,62 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/classes/{class_id}/students/{student_id}/setup-link": {
+      "post": {
+        "tags": [
+          "classes"
+        ],
+        "summary": "Issue Setup",
+        "operationId": "issue_setup_api_classes__class_id__students__student_id__setup_link_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "class_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Class Id"
+            }
+          },
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Student Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupLink"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -5866,6 +5963,42 @@
         ],
         "title": "RosterResult"
       },
+      "SetupComplete": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username"
+        ],
+        "title": "SetupComplete"
+      },
+      "SetupLink": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "setup_path": {
+            "type": "string",
+            "title": "Setup Path"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "setup_path",
+          "expires_in"
+        ],
+        "title": "SetupLink"
+      },
       "SourceRef": {
         "properties": {
           "source_id": {
@@ -5966,6 +6099,28 @@
         "additionalProperties": false,
         "type": "object",
         "title": "StudentAdd"
+      },
+      "StudentSetup": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 40,
+            "title": "Token"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "StudentSetup"
       },
       "TakeoverRequest": {
         "properties": {

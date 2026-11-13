@@ -56,6 +56,10 @@ class AuthStore:
                     role TEXT NOT NULL CHECK(role IN ('teacher','student')),
                     student_id TEXT, teacher_id TEXT
                 );
+                CREATE TABLE IF NOT EXISTS student_setup (
+                    student_id TEXT PRIMARY KEY, class_id TEXT NOT NULL,
+                    token_hash TEXT NOT NULL UNIQUE, expires REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS auth_session (
                     token_hash TEXT PRIMARY KEY, username TEXT NOT NULL,
                     expires REAL NOT NULL
@@ -115,6 +119,64 @@ class AuthStore:
                 ),
             )
             db.execute("DELETE FROM auth_session WHERE username=?", (username,))
+            if student_id:
+                db.execute("DELETE FROM student_setup WHERE student_id=?", (student_id,))
+
+    def issue_setup(self, student_id: str, class_id: str) -> tuple[str, str]:
+        """Return a one-time setup token; the stored value is a digest."""
+        token = secrets.token_urlsafe(32)
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute(
+                "SELECT username FROM account WHERE role='student' AND student_id=?", (student_id,)
+            ).fetchall()
+            if len(rows) > 1:
+                raise ValueError("该学生绑定了多个旧账号，请先由维护人员核对")
+            if rows:
+                username = rows[0][0]
+            else:
+                username = "student_" + secrets.token_hex(10)
+                db.execute(
+                    "INSERT INTO account(username,password_hash,role,student_id) VALUES (?,?,?,?)",
+                    (username, "!", "student", student_id),
+                )
+            db.execute(
+                "INSERT INTO student_setup VALUES (?,?,?,?) ON CONFLICT(student_id) DO UPDATE SET "
+                "class_id=excluded.class_id, token_hash=excluded.token_hash, "
+                "expires=excluded.expires",
+                (student_id, class_id, self.token_hash(token), time.time() + 86400),
+            )
+        return username, token
+
+    def setup_identity(self, token: str) -> tuple[str, str] | None:
+        with self.connect() as db:
+            return db.execute(
+                "SELECT student_id,class_id FROM student_setup WHERE token_hash=? AND expires>?",
+                (self.token_hash(token), time.time()),
+            ).fetchone()
+
+    def redeem_setup(self, token: str, hashed: str, student_id: str) -> str | None:
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            deleted = db.execute(
+                "DELETE FROM student_setup WHERE token_hash=? AND expires>? AND student_id=?",
+                (self.token_hash(token), time.time(), student_id),
+            )
+            if not deleted.rowcount:
+                return None
+            rows = db.execute(
+                "SELECT username FROM account WHERE role='student' AND student_id=?", (student_id,)
+            ).fetchall()
+            if len(rows) != 1:
+                return None
+            username = rows[0][0]
+            db.execute("UPDATE account SET password_hash=? WHERE username=?", (hashed, username))
+            db.execute("DELETE FROM auth_session WHERE username=?", (username,))
+            return username
+
+    def revoke_setup(self, student_id: str) -> None:
+        with self.connect() as db:
+            db.execute("DELETE FROM student_setup WHERE student_id=?", (student_id,))
 
     def login(self, username: str, password: str, seconds: int) -> tuple[str, Principal] | None:
         with self.connect() as db:

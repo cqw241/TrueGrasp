@@ -26,7 +26,6 @@ cd backend
 cp .env.example .env   # 填写 LLM_API_KEY
 uv sync
 uv run python -m app.auth_account teacher --role teacher
-uv run python -m app.auth_account student-a --role student --student-id A
 uv run uvicorn app.main:app --reload
 ```
 
@@ -38,7 +37,7 @@ npm install
 npm run dev
 ```
 
-账号命令会交互式读取密码；学生账号绑定的 ID 需要与导入的学生一致。打开前端后登录，教师进入驾驶舱，学生进入本人辅导台；顶部状态显示“实时连接正常”即实时事件通道已连通（窄屏显示状态圆点）。
+教师账号命令会交互式读取密码。打开前端后，教师从“班级管理”创建班级、添加或批量导入学生，再为每名学生生成一次性登录设置链接；学生通过链接设置密码后自动进入本人辅导台。顶部状态显示“实时连接正常”即实时事件通道已连通（窄屏显示状态圆点）。
 
 历史学生若在启用班级归属前已存在，需要管理员明确选择学生和目标班级后执行一次迁移；迁移只处理该学生仍未分配的任务、证据、事件、题目图片和掌握记录，不会把无法判定的数据授权给全部教师：
 
