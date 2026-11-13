@@ -16,6 +16,7 @@ from app.orchestration.context import current_teaching_date
 from app.orchestration.inputs import used_fingerprints
 from app.orchestration.questions import question_turn
 from app.orchestration.storage import QUESTION_FOLLOWUP, ItemExposure, VerificationExposureConflict
+from app.verify.execution import AsyncMathTools, run_with_timeout
 from app.verify.tools import SympyMathTools
 
 if TYPE_CHECKING:
@@ -142,7 +143,7 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
     async def compose_verification(state: RunState) -> dict:
         # A checkpoint may have been saved with legacy fingerprints or before another
         # task showed a question. Refresh the whitelist before resuming composition.
-        prepared = prepare_verification(state)
+        prepared = await run_with_timeout(prepare_verification, state)
         result = await verifier_graph.ainvoke(
             {"operation": "compose", "input": prepared["verifier_input"]}, durability="exit"
         )
@@ -174,9 +175,9 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
     async def replace_verification_item(state: RunState) -> dict:
         items = state["verification_items"].copy()
         index = state["item_index"]
-        prepared = prepare_verification(state)["verifier_input"]
+        prepared = (await run_with_timeout(prepare_verification, state))["verifier_input"]
         used = set(prepared["used_fingerprints"])
-        tools = SympyMathTools()
+        tools = AsyncMathTools(SympyMathTools())
         for i, value in enumerate(items):
             if i == index:
                 continue
@@ -184,7 +185,7 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
             if staged.fingerprint:
                 used.add(staged.fingerprint)
             if staged.spec:
-                used.add(tools.fingerprint(staged.spec))
+                used.add(await tools.fingerprint(staged.spec))
         inp = {
             **prepared,
             "dimensions": [items[index]["dimension"]],
@@ -197,7 +198,7 @@ def build_graph(runtime: Orchestrator, checkpointer: BaseCheckpointSaver):
         if len(replacements) != 1:
             raise ValueError("重选验证题时只允许返回一道题")
         replacement = Item.model_validate(replacements[0])
-        if replacement.spec is not None and tools.fingerprint(replacement.spec) in used:
+        if replacement.spec is not None and await tools.fingerprint(replacement.spec) in used:
             raise ValueError("重选的验证题与已用题或待展示题重复")
         runtime.save_items({**state, "verifier_input": inp, "verification_items": replacements})
         items[index] = replacements[0]

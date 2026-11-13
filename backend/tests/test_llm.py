@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 
 import httpx
 import pytest
@@ -8,7 +9,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from app.config import Settings
-from app.contracts.llm import ChatMessage
+from app.contracts.llm import ChatMessage, Tool
 from app.llm.client import LLMOutputError, OpenAICompatClient
 from app.llm.math_tools import math_tools
 from app.llm.prompts import PromptTemplates
@@ -122,6 +123,46 @@ def test_tool_loop(tool_call, error):
     assert ("error" in payload) is error
     if not error:
         assert payload["equivalent"] is True
+    assert result.answer == "ok"
+
+
+@pytest.mark.parametrize(
+    "response", [completion("bad"), completion("{}", reason="length"), completion(refusal="no")]
+)
+class ToolArgs(BaseModel):
+    value: str
+
+
+@pytest.mark.parametrize("mode", ["timeout", "exception"])
+def test_tool_failure_is_returned_to_the_model(mode):
+    def handler(args):
+        if mode == "timeout":
+            time.sleep(0.2)
+            return {"ok": True}
+        raise ValueError("boom")
+
+    tool = Tool("slow", "slow tool", ToolArgs, handler)
+    tool_call = {
+        "id": "call-slow",
+        "type": "function",
+        "function": {"name": "slow", "arguments": json.dumps({"value": "x"})},
+    }
+
+    async def operation(client):
+        return await client.generate([], Output, [tool])
+
+    result, requests = asyncio.run(
+        scenario(
+            [
+                completion(calls=[tool_call], reason="tool_calls"),
+                completion('{"answer":"ok"}'),
+            ],
+            operation,
+            math_tool_timeout=0.01,
+        )
+    )
+    payload = json.loads(requests[1]["messages"][-1]["content"])
+    assert "error" in payload
     assert result.answer == "ok"
 
 

@@ -1,11 +1,15 @@
+import asyncio
 import math
 import subprocess
 import sys
+import time
 
 import pytest
 
 from app.contracts.enums import EquivalenceMode as Mode
 from app.contracts.values import ItemSpec, Prediction
+from app.contracts.verify import Equivalence
+from app.verify.execution import AsyncMathTools
 from app.verify.tools import SympyMathTools
 
 tools = SympyMathTools()
@@ -25,6 +29,24 @@ tools = SympyMathTools()
 )
 def test_equivalence(a, b, mode, variables, expected):
     assert tools.check_equivalent(a, b, mode, variables).equivalent is expected
+
+
+def test_async_math_timeout_is_inconclusive_and_keeps_the_loop_free():
+    class Slow:
+        def check_equivalent(self, a, b, mode, variables):
+            time.sleep(0.2)
+            return Equivalence(equivalent=True, method="symbolic")
+
+    async def run():
+        tools = AsyncMathTools(Slow(), timeout=0.02)
+        ticker = asyncio.create_task(asyncio.sleep(0.005, result="tick"))
+        result = await tools.check_equivalent("x", "x", Mode.EXPR, ["x"])
+        return result, await ticker
+
+    result, tick = asyncio.run(run())
+    assert tick == "tick"
+    assert result.equivalent is None
+    assert "超时" in result.detail
 
 
 def test_periodic_domains_comparison_finishes_without_symbolic_set_intersection():
