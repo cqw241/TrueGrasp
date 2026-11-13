@@ -2939,6 +2939,24 @@
             "APIKeyCookie": []
           }
         ],
+        "parameters": [
+          {
+            "name": "class_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Class Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3166,6 +3184,121 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeworkDraft"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "homework"
+        ],
+        "summary": "Patch Draft",
+        "operationId": "patch_draft_api_homework_drafts__draft_id__patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftUpdate"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3597,6 +3730,398 @@
           }
         }
       }
+    },
+    "/api/homework-drafts/{draft_id}/publish-preview": {
+      "post": {
+        "tags": [
+          "homework"
+        ],
+        "summary": "Preview Publication",
+        "operationId": "preview_publication_api_homework_drafts__draft_id__publish_preview_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishSelection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishPreview"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/homework-drafts/{draft_id}/publish": {
+      "post": {
+        "tags": [
+          "homework"
+        ],
+        "summary": "Publish Draft",
+        "operationId": "publish_draft_api_homework_drafts__draft_id__publish_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishSelection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Publication"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Publication"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Publication"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/homework-publications/{publication_id}": {
+      "get": {
+        "tags": [
+          "homework"
+        ],
+        "summary": "Get Publication",
+        "operationId": "get_publication_api_homework_publications__publication_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "publication_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Publication Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Publication"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3756,6 +4281,17 @@
               }
             ],
             "title": "Prompt Text"
+          },
+          "class_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Id"
           }
         },
         "type": "object",
@@ -4228,6 +4764,17 @@
             "type": "string",
             "title": "Draft Id"
           },
+          "class_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Id"
+          },
           "title": {
             "type": "string",
             "title": "Title"
@@ -4241,7 +4788,8 @@
             "enum": [
               "parsing",
               "review",
-              "parse_failed"
+              "parse_failed",
+              "published"
             ],
             "title": "Status"
           },
@@ -4259,6 +4807,7 @@
         "type": "object",
         "required": [
           "draft_id",
+          "class_id",
           "title",
           "revision",
           "status",
@@ -4266,6 +4815,109 @@
           "updated_at"
         ],
         "title": "DraftSummary"
+      },
+      "DraftUpdate": {
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "title": "Expected Revision"
+          },
+          "class_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Id"
+          },
+          "question_updates": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionUpdate"
+            },
+            "type": "array",
+            "maxItems": 5000,
+            "title": "Question Updates"
+          },
+          "record_updates": {
+            "items": {
+              "$ref": "#/components/schemas/RecordUpdate"
+            },
+            "type": "array",
+            "maxItems": 5000,
+            "title": "Record Updates"
+          },
+          "issue_resolutions": {
+            "items": {
+              "$ref": "#/components/schemas/ResolveIssue"
+            },
+            "type": "array",
+            "maxItems": 10000,
+            "title": "Issue Resolutions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision"
+        ],
+        "title": "DraftUpdate"
+      },
+      "Edit": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "target_id": {
+            "type": "string",
+            "title": "Target Id"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "before": {
+            "title": "Before"
+          },
+          "after": {
+            "title": "After"
+          },
+          "by_teacher_id": {
+            "type": "string",
+            "title": "By Teacher Id"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "target_id",
+          "field",
+          "before",
+          "after",
+          "by_teacher_id",
+          "at",
+          "note"
+        ],
+        "title": "Edit"
       },
       "EnterLecture": {
         "properties": {
@@ -4655,6 +5307,17 @@
             "type": "string",
             "title": "Created By Username"
           },
+          "created_by_teacher_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Teacher Id"
+          },
           "title": {
             "type": "string",
             "title": "Title"
@@ -4669,7 +5332,8 @@
             "enum": [
               "parsing",
               "review",
-              "parse_failed"
+              "parse_failed",
+              "published"
             ],
             "title": "Status",
             "default": "parsing"
@@ -4698,6 +5362,31 @@
               }
             ]
           },
+          "edits": {
+            "items": {
+              "$ref": "#/components/schemas/Edit"
+            },
+            "type": "array",
+            "title": "Edits"
+          },
+          "publication_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Publication Ids"
+          },
+          "active_publication_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Publication Id"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -4717,12 +5406,16 @@
           "draft_id",
           "class_id",
           "created_by_username",
+          "created_by_teacher_id",
           "title",
           "revision",
           "status",
           "sources",
           "parse_errors",
           "original_extraction",
+          "edits",
+          "publication_ids",
+          "active_publication_id",
           "created_at",
           "updated_at"
         ],
@@ -4890,7 +5583,12 @@
           },
           "status": {
             "type": "string",
-            "const": "unmatched",
+            "enum": [
+              "unmatched",
+              "ambiguous",
+              "proposed",
+              "confirmed"
+            ],
             "title": "Status",
             "default": "unmatched"
           }
@@ -4908,6 +5606,10 @@
       },
       "Issue": {
         "properties": {
+          "issue_id": {
+            "type": "string",
+            "title": "Issue Id"
+          },
           "code": {
             "type": "string",
             "title": "Code"
@@ -4924,16 +5626,68 @@
             "type": "boolean",
             "title": "Blocking",
             "default": true
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IssueResolution"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "required": [
+          "issue_id",
           "code",
           "field",
           "message",
-          "blocking"
+          "blocking",
+          "resolution"
         ],
         "title": "Issue"
+      },
+      "IssueResolution": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "corrected",
+              "accepted"
+            ],
+            "title": "Action"
+          },
+          "by_teacher_id": {
+            "type": "string",
+            "title": "By Teacher Id"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "by_teacher_id",
+          "at",
+          "note"
+        ],
+        "title": "IssueResolution"
       },
       "Item": {
         "properties": {
@@ -5635,6 +6389,210 @@
         "title": "ProbeRecord",
         "description": "一道判别追问题：各假设的预测与学生的实际回答。"
       },
+      "Publication": {
+        "properties": {
+          "publication_id": {
+            "type": "string",
+            "title": "Publication Id"
+          },
+          "draft_id": {
+            "type": "string",
+            "title": "Draft Id"
+          },
+          "class_id": {
+            "type": "string",
+            "title": "Class Id"
+          },
+          "confirmed_revision": {
+            "type": "integer",
+            "title": "Confirmed Revision"
+          },
+          "record_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Record Ids"
+          },
+          "confirmed_by_teacher_id": {
+            "type": "string",
+            "title": "Confirmed By Teacher Id"
+          },
+          "confirmed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Confirmed At"
+          },
+          "teaching_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Teaching Date"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "publishing",
+              "published",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "confirmed_snapshot": {
+            "$ref": "#/components/schemas/Extraction"
+          },
+          "import_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HomeworkImportResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "record_results": {
+            "items": {
+              "$ref": "#/components/schemas/RecordResult"
+            },
+            "type": "array",
+            "title": "Record Results"
+          },
+          "workflow": {
+            "$ref": "#/components/schemas/Workflow"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicationError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "publication_id",
+          "draft_id",
+          "class_id",
+          "confirmed_revision",
+          "record_ids",
+          "confirmed_by_teacher_id",
+          "confirmed_at",
+          "teaching_date",
+          "status",
+          "confirmed_snapshot",
+          "import_result",
+          "record_results",
+          "workflow",
+          "error"
+        ],
+        "title": "Publication"
+      },
+      "PublicationError": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "retryable": {
+            "type": "boolean",
+            "title": "Retryable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "title": "PublicationError"
+      },
+      "PublishPreview": {
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "title": "Draft Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "selected_records": {
+            "type": "integer",
+            "title": "Selected Records"
+          },
+          "students": {
+            "type": "integer",
+            "title": "Students"
+          },
+          "items": {
+            "type": "integer",
+            "title": "Items"
+          },
+          "answers": {
+            "type": "integer",
+            "title": "Answers"
+          },
+          "remaining_records": {
+            "type": "integer",
+            "title": "Remaining Records"
+          },
+          "blocking_issues": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewProblem"
+            },
+            "type": "array",
+            "title": "Blocking Issues"
+          },
+          "can_publish": {
+            "type": "boolean",
+            "title": "Can Publish"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft_id",
+          "revision",
+          "selected_records",
+          "students",
+          "items",
+          "answers",
+          "remaining_records",
+          "blocking_issues",
+          "can_publish"
+        ],
+        "title": "PublishPreview"
+      },
+      "PublishSelection": {
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "title": "Expected Revision"
+          },
+          "record_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5000,
+            "minItems": 1,
+            "title": "Record Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "record_ids"
+        ],
+        "title": "PublishSelection"
+      },
       "Question": {
         "properties": {
           "question_id": {
@@ -5796,6 +6754,64 @@
         "title": "QuestionPhotoResult",
         "description": "题目照片识别结果；原图已保存，可随提问或追问再次交给模型查看。"
       },
+      "QuestionUpdate": {
+        "properties": {
+          "question_id": {
+            "type": "string",
+            "title": "Question Id"
+          },
+          "stem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stem"
+          },
+          "correct_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct Answer"
+          },
+          "knowledge_point_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Point Id"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question_id"
+        ],
+        "title": "QuestionUpdate"
+      },
       "Record": {
         "properties": {
           "record_id": {
@@ -5849,9 +6865,25 @@
           },
           "review_status": {
             "type": "string",
-            "const": "pending",
+            "enum": [
+              "pending",
+              "confirmed",
+              "skipped",
+              "published"
+            ],
             "title": "Review Status",
             "default": "pending"
+          },
+          "publication_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publication Id"
           }
         },
         "type": "object",
@@ -5863,9 +6895,96 @@
           "answer_kind",
           "source_refs",
           "issues",
-          "review_status"
+          "review_status",
+          "publication_id"
         ],
         "title": "Record"
+      },
+      "RecordResult": {
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "title": "Record Id"
+          },
+          "item_id": {
+            "type": "string",
+            "title": "Item Id"
+          },
+          "evidence_id": {
+            "type": "integer",
+            "title": "Evidence Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_id",
+          "item_id",
+          "evidence_id"
+        ],
+        "title": "RecordResult"
+      },
+      "RecordUpdate": {
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "title": "Record Id"
+          },
+          "student_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Id"
+          },
+          "student_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Answer"
+          },
+          "review_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "confirmed",
+                  "skipped"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Status"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "record_id"
+        ],
+        "title": "RecordUpdate"
       },
       "ResolveEscalation": {
         "properties": {
@@ -5879,6 +6998,40 @@
           "note"
         ],
         "title": "ResolveEscalation"
+      },
+      "ResolveIssue": {
+        "properties": {
+          "issue_id": {
+            "type": "string",
+            "title": "Issue Id"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "corrected",
+              "accepted"
+            ],
+            "title": "Action"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "issue_id",
+          "action"
+        ],
+        "title": "ResolveIssue"
       },
       "RetrySources": {
         "properties": {
@@ -5902,6 +7055,29 @@
           "source_ids"
         ],
         "title": "RetrySources"
+      },
+      "ReviewProblem": {
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "title": "Record Id"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_id",
+          "field",
+          "message"
+        ],
+        "title": "ReviewProblem"
       },
       "RosterImport": {
         "properties": {
@@ -6605,6 +7781,56 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "Workflow": {
+        "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "planned",
+              "failed"
+            ],
+            "title": "State",
+            "default": "pending"
+          },
+          "task_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Task Ids"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicationError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "state",
+          "task_ids",
+          "error"
+        ],
+        "title": "Workflow"
       }
     },
     "securitySchemes": {

@@ -4,6 +4,7 @@ import csv
 import io
 import json
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import date
 
 from pydantic import ValidationError
@@ -103,6 +104,15 @@ async def transcribe_images(llm: LLMClient, batch: Sequence[ImageHomework]) -> l
     return drafts
 
 
+@dataclass
+class PreparedHomework:
+    students: dict[str, Student]
+    items: dict[str, Item]
+    original_items: dict[str, dict | None]
+    evidence: list[Evidence]
+    class_id: str | None
+
+
 class HomeworkImporter:
     def __init__(
         self,
@@ -137,6 +147,17 @@ class HomeworkImporter:
     async def import_rows(
         self, rows: Sequence[HomeworkRow], teaching_date: date, *, class_id: str | None = None
     ) -> HomeworkImportResult:
+        prepared = await self.prepare_rows(rows, teaching_date, class_id=class_id)
+        with ClassSession(self.engine, class_id) as session:
+            write_lock(session)
+            result, _ = self.write_prepared(session, prepared, teaching_date)
+            session.commit()
+            return result
+
+    async def prepare_rows(
+        self, rows: Sequence[HomeworkRow], teaching_date: date, *, class_id: str | None = None
+    ) -> PreparedHomework:
+        """Only read and analyze; the caller can atomically commit the resulting business writes."""
         if not rows or len(rows) > MAX_ROWS:
             raise IngestError(f"作业需包含 1 到 {MAX_ROWS} 份作答")
         keys = [(row.student_id, row.item_id) for row in rows]
@@ -156,6 +177,7 @@ class HomeworkImporter:
                 raise IngestError("请先导入知识点内容")
             items: dict[str, Item] = {}
             students: dict[str, Student] = {}
+            original_items: dict[str, dict | None] = {}
             evidence = []
             for row in rows:
                 if class_id is not None and active_class(session, row.student_id) != class_id:
@@ -169,6 +191,8 @@ class HomeworkImporter:
                     raise IngestError(f"学生姓名不一致：{row.student_id}")
                 students[student.id] = student
                 item = items.get(row.item_id) or session.get(Item, row.item_id)
+                if row.item_id not in original_items:
+                    original_items[row.item_id] = item.model_dump(mode="json") if item else None
                 if item is None and (not row.stem or not row.correct_answer):
                     raise IngestError(f"新题目需 stem 和 correct_answer：{row.item_id}")
                 if row.knowledge_point_id and row.knowledge_point_id not in points:
@@ -285,38 +309,56 @@ class HomeworkImporter:
                         teaching_date=teaching_date,
                     )
                 )
-            # Revalidate membership after model calls, while holding the writer lock.
-            write_lock(session)
-            if class_id is not None and any(
-                active_class(session, student_id) != class_id for student_id in students
-            ):
+            return PreparedHomework(students, items, original_items, evidence, class_id)
+
+    def write_prepared(
+        self, session: Session, prepared: PreparedHomework, teaching_date: date
+    ) -> tuple[HomeworkImportResult, list[int]]:
+        """Caller holds the writer lock and owns commit; never commit inside this seam."""
+        class_id = prepared.class_id
+        for student_id, student in prepared.students.items():
+            if class_id is not None and active_class(session, student_id) != class_id:
                 raise IngestError("导入期间班级名单已变更，请重新核对")
-            for student in students.values():
+            current = session.get(Student, student_id)
+            if current is None:
+                if class_id is not None:
+                    raise IngestError("学生已不存在，请重新核对名单")
                 session.add(student)
-            session.flush()
-            for item in items.values():
+            elif current.name != student.name:
+                raise IngestError("导入期间学生信息已变更，请重新核对")
+        session.flush()
+        for item_id, item in prepared.items.items():
+            current = session.get(Item, item_id)
+            snapshot = current.model_dump(mode="json") if current else None
+            if snapshot != prepared.original_items[item_id]:
+                raise IngestError("导入期间题目内容已变更，请重新核对")
+            if current is None:
                 session.add(item)
+        session.flush()
+        ids = []
+        for entry in prepared.evidence:
+            written = self.evidence_writer(session, entry)
             session.flush()
-            ids = []
-            for entry in evidence:
-                written = self.evidence_writer(session, entry)
-                session.flush()
-                if written.id is None:
-                    raise IngestError("证据写入器未生成 ID")
-                ids.append(written.id)
-            event = make_event(
-                HomeworkImported(
-                    knowledge_point_ids=list(dict.fromkeys(e.knowledge_point_id for e in evidence)),
-                    evidence_ids=ids,
+            if written.id is None:
+                raise IngestError("证据写入器未生成 ID")
+            ids.append(written.id)
+        event = make_event(
+            HomeworkImported(
+                knowledge_point_ids=list(
+                    dict.fromkeys(e.knowledge_point_id for e in prepared.evidence)
                 ),
-                teaching_date,
-                class_id=class_id,
-            )
-            session.add(event)
-            session.flush()
-            queue_work(session, f"event:{event.id}", {"dispatch": True})
-            result = HomeworkImportResult(
-                event_id=event.id, students=len(students), items=len(items), evidence=len(ids)
-            )
-            session.commit()
-            return result
+                evidence_ids=ids,
+            ),
+            teaching_date,
+            class_id=class_id,
+        )
+        session.add(event)
+        session.flush()
+        queue_work(session, f"event:{event.id}", {"dispatch": True})
+        result = HomeworkImportResult(
+            event_id=event.id,
+            students=len(prepared.students),
+            items=len(prepared.items),
+            evidence=len(ids),
+        )
+        return result, ids

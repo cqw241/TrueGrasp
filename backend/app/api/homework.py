@@ -1,4 +1,4 @@
-"""OPT-03：教师个人草稿。班级匹配及审核发布由后续任务接入。"""
+"""教师作业上传、审核与确认发布。"""
 
 import hashlib
 import json
@@ -6,18 +6,31 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 from starlette.concurrency import run_in_threadpool
 
+from app.classroom import owned_classes, write_lock
 from app.homework.models import (
     DraftApiError,
     DraftSource,
     DraftSummary,
+    DraftUpdate,
     HomeworkDraft,
+    Publication,
+    PublishPreview,
+    PublishSelection,
     RetrySources,
+)
+from app.homework.publication import projection, publish
+from app.homework.review import (
+    ReviewError,
+    check_class,
+    inspect_selection,
+    owned_draft,
+    update_draft,
 )
 from app.homework.service import (
     MAX_FILE_BYTES,
@@ -29,7 +42,7 @@ from app.homework.service import (
     parse_draft,
     prepare_source,
 )
-from app.homework.storage import DraftRow, SourceData
+from app.homework.storage import DraftRow, PublicationRow, SourceData
 
 router = APIRouter(
     tags=["homework"],
@@ -44,10 +57,7 @@ def problem(status: int, code: str, message: str) -> HTTPException:
 
 
 def owned(session: Session, draft_id: str, request: Request) -> DraftRow:
-    row = session.get(DraftRow, draft_id)
-    if row is None or row.owner != request.state.principal.username:
-        raise problem(404, "draft_not_found", "草稿不存在")
-    return row
+    return owned_draft(session, request.state.principal, draft_id)
 
 
 async def read_sources(files: list[UploadFile], prompt_text: str | None = None):
@@ -106,12 +116,25 @@ def enqueue(background: BackgroundTasks, request: Request, draft_id: str, source
 
 
 @router.get("/homework-drafts")
-def list_drafts(request: Request) -> list[DraftSummary]:
+def list_drafts(request: Request, class_id: str | None = None) -> list[DraftSummary]:
+    principal = request.state.principal
     with Session(request.app.state.orchestrator.engine) as session:
+        if class_id is not None:
+            check_class(session, principal, class_id)
         rows = session.exec(
-            select(DraftRow).where(DraftRow.owner == request.state.principal.username)
+            select(DraftRow).where(
+                (DraftRow.payload["class_id"].as_string().in_(owned_classes(principal.teacher_id)))
+                | (
+                    (DraftRow.payload["class_id"].as_string().is_(None))
+                    & (DraftRow.owner == principal.username)
+                )
+            )
         )
-        summaries = [DraftSummary.model_validate(row.payload) for row in rows]
+        summaries = [
+            DraftSummary.model_validate(row.payload)
+            for row in rows
+            if class_id is None or row.payload.get("class_id") in (None, class_id)
+        ]
         return sorted(summaries, key=lambda s: s.updated_at, reverse=True)
 
 
@@ -123,15 +146,25 @@ async def create_draft(
     files: list[UploadFile] | None = None,
     title: Annotated[str, Form(max_length=200)] = "作业解析",
     prompt_text: Annotated[str | None, Form()] = None,
+    class_id: Annotated[str | None, Form()] = None,
 ) -> HomeworkDraft:
+    if class_id is not None:
+        with Session(request.app.state.orchestrator.engine) as session:
+            check_class(session, request.state.principal, class_id)
     sources = await read_sources(files or [], prompt_text)
     fingerprint = hashlib.sha256(
         json.dumps(
-            [title, [(s.filename, s.sha256) for s, _ in sources]], ensure_ascii=False
+            [title, class_id, [(s.filename, s.sha256) for s, _ in sources]], ensure_ascii=False
         ).encode()
     ).hexdigest()
     owner = request.state.principal.username
-    draft = HomeworkDraft(draft_id=uuid4().hex, created_by_username=owner, title=title)
+    draft = HomeworkDraft(
+        draft_id=uuid4().hex,
+        created_by_username=owner,
+        title=title,
+        class_id=class_id,
+        created_by_teacher_id=request.state.principal.teacher_id,
+    )
     draft.sources = [s for s, _ in sources]
     with Session(request.app.state.orchestrator.engine) as session:
         existing = session.exec(
@@ -165,6 +198,7 @@ async def create_draft(
         if existing is not None:
             if existing.request_hash != fingerprint:
                 raise problem(409, "idempotency_conflict", "重复请求的内容已变化，请重新发起上传")
+            owned(session, existing.id, request)
             return HomeworkDraft.model_validate(existing.payload)
     enqueue(background, request, draft.draft_id)
     return draft
@@ -178,7 +212,11 @@ def get_draft(draft_id: str, request: Request) -> HomeworkDraft:
 
 def claim(session: Session, row: DraftRow, expected_revision: int) -> HomeworkDraft:
     draft = HomeworkDraft.model_validate(row.payload)
-    if draft.status == "parsing" or draft.revision != expected_revision:
+    if (
+        draft.status == "parsing"
+        or draft.active_publication_id
+        or draft.revision != expected_revision
+    ):
         raise problem(409, "revision_conflict", "草稿正在解析或版本已更新，请刷新后重试")
     draft.status = "parsing"
     draft.revision += 1
@@ -188,6 +226,7 @@ def claim(session: Session, row: DraftRow, expected_revision: int) -> HomeworkDr
             DraftRow.id == row.id,
             DraftRow.payload["revision"].as_integer() == expected_revision,
             DraftRow.payload["status"].as_string() != "parsing",
+            DraftRow.payload["active_publication_id"].as_string().is_(None),
         )
         .values(payload=draft.model_dump(mode="json"))
         .execution_options(synchronize_session=False)
@@ -269,3 +308,73 @@ def get_source(draft_id: str, source_id: str, request: Request) -> Response:
                 else "attachment",
             },
         )
+
+
+@router.patch("/homework-drafts/{draft_id}")
+def patch_draft(draft_id: str, body: DraftUpdate, request: Request) -> HomeworkDraft:
+    with Session(request.app.state.orchestrator.engine) as session:
+        write_lock(session)
+        row = owned(session, draft_id, request)
+        draft = update_draft(session, request.state.principal, row, body)
+        session.commit()
+        return draft
+
+
+@router.post("/homework-drafts/{draft_id}/publish-preview")
+def preview_publication(draft_id: str, body: PublishSelection, request: Request) -> PublishPreview:
+    with Session(request.app.state.orchestrator.engine) as session:
+        draft = HomeworkDraft.model_validate(owned(session, draft_id, request).payload)
+        return inspect_selection(session, draft, body)
+
+
+@router.post(
+    "/homework-drafts/{draft_id}/publish",
+    status_code=201,
+    responses={
+        202: {"model": Publication},
+        200: {"model": Publication},
+        502: {"model": DraftApiError},
+        503: {"model": DraftApiError},
+    },
+)
+async def publish_draft(
+    draft_id: str,
+    body: PublishSelection,
+    request: Request,
+    response: Response,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
+) -> Publication:
+    result, status = await publish(
+        request.app.state.orchestrator,
+        request.app.state.clock,
+        request.state.principal,
+        draft_id,
+        body,
+        idempotency_key,
+        getattr(request.app.state, "homework_llm", None),
+    )
+    if status >= 400:
+        return JSONResponse(
+            status_code=status,
+            content={
+                "detail": {
+                    **result.error.model_dump(mode="json"),
+                    "publication_id": result.publication_id,
+                },
+                "publication": result.model_dump(mode="json"),
+            },
+        )
+    response.status_code = status
+    response.headers["Location"] = f"/api/homework-publications/{result.publication_id}"
+    return result
+
+
+@router.get("/homework-publications/{publication_id}")
+def get_publication(publication_id: str, request: Request) -> Publication:
+    runtime = request.app.state.orchestrator
+    with Session(runtime.engine) as session:
+        row = session.get(PublicationRow, publication_id)
+        if row is None:
+            raise ReviewError(404, "publication_not_found", "发布记录不存在")
+        owned(session, row.draft_id, request)
+        return projection(runtime, row)
