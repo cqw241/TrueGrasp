@@ -27,7 +27,18 @@ function detailOf(body: unknown): string | null {
     'message' in detail &&
     typeof detail.message === 'string'
   ) {
-    return detail.message
+    const issues =
+      'issues' in detail && Array.isArray(detail.issues)
+        ? detail.issues.flatMap((issue: unknown) =>
+            typeof issue === 'object' &&
+            issue !== null &&
+            'message' in issue &&
+            typeof issue.message === 'string'
+              ? [issue.message]
+              : [],
+          )
+        : []
+    return [detail.message, ...new Set(issues)].slice(0, 4).join('；')
   }
   if (Array.isArray(detail)) {
     return detail

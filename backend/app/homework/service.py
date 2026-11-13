@@ -35,6 +35,7 @@ from app.homework.models import (
     Record,
     SourceRef,
 )
+from app.homework.review import propose_identities
 from app.homework.storage import DraftRow, SourceData, save
 from app.ingest import IngestError, parse_csv
 from app.llm.client import LLMOutputError, OpenAICompatClient
@@ -213,7 +214,12 @@ def append_answer(
         (
             q
             for q in draft.questions
-            if (item_id or answer.stem)
+            if not any(
+                r.question_id == q.question_id and r.review_status == "published"
+                for r in draft.records
+            )
+            and not any(e.target_id == q.question_id for e in draft.edits)
+            and (item_id or answer.stem)
             and q.source_refs[0].source_id == ref.source_id
             and (q.item_id, q.number, q.stem, q.correct_answer, q.knowledge_point_id)
             == (item_id, answer.number, answer.stem, answer.correct_answer, kp)
@@ -245,8 +251,15 @@ def append_answer(
         draft.questions.append(question)
     elif ref not in question.source_refs:
         question.source_refs.append(ref)
+        for record in draft.records:
+            if record.question_id == question.question_id and record.review_status == "confirmed":
+                record.review_status = "pending"
     issues = [
-        Issue(code="identity_unmatched", field="identity", message="学生身份待班级关联后确认")
+        Issue(
+            code="identity_unmatched",
+            field="identity",
+            message="请核对本班学生身份" if draft.class_id else "请先绑定班级并核对学生身份",
+        )
     ]
     if not answer.student_answer:
         issues.append(
@@ -381,6 +394,7 @@ async def parse_draft(engine, draft_id: str, injected=None, source_ids=None) -> 
             draft.original_extraction = Extraction(
                 questions=draft.questions, records=draft.records
             ).model_copy(deep=True)
+        propose_identities(session, draft)
         draft.status = "review" if draft.questions else "parse_failed"
         draft.revision += 1
         save(session, row, draft)

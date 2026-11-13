@@ -3,7 +3,6 @@ import { FileText, LoaderCircle, Upload } from 'lucide-react'
 import { useRef, useState, type FormEvent } from 'react'
 import { api, fetchClient, queryClient } from '@/api/client'
 import type { HomeworkDraft } from '@/api/schema'
-import { MathText, Tex } from '@/components/math/tex'
 import { ErrorState } from '@/components/states'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,21 +10,22 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { MutationError } from './mutation-error'
-import { usePointNames } from './shared'
+import { HomeworkReview } from './homework-review'
 
 const statusLabel = {
   parsing: '正在解析',
   review: '待审核',
   parse_failed: '解析失败',
+  published: '已发布',
 }
 const accept = '.csv,.jpg,.jpeg,.png,.webp,.pdf'
 
-export function HomeworkPanel() {
+export function HomeworkPanel({ classId }: { classId: string }) {
   const [selectedId, select] = useState<string | null>(null)
   const drafts = api.useQuery(
     'get',
     '/api/homework-drafts',
-    {},
+    { params: { query: { class_id: classId } } },
     {
       refetchInterval: (query) =>
         query.state.data?.some((draft) => draft.status === 'parsing')
@@ -43,7 +43,10 @@ export function HomeworkPanel() {
     {
       enabled: Boolean(currentId),
       refetchInterval: (query) =>
-        query.state.data?.status === 'parsing' ? 1500 : false,
+        query.state.data?.status === 'parsing' ||
+        query.state.data?.active_publication_id
+          ? 1500
+          : false,
     },
   )
 
@@ -60,9 +63,10 @@ export function HomeworkPanel() {
     <div className="space-y-5 p-4">
       <p className="text-sm text-muted-foreground">
         上传作业或直接输入题目，AI
-        整理题干、作答和识别疑点，保存为仅你可见的草稿。
+        整理题干、作答和识别疑点，核对后再发布给本班学生。
       </p>
       <UploadForm
+        classId={classId}
         onCreated={(draft) => {
           select(draft.draft_id)
           refresh()
@@ -101,6 +105,7 @@ export function HomeworkPanel() {
         <DraftView
           key={current.data.draft_id}
           draft={current.data}
+          classId={classId}
           onChanged={refresh}
         />
       )}
@@ -109,8 +114,10 @@ export function HomeworkPanel() {
 }
 
 function UploadForm({
+  classId,
   onCreated,
 }: {
+  classId: string
   onCreated: (draft: HomeworkDraft) => void
 }) {
   const [title, setTitle] = useState('')
@@ -121,12 +128,17 @@ function UploadForm({
   const create = useMutation({
     mutationFn: async () => {
       const form = new FormData()
+      form.append('class_id', classId)
       form.append('title', title.trim() || '作业解析')
       if (text.trim()) form.append('prompt_text', text)
       files.forEach((file) => form.append('files', file))
       const { data } = await fetchClient.POST('/api/homework-drafts', {
         params: { header: { 'Idempotency-Key': key.current } },
-        body: { title: title.trim() || '作业解析', prompt_text: text },
+        body: {
+          title: title.trim() || '作业解析',
+          prompt_text: text,
+          class_id: classId,
+        },
         bodySerializer: () => form,
       })
       if (!data) throw new Error('未收到草稿，请重试')
@@ -228,13 +240,13 @@ function sourceUrl(draftId: string, sourceId: string) {
 
 function DraftView({
   draft,
+  classId,
   onChanged,
 }: {
   draft: HomeworkDraft
+  classId: string
   onChanged: () => void
 }) {
-  const pointName = usePointNames()
-  const [visible, setVisible] = useState(20)
   const retry = api.useMutation(
     'post',
     '/api/homework-drafts/{draft_id}/parse-retries',
@@ -254,13 +266,14 @@ function DraftView({
     onSuccess: onChanged,
   })
   const parsing = draft.status === 'parsing'
-  const busy = parsing || retry.isPending || add.isPending
+  const busy =
+    parsing ||
+    Boolean(draft.active_publication_id) ||
+    retry.isPending ||
+    add.isPending
   const failedSources = [
     ...new Set(draft.parse_errors.map((error) => error.source_id)),
   ]
-  const questions = new Map(
-    draft.questions.map((question) => [question.question_id, question]),
-  )
   return (
     <section className="space-y-3 border-t pt-4" aria-label="解析草稿">
       <div className="flex flex-wrap items-center gap-2" role="status">
@@ -274,7 +287,7 @@ function DraftView({
         </span>
       </div>
       <p className="text-xs text-muted-foreground">
-        学生身份待班级关联后确认。当前结果仅作草稿，审核、发布和辅导将在后续开放。
+        核对本班学生、题目与原始作答后发布；未核对或跳过的记录不会导入。
         {parsing && '正在逐页处理，已完成内容会持续保留。'}
       </p>
       <div className="flex flex-wrap items-center gap-2">
@@ -347,93 +360,12 @@ function DraftView({
           }}
         />
       </div>
-      <div className="space-y-2">
-        {draft.records.slice(0, visible).map((record, index) => {
-          const question = questions.get(record.question_id)
-          const issues = [...(question?.issues ?? []), ...record.issues]
-          return (
-            <details
-              key={record.record_id}
-              className="rounded-lg border p-3"
-              open={index === 0}
-            >
-              <summary className="min-h-8 cursor-pointer text-sm font-medium break-words">
-                {record.identity.observed_name ||
-                  record.identity.observed_student_id ||
-                  '学生待确认'}
-                {' · '}
-                {question?.number
-                  ? `第 ${question.number} 题`
-                  : `作答 ${index + 1}`}
-                {issues.length > 0 && (
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">
-                    有待确认项
-                  </span>
-                )}
-              </summary>
-              <div className="mt-3 space-y-3 text-sm break-words">
-                <p>
-                  <strong>题目：</strong>
-                  <MathText text={question?.stem ?? '未识别完整，请核对原件'} />
-                </p>
-                <div className="overflow-x-auto">
-                  <strong>原始作答：</strong>
-                  {record.student_answer ? (
-                    record.answer_kind === 'expression' ? (
-                      <Tex latex={record.student_answer} />
-                    ) : (
-                      <MathText text={record.student_answer} />
-                    )
-                  ) : (
-                    '未识别到作答'
-                  )}
-                </div>
-                {question?.correct_answer && (
-                  <p>
-                    <strong>参考答案（待审核）：</strong>
-                    <MathText text={question.correct_answer} />
-                  </p>
-                )}
-                {question?.knowledge_point_id && (
-                  <p className="text-xs text-muted-foreground">
-                    知识点建议：{pointName(question.knowledge_point_id)}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {record.source_refs.map((ref, i) => (
-                    <a
-                      key={i}
-                      href={`${sourceUrl(draft.draft_id, ref.source_id)}${ref.page ? `#page=${ref.page}` : ''}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="min-h-8 underline underline-offset-2"
-                    >
-                      核对原件
-                      {ref.page
-                        ? ` · 第 ${ref.page} 页`
-                        : ref.row
-                          ? ` · 第 ${ref.row} 行`
-                          : ''}
-                    </a>
-                  ))}
-                </div>
-                {issues.length > 0 && (
-                  <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
-                    {issues.map((issue, i) => (
-                      <li key={i}>{issue.message}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </details>
-          )
-        })}
-      </div>
-      {draft.records.length > visible && (
-        <Button variant="outline" onClick={() => setVisible(visible + 20)}>
-          显示更多作答
-        </Button>
-      )}
+      <HomeworkReview
+        draft={draft}
+        classId={classId}
+        busy={busy}
+        onChanged={onChanged}
+      />
     </section>
   )
 }

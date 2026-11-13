@@ -99,8 +99,8 @@ function Cockpit({ classId }: { classId: string }) {
       />
       <Workspace>
         <div className="workspace-column workspace-left">
-          <WorkspaceModule id="homework" title="作业上传与解析">
-            <HomeworkPanel />
+          <WorkspaceModule id="homework" title="作业上传与审核">
+            <HomeworkPanel classId={classId} />
           </WorkspaceModule>
           <WorkspaceModule id="goals" title="教学目标">
             <GoalPanel classId={classId} />

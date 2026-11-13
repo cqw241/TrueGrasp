@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Column, LargeBinary, UniqueConstraint
+from sqlalchemy import JSON, Column, Index, LargeBinary, UniqueConstraint, text
 from sqlmodel import Field, Session, SQLModel, select
 
 from app.homework.models import HomeworkDraft, ParseError
@@ -25,6 +25,49 @@ class SourceData(SQLModel, table=True):
     id: str = Field(primary_key=True)
     draft_id: str = Field(foreign_key="homework_draft.id", index=True)
     data: bytes = Field(sa_column=Column(LargeBinary, nullable=False))
+
+
+class PublicationRow(SQLModel, table=True):
+    __tablename__ = "homework_publication"
+    __table_args__ = (
+        UniqueConstraint("teacher_id", "idempotency_key"),
+        Index(
+            "uq_homework_publishing",
+            "draft_id",
+            unique=True,
+            sqlite_where=text("status = 'publishing'"),
+        ),
+    )
+
+    id: str = Field(primary_key=True)
+    draft_id: str = Field(foreign_key="homework_draft.id", index=True)
+    teacher_id: str
+    idempotency_key: str
+    request_hash: str
+    status: str
+    failure_status: int | None = None
+    payload: dict = Field(sa_column=Column(JSON, nullable=False))
+
+
+class PublishedRecord(SQLModel, table=True):
+    __tablename__ = "homework_published_record"
+
+    draft_id: str = Field(foreign_key="homework_draft.id", primary_key=True)
+    record_id: str = Field(primary_key=True)
+    publication_id: str = Field(foreign_key="homework_publication.id", index=True)
+    evidence_id: int = Field(foreign_key="evidence.id", unique=True)
+    item_id: str = Field(foreign_key="item.id")
+
+
+def normalize_drafts(engine) -> None:
+    """Persist defaults once, so historical issue IDs stay stable across reads."""
+    with Session(engine) as session:
+        for row in session.exec(select(DraftRow)):
+            normalized = HomeworkDraft.model_validate(row.payload).model_dump(mode="json")
+            if normalized != row.payload:
+                row.payload = normalized
+                session.add(row)
+        session.commit()
 
 
 def save(session: Session, row: DraftRow, draft: HomeworkDraft) -> None:

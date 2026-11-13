@@ -272,6 +272,31 @@ class Orchestrator:
             self._errors.append(exc)
             logger.exception("持久化待办监听失败")
 
+    def event_workflow(self, event_id: int) -> dict:
+        """Read-only publication status from the existing planning receipt and failed work."""
+        with Session(self.engine) as session:
+            receipt = session.get(NodeReceipt, f"event:{event_id}:save_plan")
+            if receipt:
+                return {
+                    "event_id": event_id,
+                    "state": "planned",
+                    "task_ids": receipt.result.get("task_ids", []),
+                    "error": None,
+                }
+        failed = f"event:{event_id}" in self._failed_work
+        return {
+            "event_id": event_id,
+            "state": "failed" if failed else "pending",
+            "task_ids": [],
+            "error": {
+                "code": "planning_failed",
+                "message": "作业已导入，规划待恢复",
+                "retryable": True,
+            }
+            if failed
+            else None,
+        }
+
     def recover_pending(self, *, new_only: bool = False) -> None:
         """只恢复事务中已登记的工作；缺少真实 Agent 时保留待办，不生成模拟结果。"""
         if self._closed:
