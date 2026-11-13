@@ -37,9 +37,13 @@ class NxKnowledgeGraph:
         with Session(engine) as session:
             return cls(
                 list(session.exec(select(KnowledgePoint))),
-                list(session.exec(select(Misconception))),
+                list(session.exec(select(Misconception).where(Misconception.class_id.is_(None)))),
                 list(session.exec(select(StrategyCard))),
-                list(session.exec(select(Item).where(Item.source == ItemSource.SEED))),
+                list(
+                    session.exec(
+                        select(Item).where(Item.source == ItemSource.SEED, Item.class_id.is_(None))
+                    )
+                ),
             )
 
     def _sorted(self, ids) -> list[KnowledgePoint]:

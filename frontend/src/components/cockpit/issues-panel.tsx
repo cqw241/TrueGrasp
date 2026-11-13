@@ -10,8 +10,10 @@ import {
 import { MathText } from '@/components/math/tex'
 import { usePointNames, useStudentNames } from './shared'
 
-export function IssuesPanel() {
-  const issues = api.useQuery('get', '/api/class/issues')
+export function IssuesPanel({ classId }: { classId: string }) {
+  const issues = api.useQuery('get', '/api/class/issues', {
+    params: { query: { class_id: classId } },
+  })
   const studentName = useStudentNames()
   const pointName = usePointNames()
   return (

@@ -20,6 +20,7 @@ from app.agents.tutor.models import (
 )
 from app.agents.tutor.pedagogy import slope_conflict
 from app.agents.tutor.storage import TutorReceipt, TutorSession
+from app.classroom import may_work
 from app.contracts.agents import TutorTurn, TutorTurnInput
 from app.contracts.entities import Evidence, Hypothesis, Item, Misconception, Task
 from app.contracts.enums import (
@@ -124,11 +125,19 @@ class DiagnosticTutor:
     async def _turn(self, inp, key, publish, streamed):
         with Session(self.engine, expire_on_commit=False) as session:
             task = session.get(Task, inp.task.task_id)
-            if task is None or task.student_id != inp.task.student_id:
+            if (
+                task is None
+                or task.student_id != inp.task.student_id
+                or not may_work(session, task)
+            ):
                 raise ValueError("辅导任务与学生不匹配")
             row = session.get(TutorSession, task.id)
             state = TeachingState.model_validate(row.state) if row else TeachingState()
             error = session.get(Evidence, inp.task.error_evidence_id)
+            if error is not None and (
+                error.class_id != task.class_id or error.student_id != task.student_id
+            ):
+                raise ValueError("辅导证据不属于当前任务")
             stuck_attempt = (
                 error is not None
                 and task.type == TaskType.QUESTION
@@ -296,6 +305,7 @@ class DiagnosticTutor:
                 if selection.unmodeled_description.strip():
                     unknown = Misconception(
                         id=f"unmodeled.{task.id}.{uuid4().hex}",
+                        class_id=task.class_id,
                         knowledge_point_id=task.knowledge_point_id,
                         family=selection.unmodeled_family or "待审核",
                         description=selection.unmodeled_description,
@@ -311,6 +321,7 @@ class DiagnosticTutor:
                     )
                     session.add(h)
                     unknown_evidence = Evidence(
+                        class_id=task.class_id,
                         student_id=task.student_id,
                         task_id=task.id,
                         knowledge_point_id=task.knowledge_point_id,
@@ -374,7 +385,7 @@ class DiagnosticTutor:
             self._stage(session, task, state, key + ":candidates")
             await self._publish_state(task.id, publish)
 
-            used = used_fingerprints(session, task.student_id, state.probe_item_ids)
+            used = used_fingerprints(session, task.student_id, state.probe_item_ids, task.class_id)
             cards = self.knowledge.strategies(state.confirmed_id) if state.confirmed_id else []
             state.strategy_ids = [c.id for c in cards]
             question_receipt = session.get(TutorReceipt, key + ":question")
@@ -391,6 +402,8 @@ class DiagnosticTutor:
                     self._replan("生成三次后仍无通过质量门槛且未重复的题目，请重规划"),
                 )
             if question_receipt is None:
+                if item.source != ItemSource.SEED:
+                    item.class_id = task.class_id
                 session.add(item)
                 session.flush()
                 session.add(TutorReceipt(key=key + ":question", result={"item_id": item.id}))

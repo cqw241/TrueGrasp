@@ -5,12 +5,14 @@ import io
 import json
 from collections.abc import Callable, Sequence
 from contextlib import nullcontext
+from dataclasses import dataclass
 from datetime import date
 
 from pydantic import ValidationError
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
+from app.classroom import ClassSession, active_class, write_lock
 from app.contracts.api import HomeworkImportResult
 from app.contracts.entities import Evidence, Item, KnowledgePoint, Misconception, Student
 from app.contracts.enums import EquivalenceMode, EvidenceKind, ItemPurpose, ItemSource, JudgedBy
@@ -103,6 +105,16 @@ async def transcribe_images(llm: LLMClient, batch: Sequence[ImageHomework]) -> l
     return drafts
 
 
+@dataclass
+class PreparedHomework:
+    students: dict[str, Student]
+    items: dict[str, Item]
+    original_items: dict[str, dict | None]
+    evidence: list[Evidence]
+    class_id: str | None
+    existing_student_ids: set[str]
+
+
 class HomeworkImporter:
     def __init__(
         self,
@@ -139,27 +151,46 @@ class HomeworkImporter:
         rows: Sequence[HomeworkRow],
         teaching_date: date,
         *,
+        class_id: str | None = None,
         session: Session | None = None,
         allow_new_students: bool = True,
         validate_before_write: Callable[[Session], None] | None = None,
     ) -> HomeworkImportResult:
-        """沿用一次导入算法；传入 session 时由调用方提交或回滚整个发布事务。
-
-        网页发布应禁止隐式创建学生，并在 validate_before_write 中重新校验
-        班级成员/确认版本。回调与业务写入在同一 Session 中，模型调用全部结束后执行。
-        返回事件的 evidence_ids 顺序与 rows 一致，可在提交前写来源映射及幂等回执。
-        只有提交成功后才可唤醒编排；本方法不负责发布鉴权或发布幂等。
-        """
-        owns_session = session is None
+        """Prepare outside the write transaction; caller-provided sessions own commit."""
         if session is not None and session.get_bind() is not self.engine:
             raise IngestError("导入 Session 必须使用同一业务数据库引擎")
+        prepared = await self.prepare_rows(
+            rows, teaching_date, class_id=class_id, allow_new_students=allow_new_students
+        )
+        owns_session = session is None
+        with (
+            ClassSession(self.engine, class_id) if owns_session else nullcontext(session) as session
+        ):
+            if owns_session:
+                write_lock(session)
+            if validate_before_write is not None:
+                validate_before_write(session)
+            result, _ = self.write_prepared(session, prepared, teaching_date)
+            if owns_session:
+                session.commit()
+            return result
+
+    async def prepare_rows(
+        self,
+        rows: Sequence[HomeworkRow],
+        teaching_date: date,
+        *,
+        class_id: str | None = None,
+        allow_new_students: bool = True,
+    ) -> PreparedHomework:
+        """Only read and analyze; the caller can atomically commit the resulting business writes."""
         if not rows or len(rows) > MAX_ROWS:
             raise IngestError(f"作业需包含 1 到 {MAX_ROWS} 份作答")
         keys = [(row.student_id, row.item_id) for row in rows]
         if len(keys) != len(set(keys)):
             raise IngestError("同批次学生和题目组合重复")
         # 模型调用前不写业务数据；任何行失败都不留下半批导入。
-        with Session(self.engine) if owns_session else nullcontext(session) as session:
+        with ClassSession(self.engine, class_id) as session:
             points = {
                 point.id: point
                 for point in session.exec(select(KnowledgePoint)).all()
@@ -172,8 +203,12 @@ class HomeworkImporter:
                 raise IngestError("请先导入知识点内容")
             items: dict[str, Item] = {}
             students: dict[str, Student] = {}
+            existing_student_ids: set[str] = set()
+            original_items: dict[str, dict | None] = {}
             evidence = []
             for row in rows:
+                if class_id is not None and active_class(session, row.student_id) != class_id:
+                    raise IngestError("名单中存在不属于该班的学生")
                 student = students.get(row.student_id) or session.get(Student, row.student_id)
                 if student is None:
                     if not allow_new_students:
@@ -184,7 +219,11 @@ class HomeworkImporter:
                 elif row.student_name and student.name != row.student_name:
                     raise IngestError(f"学生姓名不一致：{row.student_id}")
                 students[student.id] = student
+                if student in session:
+                    existing_student_ids.add(student.id)
                 item = items.get(row.item_id) or session.get(Item, row.item_id)
+                if row.item_id not in original_items:
+                    original_items[row.item_id] = item.model_dump(mode="json") if item else None
                 if item is None and (not row.stem or not row.correct_answer):
                     raise IngestError(f"新题目需 stem 和 correct_answer：{row.item_id}")
                 if row.knowledge_point_id and row.knowledge_point_id not in points:
@@ -253,6 +292,7 @@ class HomeworkImporter:
                 if item is None:
                     item = Item(
                         id=row.item_id,
+                        class_id=class_id,
                         knowledge_point_id=point_id,
                         purpose=ItemPurpose.HOMEWORK,
                         source=ItemSource.HOMEWORK,
@@ -286,6 +326,7 @@ class HomeworkImporter:
                 evidence.append(
                     Evidence(
                         student_id=row.student_id,
+                        class_id=class_id,
                         knowledge_point_id=point_id,
                         item_id=item.id,
                         student_answer=row.student_answer,
@@ -299,43 +340,58 @@ class HomeworkImporter:
                         teaching_date=teaching_date,
                     )
                 )
-            # 模型调用期间成员或身份可能变化；不要把被删除的旧学生静默建回去。
-            for student_id, student in students.items():
-                current_name = session.exec(
-                    select(Student.name).where(Student.id == student_id)
-                ).one_or_none()
-                if current_name is None and (student in session or not allow_new_students):
-                    raise IngestError(f"学生已变更，请刷新后重新确认：{student_id}")
-                if current_name is not None and current_name != student.name:
-                    raise IngestError(f"学生姓名已变更，请刷新后重新确认：{student_id}")
-            if validate_before_write is not None:
-                validate_before_write(session)
-            for student in students.values():
+            return PreparedHomework(
+                students, items, original_items, evidence, class_id, existing_student_ids
+            )
+
+    def write_prepared(
+        self, session: Session, prepared: PreparedHomework, teaching_date: date
+    ) -> tuple[HomeworkImportResult, list[int]]:
+        """Caller holds the writer lock and owns commit; never commit inside this seam."""
+        class_id = prepared.class_id
+        for student_id, student in prepared.students.items():
+            if class_id is not None and active_class(session, student_id) != class_id:
+                raise IngestError("导入期间班级名单已变更，请重新核对")
+            current = session.get(Student, student_id)
+            if current is None:
+                if class_id is not None or student_id in prepared.existing_student_ids:
+                    raise IngestError("学生已变更，请刷新后重新确认名单")
                 session.add(student)
-            session.flush()
-            for item in items.values():
+            elif current.name != student.name:
+                raise IngestError("导入期间学生信息已变更，请重新核对")
+        session.flush()
+        for item_id, item in prepared.items.items():
+            current = session.get(Item, item_id)
+            snapshot = current.model_dump(mode="json") if current else None
+            if snapshot != prepared.original_items[item_id]:
+                raise IngestError("导入期间题目内容已变更，请重新核对")
+            if current is None:
                 session.add(item)
+        session.flush()
+        ids = []
+        for entry in prepared.evidence:
+            written = self.evidence_writer(session, entry)
             session.flush()
-            ids = []
-            for entry in evidence:
-                written = self.evidence_writer(session, entry)
-                session.flush()
-                if written.id is None:
-                    raise IngestError("证据写入器未生成 ID")
-                ids.append(written.id)
-            event = make_event(
-                HomeworkImported(
-                    knowledge_point_ids=list(dict.fromkeys(e.knowledge_point_id for e in evidence)),
-                    evidence_ids=ids,
+            if written.id is None:
+                raise IngestError("证据写入器未生成 ID")
+            ids.append(written.id)
+        event = make_event(
+            HomeworkImported(
+                knowledge_point_ids=list(
+                    dict.fromkeys(e.knowledge_point_id for e in prepared.evidence)
                 ),
-                teaching_date,
-            )
-            session.add(event)
-            session.flush()
-            queue_work(session, f"event:{event.id}", {"dispatch": True})
-            result = HomeworkImportResult(
-                event_id=event.id, students=len(students), items=len(items), evidence=len(ids)
-            )
-            if owns_session:
-                session.commit()
-            return result
+                evidence_ids=ids,
+            ),
+            teaching_date,
+            class_id=class_id,
+        )
+        session.add(event)
+        session.flush()
+        queue_work(session, f"event:{event.id}", {"dispatch": True})
+        result = HomeworkImportResult(
+            event_id=event.id,
+            students=len(prepared.students),
+            items=len(prepared.items),
+            evidence=len(ids),
+        )
+        return result, ids

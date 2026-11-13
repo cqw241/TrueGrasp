@@ -11,9 +11,13 @@ import {
 } from '@/components/ui/card'
 import { masteryStateLabel } from '@/lib/labels'
 
-export function OverviewPanel() {
-  const overview = api.useQuery('get', '/api/class/overview')
-  const goals = api.useQuery('get', '/api/goals')
+export function OverviewPanel({ classId }: { classId: string }) {
+  const overview = api.useQuery('get', '/api/class/overview', {
+    params: { query: { class_id: classId } },
+  })
+  const goals = api.useQuery('get', '/api/goals', {
+    params: { query: { class_id: classId } },
+  })
   return (
     <Card>
       <CardHeader>

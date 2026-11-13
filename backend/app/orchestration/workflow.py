@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from app.contracts.entities import Event
+from app.contracts.entities import Event, Task
 from app.contracts.enums import EventType
 from app.contracts.events import HomeworkImported, read_payload
 from app.orchestration.storage import EventTaskLink, NodeReceipt, PendingWork, WorkFailure
@@ -20,11 +20,13 @@ class HomeworkWorkflow(BaseModel):
 
 def homework_event_ids(session: Session, event_id: int, task_ids: list[int]) -> set[int]:
     """包括这些任务的作答/到期事件，失败的后续规划也须回到原作业。"""
+    event = session.get(Event, event_id)
     return {
         event_id,
         *session.exec(
             select(Event.id).where(
                 Event.type.in_([EventType.ANSWER_SUBMITTED, EventType.TASK_DUE]),
+                Event.class_id == event.class_id,
                 Event.payload["task_id"].as_integer().in_(task_ids),
             )
         ).all(),
@@ -43,6 +45,9 @@ def homework_workflow(session: Session, event_id: int) -> HomeworkWorkflow:
     # 兼容增加来源表之前已部署的规划回执。
     if receipt is not None:
         task_ids.update(receipt.result.get("task_ids", []))
+    task_ids = set(
+        session.exec(select(Task.id).where(Task.id.in_(task_ids), Task.class_id == event.class_id))
+    )
     event_ids = homework_event_ids(session, event_id, sorted(task_ids))
     work_keys = [*(f"event:{i}" for i in event_ids), *(f"task:{i}" for i in task_ids)]
     failure = session.exec(

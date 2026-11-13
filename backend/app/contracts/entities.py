@@ -68,6 +68,7 @@ class TeachingGoal(SQLModel, table=True):
     """教师设定的目标，如“周五前 90% 初步掌握、两轮不通过转人工”。"""
 
     __tablename__ = "teaching_goal"
+    class_id: str | None = Field(default=None, foreign_key="classroom.id", index=True)
 
     id: int | None = Field(default=None, primary_key=True)
     knowledge_point_ids: list[str] = _json_list(str)
@@ -93,6 +94,7 @@ class Misconception(SQLModel, table=True):
     """错因。ID 全书统一，跨章节跟进靠它匹配。"""
 
     __tablename__ = "misconception"
+    class_id: str | None = Field(default=None, foreign_key="classroom.id", index=True)
 
     id: str = Field(primary_key=True)  # 如 calc.ch2.chain.miss_inner
     knowledge_point_id: str = Field(foreign_key="knowledge_point.id", index=True)
@@ -119,6 +121,7 @@ class StrategyCard(SQLModel, table=True):
 
 class Item(SQLModel, table=True):
     __tablename__ = "item"
+    class_id: str | None = Field(default=None, foreign_key="classroom.id", index=True)
 
     id: str = Field(primary_key=True)
     knowledge_point_id: str = Field(foreign_key="knowledge_point.id", index=True)
@@ -151,6 +154,7 @@ class Evidence(SQLModel, table=True):
     """证据账本，只追加、不修改。教师处理也记为一条单独的证据。"""
 
     __tablename__ = "evidence"
+    class_id: str | None = Field(default=None, foreign_key="classroom.id", index=True)
 
     id: int | None = Field(default=None, primary_key=True)
     student_id: str = Field(foreign_key="student.id", index=True)
@@ -183,6 +187,7 @@ class Task(SQLModel, table=True):
     """由规划 Agent 创建，教学时钟检查是否到期。"""
 
     __tablename__ = "task"
+    class_id: str | None = Field(default=None, foreign_key="classroom.id", index=True)
 
     id: int | None = Field(default=None, primary_key=True)
     type: TaskType
@@ -201,6 +206,7 @@ class Event(SQLModel, table=True):
     """唤起规划 Agent 的事件。payload 结构见 contracts.events 中对应的模型。"""
 
     __tablename__ = "event"
+    class_id: str | None = Field(default=None, foreign_key="classroom.id", index=True)
 
     id: int | None = Field(default=None, primary_key=True)
     type: EventType

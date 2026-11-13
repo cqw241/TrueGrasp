@@ -35,3 +35,27 @@ class PrecheckContext(SQLModel, table=True):
     knowledge_point_id: str = Field(primary_key=True, foreign_key="knowledge_point.id")
     context_knowledge_point_id: str = Field(primary_key=True, foreign_key="knowledge_point.id")
     task_id: int = Field(foreign_key="task.id", unique=True, index=True)
+
+
+class ClassClock(SQLModel, table=True):
+    __tablename__ = "class_clock"
+    class_id: str = Field(primary_key=True, foreign_key="classroom.id")
+    teaching_date: date
+    lecture: int = 1
+
+
+class ClassLectureEntry(SQLModel, table=True):
+    __tablename__ = "class_lecture_entry"
+    class_id: str = Field(primary_key=True, foreign_key="classroom.id")
+    lecture: int = Field(primary_key=True)
+    event_id: int = Field(foreign_key="event.id")
+
+
+class ClassPrecheckContext(SQLModel, table=True):
+    __tablename__ = "class_precheck_context"
+    class_id: str = Field(primary_key=True, foreign_key="classroom.id")
+    lecture: int = Field(primary_key=True)
+    student_id: str = Field(primary_key=True, foreign_key="student.id")
+    knowledge_point_id: str = Field(primary_key=True, foreign_key="knowledge_point.id")
+    context_knowledge_point_id: str = Field(primary_key=True, foreign_key="knowledge_point.id")
+    task_id: int = Field(foreign_key="task.id", unique=True, index=True)

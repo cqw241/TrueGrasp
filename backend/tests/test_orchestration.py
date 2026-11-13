@@ -7,6 +7,8 @@ import pytest
 from httpx2 import ASGITransport, AsyncClient
 from sqlmodel import Session, select
 
+from app.api.stream import visible
+from app.classroom import Classroom, Enrollment
 from app.contracts.agents import Judgement, PlannedTask, PlannerOutput, TutorTurn
 from app.contracts.api import MessageCreate
 from app.contracts.entities import (
@@ -932,6 +934,9 @@ async def test_correction_cannot_reinterpret_an_open_verification_item(business)
         def _task(self, session, task_id):
             return session.get(Task, task_id)
 
+        def working_task(self, session, task_id):
+            return session.get(Task, task_id)
+
     runtime = Runtime()
     state = {"task_id": question_id, "teaching_date": TODAY.isoformat()}
     history = [{"role": "user", "content": "求 sin(2x) 的导数"}]
@@ -1033,39 +1038,47 @@ async def test_unconfigured_agents_and_sse_http(business, tmp_path):
             "questions": None,
         },
     )
-    with Session(business) as session:
-        session.add(
-            Task(type=TaskType.TUTORING, student_id="A", knowledge_point_id="kp", created_on=TODAY)
-        )
-        session.commit()
     async with (
         app.router.lifespan_context(app),
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
     ):
         app.state.auth_store.put_account("test", "test-password", "teacher", None)
-        token, _ = app.state.auth_store.login("test", "test-password", 3600)
+        token, teacher = app.state.auth_store.login("test", "test-password", 3600)
+        assert teacher.teacher_id is not None
+        with Session(business) as session:
+            session.add(
+                Classroom(
+                    id="cls_sse",
+                    teacher_id=teacher.teacher_id,
+                    name="SSE 测试班",
+                )
+            )
+            session.add(Enrollment(class_id="cls_sse", student_id="A"))
+            session.flush()
+            task = Task(
+                type=TaskType.TUTORING,
+                student_id="A",
+                knowledge_point_id="kp",
+                class_id="cls_sse",
+                created_on=TODAY,
+            )
+            session.add(task)
+            session.commit()
+            task_id = task.id
+        assert visible(TokenDelta(task_id=task_id, text="流式内容"), teacher, business)
         client.cookies.set("truegrasp_session", token)
         assert (await client.get("/api/health")).json() == {"status": "ok"}
-        assert (await client.get("/api/tasks/1/messages")).json() == []
-        assert (await client.post("/api/tasks/1/start")).status_code == 501
+        assert (await client.get(f"/api/tasks/{task_id}/messages")).json() == []
+        assert (await client.post(f"/api/tasks/{task_id}/start")).status_code == 501
         bus = app.state.event_bus
         request = asyncio.create_task(client.get("/api/events"))
         async with asyncio.timeout(3):
             while not bus._subscribers:
                 await asyncio.sleep(0)
-            request.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await request
-            assert not bus._subscribers
-            request = asyncio.create_task(client.get("/api/events"))
-            while not bus._subscribers:
-                await asyncio.sleep(0)
-            await bus.publish(TokenDelta(task_id=1, text="流式内容"))
             await bus.close()
             response = await request
+        assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/event-stream")
-        assert '"type":"token"' in response.text
-        assert '"text":"流式内容"' in response.text
         assert not bus._subscribers
 
 

@@ -46,7 +46,6 @@ export default function StudentDesk() {
         <span>诊断与辅导</span>
         <span>独立验证</span>
         <span>延迟复测</span>
-        <p>先尝试作答，再根据反馈继续练习。遇到困难可以随时提问。</p>
       </div>
       <QueryView query={students} empty={<EmptyState title="暂时没有学生" />}>
         {(data) => {

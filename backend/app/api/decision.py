@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlmodel import Session, select
 
 from app.agents.tutor.queries import diagnosis
+from app.classroom import ClassSession, active_class, mastery_rows, owned_classes
 from app.contracts.api import DiagnosisView, DimensionResult, TimelineEntry
 from app.contracts.entities import Evidence, KnowledgePoint, Mastery, Task
 from app.contracts.enums import TaskStatus, TaskType
@@ -35,14 +36,47 @@ def get_diagnosis(task_id: int, request: Request) -> DiagnosisView:
 
 @router.get("/students/{student_id}/timeline")
 def get_timeline(student_id: str, request: Request) -> list[TimelineEntry]:
-    with Session(request.app.state.orchestrator.engine) as session:
-        return queries.timeline(session, student_id)
+    principal = request.state.principal
+    engine = request.app.state.orchestrator.engine
+    if principal.role == "student" or principal.teacher_id is None:
+        with Session(engine) as session:
+            return queries.timeline(session, student_id)
+    with Session(engine) as session:
+        class_ids = list(session.exec(owned_classes(principal.teacher_id)))
+    rows = []
+    for class_id in class_ids:
+        with ClassSession(engine, class_id, active_only=False) as session:
+            rows.extend(queries.timeline(session, student_id))
+    return sorted(rows, key=lambda row: row.teaching_date)
 
 
 @router.get("/students/{student_id}/mastery")
 def get_mastery(student_id: str, request: Request) -> list[Mastery]:
-    with Session(request.app.state.orchestrator.engine) as session:
-        return list(session.exec(select(Mastery).where(Mastery.student_id == student_id)).all())
+    return student_projection(
+        request, student_id, lambda session: list(session.exec(mastery_rows(session, student_id)))
+    )
+
+
+def student_projection(request: Request, student_id: str, read):
+    principal = request.state.principal
+    engine = request.app.state.orchestrator.engine
+    with Session(engine) as session:
+        class_id = active_class(session, student_id)
+        if principal.role == "teacher" and principal.teacher_id is not None:
+            owned = list(session.exec(owned_classes(principal.teacher_id)))
+            if class_id not in owned:
+                from app.classroom import Enrollment
+
+                class_id = (
+                    session.exec(
+                        select(Enrollment.class_id)
+                        .where(Enrollment.student_id == student_id, Enrollment.class_id.in_(owned))
+                        .order_by(Enrollment.class_id)
+                    ).first()
+                    or ""
+                )
+    with ClassSession(engine, class_id, active_only=False) as session:
+        return read(session)
 
 
 @router.get("/students/{student_id}/verification")
@@ -50,8 +84,11 @@ def get_verification(
     student_id: str, knowledge_point_id: str, request: Request
 ) -> list[DimensionResult]:
     """六维验证结果及判定方式。"""
-    with Session(request.app.state.orchestrator.engine) as session:
-        return queries.verification(session, student_id, knowledge_point_id)
+    return student_projection(
+        request,
+        student_id,
+        lambda session: queries.verification(session, student_id, knowledge_point_id),
+    )
 
 
 @router.get("/evidence/{evidence_id}")

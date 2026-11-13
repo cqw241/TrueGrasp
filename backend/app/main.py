@@ -11,11 +11,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
 from app.agents.verifier import create_verifier
-from app.api import auth, decision, health, stream, student, teacher
+from app.api import auth, classes, decision, health, homework, stream, student, teacher
 from app.auth import AuthStore, authorize
 from app.clock.service import TeachingClock
 from app.config import get_settings
 from app.db import get_engine, init_db
+from app.homework.publication import interrupt_publications
+from app.homework.review import ReviewError
+from app.homework.storage import interrupt_unfinished, normalize_drafts
 from app.knowledge.graph import NxKnowledgeGraph
 from app.llm.client import OpenAICompatClient
 from app.orchestration.bus import EventBus
@@ -71,6 +74,9 @@ def create_app(
         business_engine = engine if engine is not None else get_engine()
         app.state.auth_store = AuthStore(get_settings().auth_db_path)
         init_db(business_engine)
+        normalize_drafts(business_engine)
+        interrupt_unfinished(business_engine)
+        interrupt_publications(business_engine)
         knowledge = NxKnowledgeGraph.from_engine(business_engine)
         app.state.knowledge = knowledge
         dependencies = {"knowledge": knowledge, **(orchestration_dependencies or {})}
@@ -99,6 +105,7 @@ def create_app(
                 initial_date=settings.teaching_clock_initial_date,
             )
             dependencies.setdefault("teaching_date", clock.current_date)
+            dependencies.setdefault("class_teaching_date", clock.current_date)
             app.state.clock = clock
             if settings.llm_api_key and "verifier" not in dependencies:
                 if llm is None:
@@ -159,13 +166,17 @@ def create_app(
 
     app = FastAPI(title="真懂 AI", version="0.1.0", lifespan=lifespan)
 
+    @app.exception_handler(ReviewError)
+    async def review_error(_: Request, exc: ReviewError) -> JSONResponse:
+        return JSONResponse(status_code=exc.status, content={"detail": exc.detail})
+
     @app.exception_handler(OrchestrationError)
     async def orchestration_error(_: Request, exc: OrchestrationError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
     for module in (health, auth):
         app.include_router(module.router, prefix="/api")
-    for module in (teacher, student, decision, stream):
+    for module in (classes, teacher, student, decision, stream, homework):
         app.include_router(module.router, prefix="/api", dependencies=[Depends(authorize)])
     return app
 

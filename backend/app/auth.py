@@ -13,10 +13,11 @@ from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request, Security
 from fastapi.security import APIKeyCookie
-from sqlmodel import Session
+from sqlmodel import Session, select
 
+from app.classroom import Classroom, Enrollment, can_see, may_work, owned_classes
 from app.config import get_settings
-from app.contracts.entities import Evidence, Task
+from app.contracts.entities import Evidence, Misconception, Task
 
 COOKIE = "truegrasp_session"
 cookie_scheme = APIKeyCookie(name=COOKIE, auto_error=False)
@@ -27,6 +28,7 @@ class Principal:
     username: str
     role: str
     student_id: str | None
+    teacher_id: str | None = None
 
 
 def password_hash(password: str, salt: bytes | None = None) -> str:
@@ -52,13 +54,27 @@ class AuthStore:
                 CREATE TABLE IF NOT EXISTS account (
                     username TEXT PRIMARY KEY, password_hash TEXT NOT NULL,
                     role TEXT NOT NULL CHECK(role IN ('teacher','student')),
-                    student_id TEXT
+                    student_id TEXT, teacher_id TEXT
+                );
+                CREATE TABLE IF NOT EXISTS student_setup (
+                    student_id TEXT PRIMARY KEY, class_id TEXT NOT NULL,
+                    token_hash TEXT NOT NULL UNIQUE, expires REAL NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS auth_session (
                     token_hash TEXT PRIMARY KEY, username TEXT NOT NULL,
                     expires REAL NOT NULL
                 );
             """)
+
+            db.execute("BEGIN IMMEDIATE")
+            if "teacher_id" not in {row[1] for row in db.execute("PRAGMA table_info(account)")}:
+                db.execute("ALTER TABLE account ADD COLUMN teacher_id TEXT")
+            db.execute(
+                "UPDATE account SET teacher_id='tch_' || lower(hex(randomblob(16))) "
+                "WHERE role='teacher' AND teacher_id IS NULL"
+            )
+            db.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_teacher_id ON account(teacher_id)")
+            db.execute("CREATE INDEX IF NOT EXISTS ix_student_account ON account(student_id)")
 
     @contextmanager
     def connect(self):
@@ -74,19 +90,113 @@ class AuthStore:
             raise ValueError("账号、密码和角色不能为空")
         if (role == "student") != bool(student_id):
             raise ValueError("学生账号必须绑定学生 ID，教师账号不得绑定")
+        hashed = password_hash(password)
         with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            old = db.execute(
+                "SELECT role, student_id FROM account WHERE username=?", (username,)
+            ).fetchone()
+            if old is not None and old != (role, student_id):
+                raise ValueError("不能修改现有账号的角色或绑定身份")
+            if (
+                student_id
+                and db.execute(
+                    "SELECT 1 FROM account WHERE student_id=? AND username!=?",
+                    (student_id, username),
+                ).fetchone()
+            ):
+                raise ValueError("该学生已绑定其他账号")
             db.execute(
-                "INSERT INTO account VALUES (?, ?, ?, ?) ON CONFLICT(username) DO UPDATE SET "
-                "password_hash=excluded.password_hash, role=excluded.role, "
-                "student_id=excluded.student_id",
-                (username, password_hash(password), role, student_id),
+                "INSERT INTO account(username,password_hash,role,student_id,teacher_id) "
+                "VALUES (?, ?, ?, ?, ?) ON CONFLICT(username) DO UPDATE SET "
+                "password_hash=excluded.password_hash",
+                (
+                    username,
+                    hashed,
+                    role,
+                    student_id,
+                    "tch_" + secrets.token_hex(16) if role == "teacher" else None,
+                ),
             )
             db.execute("DELETE FROM auth_session WHERE username=?", (username,))
+            if student_id:
+                db.execute("DELETE FROM student_setup WHERE student_id=?", (student_id,))
+
+    def create_teacher(self, username: str, password: str) -> bool:
+        """Public signup is insert-only; never reset an existing account or its sessions."""
+        hashed = password_hash(password)
+        with self.connect() as db:
+            inserted = db.execute(
+                "INSERT INTO account(username,password_hash,role,student_id,teacher_id) "
+                "VALUES (?, ?, 'teacher', NULL, ?) ON CONFLICT(username) DO NOTHING",
+                (username, hashed, "tch_" + secrets.token_hex(16)),
+            )
+            return inserted.rowcount == 1
+
+    def issue_setup(self, student_id: str, class_id: str) -> tuple[str, str]:
+        """Return a one-time setup token; the stored value is a digest."""
+        token = secrets.token_urlsafe(32)
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute(
+                "SELECT username FROM account WHERE role='student' AND student_id=?", (student_id,)
+            ).fetchall()
+            if len(rows) > 1:
+                raise ValueError("该学生绑定了多个旧账号，请先由维护人员核对")
+            if rows:
+                username = rows[0][0]
+            else:
+                username = "student_" + secrets.token_hex(10)
+                db.execute(
+                    "INSERT INTO account(username,password_hash,role,student_id) VALUES (?,?,?,?)",
+                    (username, "!", "student", student_id),
+                )
+            db.execute(
+                "INSERT INTO student_setup VALUES (?,?,?,?) ON CONFLICT(student_id) DO UPDATE SET "
+                "class_id=excluded.class_id, token_hash=excluded.token_hash, "
+                "expires=excluded.expires",
+                (student_id, class_id, self.token_hash(token), time.time() + 86400),
+            )
+        return username, token
+
+    def setup_identity(self, token: str) -> tuple[str, str] | None:
+        with self.connect() as db:
+            return db.execute(
+                "SELECT student_id,class_id FROM student_setup WHERE token_hash=? AND expires>?",
+                (self.token_hash(token), time.time()),
+            ).fetchone()
+
+    def redeem_setup(self, token: str, hashed: str, student_id: str) -> str | None:
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            deleted = db.execute(
+                "DELETE FROM student_setup WHERE token_hash=? AND expires>? AND student_id=?",
+                (self.token_hash(token), time.time(), student_id),
+            )
+            if not deleted.rowcount:
+                return None
+            rows = db.execute(
+                "SELECT username FROM account WHERE role='student' AND student_id=?", (student_id,)
+            ).fetchall()
+            if len(rows) != 1:
+                return None
+            username = rows[0][0]
+            db.execute("UPDATE account SET password_hash=? WHERE username=?", (hashed, username))
+            db.execute("DELETE FROM auth_session WHERE username=?", (username,))
+            return username
+
+    def revoke_setup(self, student_id: str) -> None:
+        with self.connect() as db:
+            db.execute("DELETE FROM student_setup WHERE student_id=?", (student_id,))
 
     def login(self, username: str, password: str, seconds: int) -> tuple[str, Principal] | None:
         with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
             row = db.execute(
-                "SELECT password_hash, role, student_id FROM account WHERE username=?", (username,)
+                "SELECT password_hash, role, student_id, teacher_id FROM account WHERE username=? "
+                "AND (role='teacher' OR (SELECT count(*) FROM account b WHERE "
+                "b.student_id=account.student_id)=1)",
+                (username,),
             ).fetchone()
             if row is None or not verify_password(password, row[0]):
                 return None
@@ -96,7 +206,7 @@ class AuthStore:
                 "INSERT INTO auth_session VALUES (?, ?, ?)",
                 (self.token_hash(token), username, time.time() + seconds),
             )
-            return token, Principal(username, row[1], row[2])
+            return token, Principal(username, row[1], row[2], row[3])
 
     @staticmethod
     def token_hash(token: str) -> str:
@@ -107,8 +217,10 @@ class AuthStore:
             return None
         with self.connect() as db:
             row = db.execute(
-                "SELECT a.username, a.role, a.student_id FROM auth_session s "
-                "JOIN account a ON a.username=s.username WHERE s.token_hash=? AND s.expires>?",
+                "SELECT a.username, a.role, a.student_id, a.teacher_id FROM auth_session s "
+                "JOIN account a ON a.username=s.username WHERE s.token_hash=? AND s.expires>? "
+                "AND (a.role='teacher' OR "
+                "(SELECT count(*) FROM account b WHERE b.student_id=a.student_id)=1)",
                 (self.token_hash(token), time.time()),
             ).fetchone()
         return Principal(*row) if row else None
@@ -117,6 +229,10 @@ class AuthStore:
         if token:
             with self.connect() as db:
                 db.execute("DELETE FROM auth_session WHERE token_hash=?", (self.token_hash(token),))
+
+
+def business_error(code: str, message: str) -> dict:
+    return {"code": code, "message": message, "retryable": False, "issues": []}
 
 
 def check_origin(request: Request) -> None:
@@ -144,58 +260,99 @@ def current_principal(request: Request) -> Principal:
 
 def authorize(request: Request, _cookie: Annotated[str | None, Security(cookie_scheme)]) -> None:
     """默认只允许教师；学生必须明确列入共享接口并检查对象归属。"""
-    check_origin(request)
-    principal = current_principal(request)
+    try:
+        check_origin(request)
+        principal = current_principal(request)
+    except HTTPException as exc:
+        if request.scope["route"].path.startswith("/classes"):
+            code = "login_required" if exc.status_code == 401 else "origin_forbidden"
+            raise HTTPException(exc.status_code, business_error(code, exc.detail)) from exc
+        raise
     request.state.principal = principal
-    if principal.role == "teacher":
-        return
-    route = f"/api{request.scope['route'].path}"
+    route = request.scope["route"].path
     method = request.method
-    shared = {
-        ("GET", "/api/events"),
-        ("GET", "/api/students"),
-        ("GET", "/api/tasks"),
-        ("GET", "/api/knowledge/points"),
-        ("GET", "/api/knowledge/path"),
-    }
-    if (method, route) in shared:
-        if route == "/api/tasks":
+    params = request.path_params
+    if principal.role == "teacher":
+        with Session(request.app.state.orchestrator.engine) as session:
+            if "task_id" in params:
+                task = session.get(Task, int(params["task_id"]))
+                if not can_see(session, principal, task):
+                    raise HTTPException(404, "任务不存在")
+                if method != "GET" and not may_work(session, task):
+                    raise HTTPException(409, "学生已退出任务所属班级")
+            if "evidence_id" in params and not can_see(
+                session, principal, session.get(Evidence, int(params["evidence_id"]))
+            ):
+                raise HTTPException(404, "证据不存在")
+            if "misconception_id" in params:
+                cause = session.get(Misconception, params["misconception_id"])
+                if (
+                    cause is None
+                    or cause.class_id is None
+                    or session.exec(
+                        owned_classes(principal.teacher_id).where(Classroom.id == cause.class_id)
+                    ).first()
+                    is None
+                ):
+                    raise HTTPException(404, "错因不存在")
+            if "student_id" in params and "class_id" not in params:
+                # Former teachers can still read the student's records from their
+                # own classes. Only an active enrollment allows new work.
+                query = select(Enrollment).where(
+                    Enrollment.student_id == params["student_id"],
+                    Enrollment.class_id.in_(owned_classes(principal.teacher_id)),
+                )
+                if method != "GET":
+                    query = query.where(Enrollment.status == "active")
+                if session.exec(query).first() is None:
+                    raise HTTPException(404, "学生不存在")
+        return
+    if method == "GET" and route in {
+        "/events",
+        "/students",
+        "/tasks",
+        "/knowledge/points",
+        "/knowledge/path",
+    }:
+        if route == "/tasks":
             requested = request.query_params.get("student_id")
             if requested and requested != principal.student_id:
                 raise HTTPException(403, "无权访问其他学生的数据")
         return
-    params = request.path_params
     student_routes = {
-        ("GET", "/api/students/{student_id}/timeline"),
-        ("GET", "/api/students/{student_id}/mastery"),
-        ("GET", "/api/students/{student_id}/verification"),
-        ("POST", "/api/students/{student_id}/question-photo"),
-        ("POST", "/api/students/{student_id}/questions"),
+        ("GET", "/students/{student_id}/timeline"),
+        ("GET", "/students/{student_id}/mastery"),
+        ("GET", "/students/{student_id}/verification"),
+        ("POST", "/students/{student_id}/question-photo"),
+        ("POST", "/students/{student_id}/questions"),
     }
     if (method, route) in student_routes:
         if params["student_id"] != principal.student_id:
             raise HTTPException(403, "无权访问其他学生的数据")
         return
     task_routes = {
-        ("GET", "/api/tasks/{task_id}"),
-        ("GET", "/api/tasks/{task_id}/messages"),
-        ("GET", "/api/tasks/{task_id}/answer-target"),
-        ("GET", "/api/tasks/{task_id}/diagnosis"),
-        ("POST", "/api/tasks/{task_id}/start"),
-        ("POST", "/api/tasks/{task_id}/messages"),
-        ("POST", "/api/tasks/{task_id}/answer-photo"),
-        ("POST", "/api/tasks/{task_id}/question-photo"),
+        ("GET", "/tasks/{task_id}"),
+        ("GET", "/tasks/{task_id}/messages"),
+        ("GET", "/tasks/{task_id}/answer-target"),
+        ("GET", "/tasks/{task_id}/diagnosis"),
+        ("POST", "/tasks/{task_id}/start"),
+        ("POST", "/tasks/{task_id}/messages"),
+        ("POST", "/tasks/{task_id}/answer-photo"),
+        ("POST", "/tasks/{task_id}/question-photo"),
     }
     if (method, route) in task_routes:
         with Session(request.app.state.orchestrator.engine) as session:
             task = session.get(Task, int(params["task_id"]))
-            if task is None or task.student_id != principal.student_id:
+            if not can_see(session, principal, task):
                 raise HTTPException(404, "任务不存在")
+            if method != "GET" and not may_work(session, task):
+                raise HTTPException(409, "学生已退出任务所属班级")
         return
-    if "evidence_id" in params and method == "GET":
+    if route == "/evidence/{evidence_id}" and method == "GET":
         with Session(request.app.state.orchestrator.engine) as session:
-            evidence = session.get(Evidence, int(params["evidence_id"]))
-            if evidence is None or evidence.student_id != principal.student_id:
+            if not can_see(session, principal, session.get(Evidence, int(params["evidence_id"]))):
                 raise HTTPException(404, "证据不存在")
         return
+    if route.startswith("/classes"):
+        raise HTTPException(403, business_error("teacher_required", "需要教师权限"))
     raise HTTPException(403, "需要教师权限")

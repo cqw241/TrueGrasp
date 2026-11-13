@@ -38,6 +38,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/auth/register': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Register Teacher */
+    post: operations['register_teacher_api_auth_register_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/auth/me': {
     parameters: {
       query?: never
@@ -66,6 +83,147 @@ export interface paths {
     put?: never
     /** Logout */
     post: operations['logout_api_auth_logout_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/auth/student-setup': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Setup Student */
+    post: operations['setup_student_api_auth_student_setup_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/classes': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Classes */
+    get: operations['list_classes_api_classes_get']
+    put?: never
+    /** Create Class */
+    post: operations['create_class_api_classes_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/classes/{class_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    /** Rename Class */
+    patch: operations['rename_class_api_classes__class_id__patch']
+    trace?: never
+  }
+  '/api/classes/{class_id}/students': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Members */
+    get: operations['list_members_api_classes__class_id__students_get']
+    put?: never
+    /** Enroll */
+    post: operations['enroll_api_classes__class_id__students_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/classes/available-students': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Available Students
+     * @description Candidates are unassigned to an active class and explicitly managed by this teacher.
+     */
+    get: operations['available_students_api_classes_available_students_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/classes/{class_id}/students/import': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Import Roster */
+    post: operations['import_roster_api_classes__class_id__students_import_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/classes/{class_id}/students/{student_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** Remove Member */
+    delete: operations['remove_member_api_classes__class_id__students__student_id__delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/classes/{class_id}/students/{student_id}/setup-link': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Issue Setup */
+    post: operations['issue_setup_api_classes__class_id__students__student_id__setup_link_post']
     delete?: never
     options?: never
     head?: never
@@ -699,6 +857,178 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/homework-drafts': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Drafts */
+    get: operations['list_drafts_api_homework_drafts_get']
+    put?: never
+    /** Create Draft */
+    post: operations['create_draft_api_homework_drafts_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-drafts/{draft_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Draft */
+    get: operations['get_draft_api_homework_drafts__draft_id__get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    /** Patch Draft */
+    patch: operations['patch_draft_api_homework_drafts__draft_id__patch']
+    trace?: never
+  }
+  '/api/homework-drafts/{draft_id}/parse-retries': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Retry Sources */
+    post: operations['retry_sources_api_homework_drafts__draft_id__parse_retries_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-drafts/{draft_id}/sources': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Add Sources */
+    post: operations['add_sources_api_homework_drafts__draft_id__sources_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-drafts/{draft_id}/sources/{source_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Source */
+    get: operations['get_source_api_homework_drafts__draft_id__sources__source_id__get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-drafts/{draft_id}/publish-preview': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Preview Publication */
+    post: operations['preview_publication_api_homework_drafts__draft_id__publish_preview_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-drafts/{draft_id}/publish': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Publish Draft */
+    post: operations['publish_draft_api_homework_drafts__draft_id__publish_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-publications/{publication_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Publication */
+    get: operations['get_publication_api_homework_publications__publication_id__get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-publications/{publication_id}/workflow-retries': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Retry Publication Workflow */
+    post: operations['retry_publication_workflow_api_homework_publications__publication_id__workflow_retries_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-publications/{publication_id}/progress': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Publication Progress */
+    get: operations['get_publication_progress_api_homework_publications__publication_id__progress_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -762,6 +1092,27 @@ export interface components {
        */
       accepts_question_photo: boolean
     }
+    /** Body_add_sources_api_homework_drafts__draft_id__sources_post */
+    Body_add_sources_api_homework_drafts__draft_id__sources_post: {
+      /** Files */
+      files: string[]
+      /** Expected Revision */
+      expected_revision: number
+    }
+    /** Body_create_draft_api_homework_drafts_post */
+    Body_create_draft_api_homework_drafts_post: {
+      /** Files */
+      files?: string[] | null
+      /**
+       * Title
+       * @default 作业解析
+       */
+      title: string
+      /** Prompt Text */
+      prompt_text?: string | null
+      /** Class Id */
+      class_id?: string | null
+    }
     /** Body_import_homework_api_homework_post */
     Body_import_homework_api_homework_post: {
       /** File */
@@ -800,6 +1151,11 @@ export interface components {
        */
       solution: boolean
     }
+    /** ClassName */
+    ClassName: {
+      /** Name */
+      name: string
+    }
     /** ClassOverview */
     ClassOverview: {
       /** Students */
@@ -815,8 +1171,19 @@ export interface components {
         [key: string]: number
       }
     }
+    /** ClassView */
+    ClassView: {
+      /** Name */
+      name: string
+      /** Class Id */
+      class_id: string
+      /** Teacher Id */
+      teacher_id: string
+    }
     /** ClockAdvanced */
     ClockAdvanced: {
+      /** Class Id */
+      class_id?: string | null
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
@@ -899,6 +1266,99 @@ export interface components {
       /** Evidence Id */
       evidence_id: number | null
     }
+    /** DraftApiError */
+    DraftApiError: {
+      /** Detail */
+      detail:
+        | string
+        | {
+            [key: string]: unknown
+          }
+        | {
+            [key: string]: unknown
+          }[]
+    }
+    /** DraftSource */
+    DraftSource: {
+      /** Source Id */
+      source_id: string
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: 'file' | 'text'
+      /** Filename */
+      filename: string
+      /** Mime Type */
+      mime_type: string
+      /** Size Bytes */
+      size_bytes: number
+      /** Sha256 */
+      sha256: string
+      /** Page Count */
+      page_count: number | null
+    }
+    /** DraftSummary */
+    DraftSummary: {
+      /** Draft Id */
+      draft_id: string
+      /** Class Id */
+      class_id: string | null
+      /** Title */
+      title: string
+      /** Revision */
+      revision: number
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'parsing' | 'review' | 'parse_failed' | 'published'
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string
+    }
+    /** DraftUpdate */
+    DraftUpdate: {
+      /** Expected Revision */
+      expected_revision: number
+      /** Class Id */
+      class_id?: string | null
+      /** Question Updates */
+      question_updates?: components['schemas']['QuestionUpdate'][]
+      /** Record Updates */
+      record_updates?: components['schemas']['RecordUpdate'][]
+      /** Issue Resolutions */
+      issue_resolutions?: components['schemas']['ResolveIssue'][]
+    }
+    /** Edit */
+    Edit: {
+      /** Revision */
+      revision: number
+      /** Target Id */
+      target_id: string
+      /** Field */
+      field: string
+      /** Before */
+      before: unknown
+      /** After */
+      after: unknown
+      /** By Teacher Id */
+      by_teacher_id: string
+      /**
+       * At
+       * Format: date-time
+       */
+      at: string
+      /** Note */
+      note: string | null
+    }
     /** EnterLecture */
     EnterLecture: {
       /** Lecture */
@@ -919,6 +1379,8 @@ export interface components {
      * @description 证据账本，只追加、不修改。教师处理也记为一条单独的证据。
      */
     Evidence: {
+      /** Class Id */
+      class_id?: string | null
       /** Id */
       id?: number | null
       /** Student Id */
@@ -986,6 +1448,13 @@ export interface components {
      * @enum {string}
      */
     ExamTag: 'math1' | 'math2' | 'math3'
+    /** Extraction */
+    Extraction: {
+      /** Questions */
+      questions: components['schemas']['Question'][]
+      /** Records */
+      records: components['schemas']['Record'][]
+    }
     /** GoalCreate */
     GoalCreate: {
       /** Knowledge Point Ids */
@@ -1033,6 +1502,61 @@ export interface components {
       /** Misconception Students */
       misconception_students: number
     }
+    /** HomeworkDraft */
+    HomeworkDraft: {
+      /** Questions */
+      questions: components['schemas']['Question'][]
+      /** Records */
+      records: components['schemas']['Record'][]
+      /**
+       * Schema Version
+       * @default 0.1
+       * @constant
+       */
+      schema_version: '0.1'
+      /** Draft Id */
+      draft_id: string
+      /** Class Id */
+      class_id: string | null
+      /** Created By Username */
+      created_by_username: string
+      /** Created By Teacher Id */
+      created_by_teacher_id: string | null
+      /** Title */
+      title: string
+      /**
+       * Revision
+       * @default 1
+       */
+      revision: number
+      /**
+       * Status
+       * @default parsing
+       * @enum {string}
+       */
+      status: 'parsing' | 'review' | 'parse_failed' | 'published'
+      /** Sources */
+      sources: components['schemas']['DraftSource'][]
+      /** Parse Errors */
+      parse_errors: components['schemas']['ParseError'][]
+      original_extraction: components['schemas']['Extraction'] | null
+      /** Edits */
+      edits: components['schemas']['Edit'][]
+      /** Publication Ids */
+      publication_ids: string[]
+      /** Active Publication Id */
+      active_publication_id: string | null
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string
+    }
     /** HomeworkImportResult */
     HomeworkImportResult: {
       /** Event Id */
@@ -1043,6 +1567,25 @@ export interface components {
       items: number
       /** Evidence */
       evidence: number
+    }
+    /** HomeworkTaskProgress */
+    HomeworkTaskProgress: {
+      task: components['schemas']['Task']
+      /** Student Name */
+      student_name: string | null
+      /** Student Number */
+      student_number: string | null
+      /** Knowledge Point Name */
+      knowledge_point_name: string
+      mastery_state: components['schemas']['MasteryState'] | null
+      /** Verification */
+      verification: components['schemas']['DimensionResult'][]
+      /** Failed */
+      failed: boolean
+      /** Teacher Takeover */
+      teacher_takeover: boolean
+      /** Can Work */
+      can_work: boolean
     }
     /**
      * HypothesisStatus
@@ -1078,8 +1621,63 @@ export interface components {
       /** Unmodeled */
       unmodeled: boolean
     }
+    /** IdentityMatch */
+    IdentityMatch: {
+      /** Observed Name */
+      observed_name: string | null
+      /** Observed Student Id */
+      observed_student_id: string | null
+      /** Student Number */
+      student_number: string | null
+      /** Student Id */
+      student_id: string | null
+      /** Candidate Student Ids */
+      candidate_student_ids: string[]
+      /**
+       * Status
+       * @default unmatched
+       * @enum {string}
+       */
+      status: 'unmatched' | 'ambiguous' | 'proposed' | 'confirmed'
+    }
+    /** Issue */
+    Issue: {
+      /** Issue Id */
+      issue_id: string
+      /** Code */
+      code: string
+      /** Field */
+      field: string
+      /** Message */
+      message: string
+      /**
+       * Blocking
+       * @default true
+       */
+      blocking: boolean
+      resolution: components['schemas']['IssueResolution'] | null
+    }
+    /** IssueResolution */
+    IssueResolution: {
+      /**
+       * Action
+       * @enum {string}
+       */
+      action: 'corrected' | 'accepted'
+      /** By Teacher Id */
+      by_teacher_id: string
+      /**
+       * At
+       * Format: date-time
+       */
+      at: string
+      /** Note */
+      note: string | null
+    }
     /** Item */
     Item: {
+      /** Class Id */
+      class_id?: string | null
       /** Id */
       id: string
       /** Knowledge Point Id */
@@ -1149,6 +1747,16 @@ export interface components {
      * @enum {string}
      */
     JudgedBy: 'tool' | 'model' | 'teacher'
+    /** KnowledgeCandidate */
+    KnowledgeCandidate: {
+      /** Id */
+      id: string
+      /**
+       * Reason
+       * @default
+       */
+      reason: string
+    }
     /** KnowledgePoint */
     KnowledgePoint: {
       /** Id */
@@ -1188,6 +1796,8 @@ export interface components {
     }
     /** MasteryChanged */
     MasteryChanged: {
+      /** Class Id */
+      class_id?: string | null
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
@@ -1212,6 +1822,22 @@ export interface components {
       | 'integrated'
       | 'relapsed'
       | 'escalated'
+    /** MemberView */
+    MemberView: {
+      /** Class Id */
+      class_id: string
+      /** Student Id */
+      student_id: string
+      /** Name */
+      name: string
+      /** Student Number */
+      student_number: string | null
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'active' | 'left'
+    }
     /** MessageCreate */
     MessageCreate: {
       /**
@@ -1242,6 +1868,8 @@ export interface components {
      * @description 错因。ID 全书统一，跨章节跟进靠它匹配。
      */
     Misconception: {
+      /** Class Id */
+      class_id?: string | null
       /** Id */
       id: string
       /** Knowledge Point Id */
@@ -1290,6 +1918,22 @@ export interface components {
       | 'definite_integral'
       | 'double_integral'
       | 'limit'
+    /** ParseError */
+    ParseError: {
+      /** Source Id */
+      source_id: string
+      /** Page */
+      page: number | null
+      /** Code */
+      code: string
+      /** Message */
+      message: string
+      /**
+       * Retryable
+       * @default true
+       */
+      retryable: boolean
+    }
     /** PhotoUploadError */
     PhotoUploadError: {
       /** Detail */
@@ -1330,6 +1974,112 @@ export interface components {
       matched_misconception_id: string | null
       judged_by: components['schemas']['JudgedBy'] | null
     }
+    /** Publication */
+    Publication: {
+      /** Publication Id */
+      publication_id: string
+      /** Draft Id */
+      draft_id: string
+      /** Class Id */
+      class_id: string
+      /** Confirmed Revision */
+      confirmed_revision: number
+      /** Record Ids */
+      record_ids: string[]
+      /** Confirmed By Teacher Id */
+      confirmed_by_teacher_id: string
+      /**
+       * Confirmed At
+       * Format: date-time
+       */
+      confirmed_at: string
+      /**
+       * Teaching Date
+       * Format: date
+       */
+      teaching_date: string
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'publishing' | 'published' | 'failed'
+      confirmed_snapshot: components['schemas']['Extraction']
+      import_result: components['schemas']['HomeworkImportResult'] | null
+      /** Record Results */
+      record_results: components['schemas']['RecordResult'][]
+      workflow: components['schemas']['Workflow']
+      error: components['schemas']['PublicationError'] | null
+    }
+    /** PublicationError */
+    PublicationError: {
+      /** Code */
+      code: string
+      /** Message */
+      message: string
+      /** Retryable */
+      retryable: boolean
+    }
+    /** PublicationProgress */
+    PublicationProgress: {
+      /** Publication Id */
+      publication_id: string
+      /** Class Id */
+      class_id: string
+      workflow: components['schemas']['Workflow']
+      /** Tasks */
+      tasks: components['schemas']['HomeworkTaskProgress'][]
+    }
+    /** PublishPreview */
+    PublishPreview: {
+      /** Draft Id */
+      draft_id: string
+      /** Revision */
+      revision: number
+      /** Selected Records */
+      selected_records: number
+      /** Students */
+      students: number
+      /** Items */
+      items: number
+      /** Answers */
+      answers: number
+      /** Remaining Records */
+      remaining_records: number
+      /** Blocking Issues */
+      blocking_issues: components['schemas']['ReviewProblem'][]
+      /** Can Publish */
+      can_publish: boolean
+    }
+    /** PublishSelection */
+    PublishSelection: {
+      /** Expected Revision */
+      expected_revision: number
+      /** Record Ids */
+      record_ids: string[]
+    }
+    /** Question */
+    Question: {
+      /** Question Id */
+      question_id: string
+      /** Number */
+      number: string | null
+      /** Item Id */
+      item_id: string | null
+      /** Stem */
+      stem: string | null
+      /** Correct Answer */
+      correct_answer: string | null
+      /** Rubric */
+      rubric: string[]
+      /** Knowledge Point Id */
+      knowledge_point_id: string | null
+      /** Knowledge Candidates */
+      knowledge_candidates: components['schemas']['KnowledgeCandidate'][]
+      /** Source Refs */
+      source_refs: components['schemas']['SourceRef'][]
+      /** Issues */
+      issues: components['schemas']['Issue'][]
+    }
     /**
      * QuestionCreate
      * @description 学生主动提问：题目文字/LaTeX 或题图，可附上自己的尝试或卡住的位置。
@@ -1365,10 +2115,143 @@ export interface components {
       /** Photo Id */
       photo_id: string
     }
+    /** QuestionUpdate */
+    QuestionUpdate: {
+      /** Question Id */
+      question_id: string
+      /** Stem */
+      stem?: string | null
+      /** Correct Answer */
+      correct_answer?: string | null
+      /** Knowledge Point Id */
+      knowledge_point_id?: string | null
+      /** Item Id */
+      item_id?: string | null
+    }
+    /** Record */
+    Record: {
+      /** Record Id */
+      record_id: string
+      /** Question Id */
+      question_id: string
+      identity: components['schemas']['IdentityMatch']
+      /** Student Answer */
+      student_answer: string | null
+      /**
+       * Answer Kind
+       * @default unknown
+       * @enum {string}
+       */
+      answer_kind:
+        'expression' | 'steps' | 'text' | 'proof' | 'mixed' | 'unknown'
+      /** Source Refs */
+      source_refs: components['schemas']['SourceRef'][]
+      /** Issues */
+      issues: components['schemas']['Issue'][]
+      /**
+       * Review Status
+       * @default pending
+       * @enum {string}
+       */
+      review_status: 'pending' | 'confirmed' | 'skipped' | 'published'
+      /** Publication Id */
+      publication_id: string | null
+    }
+    /** RecordResult */
+    RecordResult: {
+      /** Record Id */
+      record_id: string
+      /** Item Id */
+      item_id: string
+      /** Evidence Id */
+      evidence_id: number
+    }
+    /** RecordUpdate */
+    RecordUpdate: {
+      /** Record Id */
+      record_id: string
+      /** Student Id */
+      student_id?: string | null
+      /** Student Answer */
+      student_answer?: string | null
+      /** Review Status */
+      review_status?: ('pending' | 'confirmed' | 'skipped') | null
+      /** Note */
+      note?: string | null
+    }
     /** ResolveEscalation */
     ResolveEscalation: {
       /** Note */
       note: string
+    }
+    /** ResolveIssue */
+    ResolveIssue: {
+      /** Issue Id */
+      issue_id: string
+      /**
+       * Action
+       * @enum {string}
+       */
+      action: 'corrected' | 'accepted'
+      /** Note */
+      note?: string | null
+    }
+    /** RetrySources */
+    RetrySources: {
+      /** Expected Revision */
+      expected_revision: number
+      /** Source Ids */
+      source_ids: string[]
+    }
+    /** ReviewProblem */
+    ReviewProblem: {
+      /** Record Id */
+      record_id: string
+      /** Field */
+      field: string
+      /** Message */
+      message: string
+    }
+    /** RosterImport */
+    RosterImport: {
+      /** Rows */
+      rows: string[][]
+    }
+    /** RosterResult */
+    RosterResult: {
+      /** Row */
+      row: number
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'added' | 'duplicate' | 'missing' | 'failed'
+      /** Message */
+      message: string
+      student?: components['schemas']['MemberView'] | null
+    }
+    /** SetupComplete */
+    SetupComplete: {
+      /** Username */
+      username: string
+    }
+    /** SetupLink */
+    SetupLink: {
+      /** Username */
+      username: string
+      /** Setup Path */
+      setup_path: string
+      /** Expires In */
+      expires_in: number
+    }
+    /** SourceRef */
+    SourceRef: {
+      /** Source Id */
+      source_id: string
+      /** Page */
+      page: number | null
+      /** Row */
+      row: number | null
     }
     /** Student */
     Student: {
@@ -1376,6 +2259,22 @@ export interface components {
       id: string
       /** Name */
       name: string
+    }
+    /** StudentAdd */
+    StudentAdd: {
+      /** Student Id */
+      student_id?: string | null
+      /** Name */
+      name?: string | null
+      /** Student Number */
+      student_number?: string | null
+    }
+    /** StudentSetup */
+    StudentSetup: {
+      /** Token */
+      token: string
+      /** Password */
+      password: string
     }
     /** TakeoverRequest */
     TakeoverRequest: {
@@ -1390,6 +2289,8 @@ export interface components {
      * @description 由规划 Agent 创建，教学时钟检查是否到期。
      */
     Task: {
+      /** Class Id */
+      class_id?: string | null
       /** Id */
       id?: number | null
       type: components['schemas']['TaskType']
@@ -1487,11 +2388,20 @@ export interface components {
       | 'escalation'
       | 'class_review'
       | 'question'
+    /** TeacherRegistration */
+    TeacherRegistration: {
+      /** Username */
+      username: string
+      /** Password */
+      password: string
+    }
     /**
      * TeachingGoal
      * @description 教师设定的目标，如“周五前 90% 初步掌握、两轮不通过转人工”。
      */
     TeachingGoal: {
+      /** Class Id */
+      class_id?: string | null
       /** Id */
       id?: number | null
       /** Knowledge Point Ids */
@@ -1612,6 +2522,20 @@ export interface components {
       /** Context */
       ctx?: Record<string, never>
     }
+    /** Workflow */
+    Workflow: {
+      /** Event Id */
+      event_id: number | null
+      /**
+       * State
+       * @default pending
+       * @enum {string}
+       */
+      state: 'pending' | 'planned' | 'failed'
+      /** Task Ids */
+      task_ids: number[]
+      error: components['schemas']['PublicationError'] | null
+    }
   }
   responses: never
   parameters: never
@@ -1623,11 +2547,17 @@ export type Accepted = components['schemas']['Accepted']
 export type AdoptMisconception = components['schemas']['AdoptMisconception']
 export type AdvanceClock = components['schemas']['AdvanceClock']
 export type AnswerTarget = components['schemas']['AnswerTarget']
+export type BodyAddSourcesApiHomeworkDraftsDraftIdSourcesPost =
+  components['schemas']['Body_add_sources_api_homework_drafts__draft_id__sources_post']
+export type BodyCreateDraftApiHomeworkDraftsPost =
+  components['schemas']['Body_create_draft_api_homework_drafts_post']
 export type BodyImportHomeworkApiHomeworkPost =
   components['schemas']['Body_import_homework_api_homework_post']
 export type Bound = components['schemas']['Bound']
 export type ChatTurn = components['schemas']['ChatTurn']
+export type ClassName = components['schemas']['ClassName']
 export type ClassOverview = components['schemas']['ClassOverview']
+export type ClassView = components['schemas']['ClassView']
 export type ClockAdvanced = components['schemas']['ClockAdvanced']
 export type ClockState = components['schemas']['ClockState']
 export type CommonIssue = components['schemas']['CommonIssue']
@@ -1635,41 +2565,75 @@ export type ContentSource = components['schemas']['ContentSource']
 export type DiagnosisView = components['schemas']['DiagnosisView']
 export type Dimension = components['schemas']['Dimension']
 export type DimensionResult = components['schemas']['DimensionResult']
+export type DraftApiError = components['schemas']['DraftApiError']
+export type DraftSource = components['schemas']['DraftSource']
+export type DraftSummary = components['schemas']['DraftSummary']
+export type DraftUpdate = components['schemas']['DraftUpdate']
+export type Edit = components['schemas']['Edit']
 export type EnterLecture = components['schemas']['EnterLecture']
 export type Escalation = components['schemas']['Escalation']
 export type Evidence = components['schemas']['Evidence']
 export type EvidenceAdded = components['schemas']['EvidenceAdded']
 export type EvidenceKind = components['schemas']['EvidenceKind']
 export type ExamTag = components['schemas']['ExamTag']
+export type Extraction = components['schemas']['Extraction']
 export type GoalCreate = components['schemas']['GoalCreate']
 export type HttpValidationError = components['schemas']['HTTPValidationError']
 export type HeatCell = components['schemas']['HeatCell']
+export type HomeworkDraft = components['schemas']['HomeworkDraft']
 export type HomeworkImportResult = components['schemas']['HomeworkImportResult']
+export type HomeworkTaskProgress = components['schemas']['HomeworkTaskProgress']
 export type HypothesisStatus = components['schemas']['HypothesisStatus']
 export type HypothesisUpdated = components['schemas']['HypothesisUpdated']
 export type HypothesisView = components['schemas']['HypothesisView']
+export type IdentityMatch = components['schemas']['IdentityMatch']
+export type Issue = components['schemas']['Issue']
+export type IssueResolution = components['schemas']['IssueResolution']
 export type Item = components['schemas']['Item']
 export type ItemPurpose = components['schemas']['ItemPurpose']
 export type ItemSource = components['schemas']['ItemSource']
 export type ItemSpec = components['schemas']['ItemSpec']
 export type JudgedBy = components['schemas']['JudgedBy']
+export type KnowledgeCandidate = components['schemas']['KnowledgeCandidate']
 export type KnowledgePoint = components['schemas']['KnowledgePoint']
 export type Login = components['schemas']['Login']
 export type Mastery = components['schemas']['Mastery']
 export type MasteryChanged = components['schemas']['MasteryChanged']
 export type MasteryState = components['schemas']['MasteryState']
+export type MemberView = components['schemas']['MemberView']
 export type MessageCreate = components['schemas']['MessageCreate']
 export type MessageDone = components['schemas']['MessageDone']
 export type Misconception = components['schemas']['Misconception']
 export type MisconceptionExample = components['schemas']['MisconceptionExample']
 export type Operation = components['schemas']['Operation']
+export type ParseError = components['schemas']['ParseError']
 export type PhotoUploadError = components['schemas']['PhotoUploadError']
 export type Prediction = components['schemas']['Prediction']
 export type ProbeRecord = components['schemas']['ProbeRecord']
+export type Publication = components['schemas']['Publication']
+export type PublicationError = components['schemas']['PublicationError']
+export type PublicationProgress = components['schemas']['PublicationProgress']
+export type PublishPreview = components['schemas']['PublishPreview']
+export type PublishSelection = components['schemas']['PublishSelection']
+export type Question = components['schemas']['Question']
 export type QuestionCreate = components['schemas']['QuestionCreate']
 export type QuestionPhotoResult = components['schemas']['QuestionPhotoResult']
+export type QuestionUpdate = components['schemas']['QuestionUpdate']
+export type Record = components['schemas']['Record']
+export type RecordResult = components['schemas']['RecordResult']
+export type RecordUpdate = components['schemas']['RecordUpdate']
 export type ResolveEscalation = components['schemas']['ResolveEscalation']
+export type ResolveIssue = components['schemas']['ResolveIssue']
+export type RetrySources = components['schemas']['RetrySources']
+export type ReviewProblem = components['schemas']['ReviewProblem']
+export type RosterImport = components['schemas']['RosterImport']
+export type RosterResult = components['schemas']['RosterResult']
+export type SetupComplete = components['schemas']['SetupComplete']
+export type SetupLink = components['schemas']['SetupLink']
+export type SourceRef = components['schemas']['SourceRef']
 export type Student = components['schemas']['Student']
+export type StudentAdd = components['schemas']['StudentAdd']
+export type StudentSetup = components['schemas']['StudentSetup']
 export type TakeoverRequest = components['schemas']['TakeoverRequest']
 export type Task = components['schemas']['Task']
 export type TaskChanged = components['schemas']['TaskChanged']
@@ -1677,6 +2641,7 @@ export type TaskControl = components['schemas']['TaskControl']
 export type TaskOverride = components['schemas']['TaskOverride']
 export type TaskStatus = components['schemas']['TaskStatus']
 export type TaskType = components['schemas']['TaskType']
+export type TeacherRegistration = components['schemas']['TeacherRegistration']
 export type TeachingGoal = components['schemas']['TeachingGoal']
 export type TimelineEntry = components['schemas']['TimelineEntry']
 export type TimelineKind = components['schemas']['TimelineKind']
@@ -1684,6 +2649,7 @@ export type TokenDelta = components['schemas']['TokenDelta']
 export type Transcription = components['schemas']['Transcription']
 export type User = components['schemas']['User']
 export type ValidationError = components['schemas']['ValidationError']
+export type Workflow = components['schemas']['Workflow']
 export type $defs = Record<string, never>
 export interface operations {
   health_api_health_get: {
@@ -1741,6 +2707,39 @@ export interface operations {
       }
     }
   }
+  register_teacher_api_auth_register_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TeacherRegistration']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['User']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
   me_api_auth_me_get: {
     parameters: {
       query?: never
@@ -1779,9 +2778,317 @@ export interface operations {
       }
     }
   }
-  get_clock_api_clock_get: {
+  setup_student_api_auth_student_setup_post: {
     parameters: {
       query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StudentSetup']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SetupComplete']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_classes_api_classes_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClassView'][]
+        }
+      }
+    }
+  }
+  create_class_api_classes_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClassName']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClassView']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  rename_class_api_classes__class_id__patch: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        class_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClassName']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClassView']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_members_api_classes__class_id__students_get: {
+    parameters: {
+      query?: {
+        include_left?: boolean
+      }
+      header?: never
+      path: {
+        class_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MemberView'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  enroll_api_classes__class_id__students_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        class_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StudentAdd']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MemberView']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  available_students_api_classes_available_students_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Student'][]
+        }
+      }
+    }
+  }
+  import_roster_api_classes__class_id__students_import_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        class_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RosterImport']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RosterResult'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  remove_member_api_classes__class_id__students__student_id__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        class_id: string
+        student_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  issue_setup_api_classes__class_id__students__student_id__setup_link_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        class_id: string
+        student_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SetupLink']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_clock_api_clock_get: {
+    parameters: {
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -1797,11 +3104,22 @@ export interface operations {
           'application/json': components['schemas']['ClockState']
         }
       }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
     }
   }
   advance_clock_api_clock_advance_post: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -1834,7 +3152,9 @@ export interface operations {
   }
   enter_lecture_api_clock_lecture_post: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -1867,7 +3187,9 @@ export interface operations {
   }
   list_goals_api_goals_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -1883,11 +3205,22 @@ export interface operations {
           'application/json': components['schemas']['TeachingGoal'][]
         }
       }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
     }
   }
   create_goal_api_goals_post: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -1920,7 +3253,9 @@ export interface operations {
   }
   import_homework_api_homework_post: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -1953,7 +3288,9 @@ export interface operations {
   }
   class_overview_api_class_overview_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -1969,11 +3306,22 @@ export interface operations {
           'application/json': components['schemas']['ClassOverview']
         }
       }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
     }
   }
   class_heatmap_api_class_heatmap_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -1989,11 +3337,22 @@ export interface operations {
           'application/json': components['schemas']['HeatCell'][]
         }
       }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
     }
   }
   class_issues_api_class_issues_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2009,6 +3368,15 @@ export interface operations {
           'application/json': components['schemas']['CommonIssue'][]
         }
       }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
     }
   }
   list_tasks_api_tasks_get: {
@@ -2017,6 +3385,7 @@ export interface operations {
         student_id?: string | null
         type?: components['schemas']['TaskType'] | null
         status?: components['schemas']['TaskStatus'] | null
+        class_id?: string | null
       }
       header?: never
       path?: never
@@ -2046,7 +3415,9 @@ export interface operations {
   }
   list_task_controls_api_tasks_controls_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2060,6 +3431,15 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['TaskControl'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }
@@ -2198,7 +3578,9 @@ export interface operations {
   }
   list_pending_misconceptions_api_misconceptions_pending_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2212,6 +3594,15 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Misconception'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }
@@ -2253,7 +3644,9 @@ export interface operations {
   }
   list_escalations_api_escalations_get: {
     parameters: {
-      query?: never
+      query?: {
+        class_id?: string | null
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2267,6 +3660,15 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Escalation'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }
@@ -3000,6 +4402,1089 @@ export interface operations {
         }
         content: {
           'text/event-stream': unknown
+        }
+      }
+    }
+  }
+  list_drafts_api_homework_drafts_get: {
+    parameters: {
+      query?: {
+        class_id?: string | null
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftSummary'][]
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  create_draft_api_homework_drafts_post: {
+    parameters: {
+      query?: never
+      header: {
+        'Idempotency-Key': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'multipart/form-data': components['schemas']['Body_create_draft_api_homework_drafts_post']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HomeworkDraft']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  get_draft_api_homework_drafts__draft_id__get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        draft_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HomeworkDraft']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  patch_draft_api_homework_drafts__draft_id__patch: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        draft_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DraftUpdate']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HomeworkDraft']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  retry_sources_api_homework_drafts__draft_id__parse_retries_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        draft_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RetrySources']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HomeworkDraft']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  add_sources_api_homework_drafts__draft_id__sources_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        draft_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'multipart/form-data': components['schemas']['Body_add_sources_api_homework_drafts__draft_id__sources_post']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HomeworkDraft']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  get_source_api_homework_drafts__draft_id__sources__source_id__get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        draft_id: string
+        source_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': unknown
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  preview_publication_api_homework_drafts__draft_id__publish_preview_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        draft_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PublishSelection']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PublishPreview']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  publish_draft_api_homework_drafts__draft_id__publish_post: {
+    parameters: {
+      query?: never
+      header: {
+        'Idempotency-Key': string
+      }
+      path: {
+        draft_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PublishSelection']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Publication']
+        }
+      }
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Publication']
+        }
+      }
+      /** @description Accepted */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Publication']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Bad Gateway */
+      502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  get_publication_api_homework_publications__publication_id__get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        publication_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Publication']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  retry_publication_workflow_api_homework_publications__publication_id__workflow_retries_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        publication_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Publication']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  get_publication_progress_api_homework_publications__publication_id__progress_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        publication_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PublicationProgress']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
         }
       }
     }

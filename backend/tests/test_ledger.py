@@ -298,9 +298,13 @@ def test_replace_cannot_overwrite_evidence(session):
     with pytest.raises(IntegrityError, match="append-only"):
         session.execute(
             text(
-                "INSERT OR REPLACE INTO evidence SELECT id, student_id, knowledge_point_id, kind, "
-                "dimension, task_id, item_id, student_answer, correct_answer, predictions, "
-                "is_correct, matched_misconception_id, judged_by, 'replaced', teaching_date "
+                "INSERT OR REPLACE INTO evidence "
+                "(id, student_id, knowledge_point_id, kind, dimension, task_id, item_id, "
+                "student_answer, correct_answer, predictions, is_correct, "
+                "matched_misconception_id, judged_by, reason, teaching_date, class_id) "
+                "SELECT id, student_id, knowledge_point_id, kind, dimension, task_id, item_id, "
+                "student_answer, correct_answer, predictions, is_correct, "
+                "matched_misconception_id, judged_by, 'replaced', teaching_date, class_id "
                 "FROM evidence"
             )
         )

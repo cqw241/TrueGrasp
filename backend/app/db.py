@@ -4,11 +4,14 @@ from collections.abc import Iterator
 from functools import lru_cache
 from pathlib import Path
 
-from sqlalchemy import Engine, event
+from sqlalchemy import Engine, event, inspect, text
 from sqlmodel import Session, SQLModel, create_engine
 
+import app.classroom  # noqa: F401
 import app.clock.storage  # noqa: F401  注册时钟私有表
 import app.contracts.entities  # noqa: F401  注册全部表
+import app.homework.storage  # noqa: F401  注册作业草稿与原文件表
+import app.orchestration.storage  # noqa: F401
 from app.config import get_settings
 
 
@@ -39,6 +42,28 @@ def init_db(engine: Engine | None = None) -> None:
 
     business_engine = engine or get_engine()
     SQLModel.metadata.create_all(business_engine)
+    # Existing SQLite files predate class ownership. NULL is intentionally unassigned.
+    # Adding a nullable column leaves the append-only evidence trigger and row IDs intact.
+    with business_engine.begin() as connection:
+        connection.execute(text("BEGIN IMMEDIATE"))
+        for table in (
+            "teaching_goal",
+            "misconception",
+            "item",
+            "evidence",
+            "task",
+            "event",
+            "question_photo",
+        ):
+            if "class_id" not in {
+                column["name"] for column in inspect(connection).get_columns(table)
+            }:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {table} ADD COLUMN class_id VARCHAR REFERENCES classroom(id)"
+                    )
+                )
+                connection.execute(text(f"CREATE INDEX ix_{table}_class_id ON {table}(class_id)"))
     with Session(business_engine) as session:
         if session.get(KnowledgePoint, PENDING_KNOWLEDGE_POINT_ID) is None:
             session.add(

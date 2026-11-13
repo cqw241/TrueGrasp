@@ -15,8 +15,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { MutationError } from './mutation-error'
 import { useInvalidate, usePointNames } from './shared'
 
-export function PendingMisconceptionsPanel() {
-  const pending = api.useQuery('get', '/api/misconceptions/pending')
+export function PendingMisconceptionsPanel({ classId }: { classId: string }) {
+  const pending = api.useQuery('get', '/api/misconceptions/pending', {
+    params: { query: { class_id: classId } },
+  })
   return (
     <Card>
       <CardHeader>
