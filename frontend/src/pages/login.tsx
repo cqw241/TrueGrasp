@@ -179,7 +179,7 @@ export default function Login() {
               : '还没有教师账号？注册教师账号'}
           </Button>
           <p className="text-muted-foreground text-xs leading-6">
-            教师可自行注册。学生请使用教师发放的登录设置链接，登录后仅可查看本人的任务与进度。
+            学生请使用教师发放的登录设置链接。
           </p>
         </form>
       </section>

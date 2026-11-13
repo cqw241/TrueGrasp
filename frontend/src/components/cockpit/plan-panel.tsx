@@ -313,7 +313,7 @@ function OverrideForm({ task, onDone }: { task: Task; onDone: () => void }) {
         <SheetTitle>修改计划</SheetTitle>
         <SheetDescription>
           {studentName(task.student_id)} · {taskTypeLabel[task.type]} ·{' '}
-          {pointName(task.knowledge_point_id)}。修改后 Agent 不会再改回
+          {pointName(task.knowledge_point_id)}
         </SheetDescription>
       </SheetHeader>
       <div className="flex-1 space-y-4 px-4">

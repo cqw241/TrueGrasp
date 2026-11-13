@@ -64,7 +64,7 @@ export function TaskAnswer({ taskId }: { taskId: number }) {
       )}
       {phase === 'failed' && (
         <p role="alert" className="text-sm">
-          任务处理失败。可以从当前进度继续，无需重新上传已经提交的答案。
+          处理失败，请点击“继续处理”。
         </p>
       )}
       {(phase === 'idle' || phase === 'failed') && (
@@ -356,7 +356,7 @@ function AnswerEditor({
           )}
           {replacement && (
             <div className="bg-muted space-y-2 rounded-md p-3 text-sm">
-              <p>新照片已识别，当前答案仍保留。</p>
+              <p>新照片识别结果：</p>
               <Tex latex={replacement.latex} display />
               <Button
                 type="button"

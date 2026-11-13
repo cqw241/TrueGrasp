@@ -363,7 +363,7 @@ function StudentRow({ row }: { row: MemberView }) {
       </div>
       {confirm && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span>退班后保留学习历史，并停止本班未完成任务。</span>
+          <span>退班将停止该学生在本班未完成的任务。</span>
           <Button
             size="sm"
             variant="destructive"
@@ -389,10 +389,7 @@ function StudentRow({ row }: { row: MemberView }) {
       )}
       {url && (
         <div className="grid gap-2 rounded-md border p-3 text-sm">
-          <p>
-            账号：{issue.data.username}。链接有效期 24
-            小时，仅可使用一次，请单独发给该学生。
-          </p>
+          <p>账号：{issue.data.username}。链接在 24 小时内有效，使用后失效。</p>
           <div className="flex flex-wrap gap-2">
             <Input
               className="min-w-0 flex-1"

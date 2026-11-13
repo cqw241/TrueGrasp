@@ -132,7 +132,7 @@ export function AskQuestion({
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-muted-foreground text-sm">
-          说出哪道题没做出来。辅导老师不会直接给答案，会先请你试一试，再一层层提示。
+          输入题目和你的疑问，也可以上传照片。
         </p>
         <Button
           type="button"
