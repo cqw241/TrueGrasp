@@ -1,0 +1,23 @@
+[Unit]
+Description=TrueGrasp dedicated HTTPS gateway
+Wants=network-online.target truegrasp.service
+After=network-online.target truegrasp.service
+
+[Service]
+Type=simple
+LogsDirectory=truegrasp-gateway
+LogsDirectoryMode=0700
+ExecStartPre=/usr/bin/mkdir -p /var/lib/truegrasp-gateway/logs
+ExecStartPre=/usr/bin/nginx -t -p /var/lib/truegrasp-gateway/ -c /etc/truegrasp/nginx.conf
+ExecStart=/usr/bin/nginx -p /var/lib/truegrasp-gateway/ -c /etc/truegrasp/nginx.conf -g "daemon off;"
+ExecReload=/bin/kill -HUP $MAINPID
+KillSignal=SIGQUIT
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
