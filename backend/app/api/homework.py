@@ -12,14 +12,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 from starlette.concurrency import run_in_threadpool
 
-from app.classroom import owned_classes, write_lock
+from app.classroom import Enrollment, mastery_for, may_work, owned_classes, write_lock
+from app.contracts.api import DimensionResult
+from app.contracts.entities import Evidence, KnowledgePoint, Student, Task
+from app.contracts.enums import Dimension, EvidenceKind
 from app.homework.models import (
     DraftApiError,
     DraftSource,
     DraftSummary,
     DraftUpdate,
     HomeworkDraft,
+    HomeworkTaskProgress,
     Publication,
+    PublicationProgress,
     PublishPreview,
     PublishSelection,
     RetrySources,
@@ -43,6 +48,11 @@ from app.homework.service import (
     prepare_source,
 )
 from app.homework.storage import DraftRow, PublicationRow, SourceData
+from app.orchestration.storage import (
+    PendingWork,
+    WorkFailure,
+    teacher_has_student,
+)
 
 router = APIRouter(
     tags=["homework"],
@@ -378,3 +388,90 @@ def get_publication(publication_id: str, request: Request) -> Publication:
             raise ReviewError(404, "publication_not_found", "发布记录不存在")
         owned(session, row.draft_id, request)
         return projection(runtime, row)
+
+
+def authorized_publication(session: Session, publication_id: str, request: Request) -> Publication:
+    row = session.get(PublicationRow, publication_id)
+    if row is None:
+        raise ReviewError(404, "publication_not_found", "发布记录不存在")
+    owned(session, row.draft_id, request)
+    publication = Publication.model_validate(row.payload)
+    check_class(session, request.state.principal, publication.class_id)
+    return publication
+
+
+@router.post("/homework-publications/{publication_id}/workflow-retries", status_code=202)
+async def retry_publication_workflow(publication_id: str, request: Request) -> Publication:
+    runtime = request.app.state.orchestrator
+    with Session(runtime.engine) as session:
+        publication = authorized_publication(session, publication_id, request)
+        if publication.status != "published" or publication.import_result is None:
+            raise ReviewError(409, "not_published", "作业尚未成功导入，请先查看发布回执")
+    await runtime.retry_homework(publication.import_result.event_id)
+    return get_publication(publication_id, request)
+
+
+@router.get("/homework-publications/{publication_id}/progress")
+def get_publication_progress(publication_id: str, request: Request) -> PublicationProgress:
+    runtime = request.app.state.orchestrator
+    with Session(runtime.engine) as session:
+        publication = authorized_publication(session, publication_id, request)
+        row = session.get(PublicationRow, publication_id)
+        workflow = projection(runtime, row).workflow
+        tasks = session.exec(
+            select(Task)
+            .where(Task.id.in_(workflow.task_ids), Task.class_id == publication.class_id)
+            .order_by(Task.id)
+        ).all()
+        progress = []
+        for task in tasks:
+            student = session.get(Student, task.student_id) if task.student_id else None
+            membership = (
+                session.get(Enrollment, (publication.class_id, task.student_id))
+                if task.student_id
+                else None
+            )
+            point = session.get(KnowledgePoint, task.knowledge_point_id)
+            mastery = (
+                mastery_for(session, task.student_id, task.knowledge_point_id, publication.class_id)
+                if task.student_id
+                else None
+            )
+            evidence = session.exec(
+                select(Evidence)
+                .where(
+                    Evidence.task_id == task.id,
+                    Evidence.class_id == publication.class_id,
+                    Evidence.kind == EvidenceKind.VERIFICATION,
+                )
+                .order_by(Evidence.id)
+            ).all()
+            latest = {entry.dimension: entry for entry in evidence}
+            work = session.get(PendingWork, f"task:{task.id}")
+            progress.append(
+                HomeworkTaskProgress(
+                    task=task,
+                    student_name=student.name if student else None,
+                    student_number=membership.student_number if membership else None,
+                    knowledge_point_name=point.name if point else task.knowledge_point_id,
+                    mastery_state=mastery.state if mastery else None,
+                    verification=[
+                        DimensionResult(
+                            dimension=dimension,
+                            passed=entry.is_correct if (entry := latest.get(dimension)) else None,
+                            judged_by=entry.judged_by if entry else None,
+                            evidence_id=entry.id if entry else None,
+                        )
+                        for dimension in Dimension
+                    ],
+                    failed=bool(work and work.pending and session.get(WorkFailure, work.key)),
+                    teacher_takeover=teacher_has_student(session, task.student_id, task.class_id),
+                    can_work=may_work(session, task),
+                )
+            )
+        return PublicationProgress(
+            publication_id=publication_id,
+            class_id=publication.class_id,
+            workflow=workflow,
+            tasks=progress,
+        )

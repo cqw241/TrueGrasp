@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { MutationError } from './mutation-error'
+import { HomeworkFollowup } from './homework-workflow'
 
 const reviewLabels = {
   pending: '待核对',
@@ -151,6 +152,14 @@ export function HomeworkReview({
       )}
       {roster.error && <MutationError error={roster.error} />}
       {points.error && <MutationError error={points.error} />}
+      {draft.publication_ids.toReversed().map((id, i) => (
+        <HomeworkFollowup
+          key={id}
+          publicationId={id}
+          index={draft.publication_ids.length - i - 1}
+          latest={i === 0}
+        />
+      ))}
       {draft.records.slice(0, visible).map((record, index) => {
         const question = questions.get(record.question_id)
         return (
@@ -213,38 +222,6 @@ export function HomeworkReview({
           </ul>
         )}
       </div>
-      {publication.data && (
-        <div role="status" className="space-y-1 rounded-lg border p-3 text-sm">
-          <p className="font-medium">
-            {publication.data.status === 'published'
-              ? '发布成功'
-              : publication.data.status === 'publishing'
-                ? '正在正式导入…'
-                : '本次发布失败'}
-          </p>
-          {publication.data.import_result && (
-            <p>
-              已导入 {publication.data.import_result.evidence} 份作答，关联{' '}
-              {publication.data.import_result.students} 名学生。
-            </p>
-          )}
-          {publication.data.status === 'published' && (
-            <p>
-              {publication.data.workflow.state === 'planned'
-                ? `Agent 规划已完成，本次关联 ${publication.data.workflow.task_ids.length} 个任务。`
-                : publication.data.workflow.state === 'failed'
-                  ? '教学规划失败，等待恢复。'
-                  : '等待教学规划。'}
-            </p>
-          )}
-          {publication.data.error && (
-            <p className="text-destructive">{publication.data.error.message}</p>
-          )}
-          <p className="break-all text-xs text-muted-foreground">
-            回执：{publication.data.publication_id}
-          </p>
-        </div>
-      )}
       <MutationError error={publication.error} />
       {draft.edits.length > 0 && (
         <details className="rounded-lg border p-3 text-xs">

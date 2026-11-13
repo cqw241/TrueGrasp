@@ -4,6 +4,7 @@ import csv
 import io
 import json
 from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import date
 
@@ -111,6 +112,7 @@ class PreparedHomework:
     original_items: dict[str, dict | None]
     evidence: list[Evidence]
     class_id: str | None
+    existing_student_ids: set[str]
 
 
 class HomeworkImporter:
@@ -145,17 +147,41 @@ class HomeworkImporter:
         )
 
     async def import_rows(
-        self, rows: Sequence[HomeworkRow], teaching_date: date, *, class_id: str | None = None
+        self,
+        rows: Sequence[HomeworkRow],
+        teaching_date: date,
+        *,
+        class_id: str | None = None,
+        session: Session | None = None,
+        allow_new_students: bool = True,
+        validate_before_write: Callable[[Session], None] | None = None,
     ) -> HomeworkImportResult:
-        prepared = await self.prepare_rows(rows, teaching_date, class_id=class_id)
-        with ClassSession(self.engine, class_id) as session:
-            write_lock(session)
+        """Prepare outside the write transaction; caller-provided sessions own commit."""
+        if session is not None and session.get_bind() is not self.engine:
+            raise IngestError("导入 Session 必须使用同一业务数据库引擎")
+        prepared = await self.prepare_rows(
+            rows, teaching_date, class_id=class_id, allow_new_students=allow_new_students
+        )
+        owns_session = session is None
+        with (
+            ClassSession(self.engine, class_id) if owns_session else nullcontext(session) as session
+        ):
+            if owns_session:
+                write_lock(session)
+            if validate_before_write is not None:
+                validate_before_write(session)
             result, _ = self.write_prepared(session, prepared, teaching_date)
-            session.commit()
+            if owns_session:
+                session.commit()
             return result
 
     async def prepare_rows(
-        self, rows: Sequence[HomeworkRow], teaching_date: date, *, class_id: str | None = None
+        self,
+        rows: Sequence[HomeworkRow],
+        teaching_date: date,
+        *,
+        class_id: str | None = None,
+        allow_new_students: bool = True,
     ) -> PreparedHomework:
         """Only read and analyze; the caller can atomically commit the resulting business writes."""
         if not rows or len(rows) > MAX_ROWS:
@@ -177,6 +203,7 @@ class HomeworkImporter:
                 raise IngestError("请先导入知识点内容")
             items: dict[str, Item] = {}
             students: dict[str, Student] = {}
+            existing_student_ids: set[str] = set()
             original_items: dict[str, dict | None] = {}
             evidence = []
             for row in rows:
@@ -184,12 +211,16 @@ class HomeworkImporter:
                     raise IngestError("名单中存在不属于该班的学生")
                 student = students.get(row.student_id) or session.get(Student, row.student_id)
                 if student is None:
+                    if not allow_new_students:
+                        raise IngestError(f"学生不存在，发布不能隐式创建学生：{row.student_id}")
                     if not row.student_name:
                         raise IngestError(f"学生不存在且未提供 student_name：{row.student_id}")
                     student = Student(id=row.student_id, name=row.student_name)
                 elif row.student_name and student.name != row.student_name:
                     raise IngestError(f"学生姓名不一致：{row.student_id}")
                 students[student.id] = student
+                if student in session:
+                    existing_student_ids.add(student.id)
                 item = items.get(row.item_id) or session.get(Item, row.item_id)
                 if row.item_id not in original_items:
                     original_items[row.item_id] = item.model_dump(mode="json") if item else None
@@ -309,7 +340,9 @@ class HomeworkImporter:
                         teaching_date=teaching_date,
                     )
                 )
-            return PreparedHomework(students, items, original_items, evidence, class_id)
+            return PreparedHomework(
+                students, items, original_items, evidence, class_id, existing_student_ids
+            )
 
     def write_prepared(
         self, session: Session, prepared: PreparedHomework, teaching_date: date
@@ -321,8 +354,8 @@ class HomeworkImporter:
                 raise IngestError("导入期间班级名单已变更，请重新核对")
             current = session.get(Student, student_id)
             if current is None:
-                if class_id is not None:
-                    raise IngestError("学生已不存在，请重新核对名单")
+                if class_id is not None or student_id in prepared.existing_student_ids:
+                    raise IngestError("学生已变更，请刷新后重新确认名单")
                 session.add(student)
             elif current.name != student.name:
                 raise IngestError("导入期间学生信息已变更，请重新核对")

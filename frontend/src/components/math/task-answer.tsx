@@ -405,7 +405,7 @@ function AnswerEditor({
         <textarea
           aria-label="回复"
           className="bg-background min-h-24 w-full rounded-md border p-3"
-          placeholder={itemId ? '输入公式或说明卡在哪一步' : '输入回复'}
+          placeholder={itemId ? '输入公式、解题步骤，或询问为什么' : '输入回复'}
           value={answer}
           disabled={busy}
           onChange={(event) => setAnswer(event.target.value)}

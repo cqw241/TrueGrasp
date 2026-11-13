@@ -6,7 +6,9 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.contracts.api import HomeworkImportResult
+from app.contracts.api import DimensionResult, HomeworkImportResult
+from app.contracts.entities import Task
+from app.contracts.enums import MasteryState
 
 
 class DraftModel(BaseModel):
@@ -239,6 +241,25 @@ class Workflow(DraftModel):
     state: Literal["pending", "planned", "failed"] = "pending"
     task_ids: list[int] = Field(default_factory=list)
     error: PublicationError | None = None
+
+
+class HomeworkTaskProgress(DraftModel):
+    task: Task
+    student_name: str | None
+    student_number: str | None
+    knowledge_point_name: str
+    mastery_state: MasteryState | None
+    verification: list[DimensionResult]
+    failed: bool
+    teacher_takeover: bool
+    can_work: bool
+
+
+class PublicationProgress(DraftModel):
+    publication_id: str
+    class_id: str
+    workflow: Workflow
+    tasks: list[HomeworkTaskProgress]
 
 
 class Publication(DraftModel):

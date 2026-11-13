@@ -995,6 +995,40 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/homework-publications/{publication_id}/workflow-retries': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Retry Publication Workflow */
+    post: operations['retry_publication_workflow_api_homework_publications__publication_id__workflow_retries_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/homework-publications/{publication_id}/progress': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Publication Progress */
+    get: operations['get_publication_progress_api_homework_publications__publication_id__progress_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -1534,6 +1568,25 @@ export interface components {
       /** Evidence */
       evidence: number
     }
+    /** HomeworkTaskProgress */
+    HomeworkTaskProgress: {
+      task: components['schemas']['Task']
+      /** Student Name */
+      student_name: string | null
+      /** Student Number */
+      student_number: string | null
+      /** Knowledge Point Name */
+      knowledge_point_name: string
+      mastery_state: components['schemas']['MasteryState'] | null
+      /** Verification */
+      verification: components['schemas']['DimensionResult'][]
+      /** Failed */
+      failed: boolean
+      /** Teacher Takeover */
+      teacher_takeover: boolean
+      /** Can Work */
+      can_work: boolean
+    }
     /**
      * HypothesisStatus
      * @enum {string}
@@ -1965,6 +2018,16 @@ export interface components {
       message: string
       /** Retryable */
       retryable: boolean
+    }
+    /** PublicationProgress */
+    PublicationProgress: {
+      /** Publication Id */
+      publication_id: string
+      /** Class Id */
+      class_id: string
+      workflow: components['schemas']['Workflow']
+      /** Tasks */
+      tasks: components['schemas']['HomeworkTaskProgress'][]
     }
     /** PublishPreview */
     PublishPreview: {
@@ -2519,6 +2582,7 @@ export type HttpValidationError = components['schemas']['HTTPValidationError']
 export type HeatCell = components['schemas']['HeatCell']
 export type HomeworkDraft = components['schemas']['HomeworkDraft']
 export type HomeworkImportResult = components['schemas']['HomeworkImportResult']
+export type HomeworkTaskProgress = components['schemas']['HomeworkTaskProgress']
 export type HypothesisStatus = components['schemas']['HypothesisStatus']
 export type HypothesisUpdated = components['schemas']['HypothesisUpdated']
 export type HypothesisView = components['schemas']['HypothesisView']
@@ -2548,6 +2612,7 @@ export type Prediction = components['schemas']['Prediction']
 export type ProbeRecord = components['schemas']['ProbeRecord']
 export type Publication = components['schemas']['Publication']
 export type PublicationError = components['schemas']['PublicationError']
+export type PublicationProgress = components['schemas']['PublicationProgress']
 export type PublishPreview = components['schemas']['PublishPreview']
 export type PublishSelection = components['schemas']['PublishSelection']
 export type Question = components['schemas']['Question']
@@ -5187,6 +5252,176 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Publication']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  retry_publication_workflow_api_homework_publications__publication_id__workflow_retries_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        publication_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Publication']
+        }
+      }
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DraftApiError']
+        }
+      }
+    }
+  }
+  get_publication_progress_api_homework_publications__publication_id__progress_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        publication_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PublicationProgress']
         }
       }
       /** @description Unauthorized */

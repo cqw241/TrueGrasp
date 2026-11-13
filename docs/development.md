@@ -108,6 +108,21 @@ uv run pytest tests/test_orchestration.py -q
 
 验收覆盖完整教学链路、验证信息隔离、两个等待阶段及业务提交/checkpoint/调度之间的中断恢复、跨会话未答题指纹去重、失败重试、事件与任务去重、重规划与取消、到期任务、HTTP 异步受理以及 SSE 广播和订阅释放。
 
+### OPT-05 发布衔接与恢复
+
+OPT-05 的发布事务接入、网页跟进和失败恢复见 [OPT-05 接入与验收记录](reviews/OPT-05.md)。
+正式发布先调用 `HomeworkImporter.prepare_rows` 完成只读分析，再在发布方事务中调用
+`write_prepared`，将证据、事件、待办、记录映射与成功回执一次提交。兼容入口 `import_rows`
+仍可接收调用方业务 Session，不自行提交该 Session。
+`runtime.homework_workflow(event_id)` 读取持久化编排来源及失败状态，
+`await runtime.retry_homework(event_id)` 恢复原事件或失败任务。
+教师通过 `GET /api/homework-publications/{publication_id}/progress` 查看同班关联任务、
+当前掌握状态及各维独立验证证据；通过 `POST /api/homework-publications/{publication_id}/workflow-retries`
+恢复已发布作业的原工作。两个入口都检查教师、草稿与班级归属，不重新导入作业。
+网页在“作业上传与审核”中按发布批次显示教学跟进，支持自动刷新、展开证据及失败恢复。
+普通辅导阶段的 `answer-target.accepts_text` 为 true，允许文字步骤和概念追问；独立验证阶段保留原输入规则。
+辅导和验证回复先持久化再后台执行，服务重启可以恢复已经受理的作答，无需学生重新提交。
+
 ## T04 知识图谱与内容管线
 
 教学内容在 `content/lectures/`，每讲一个 YAML 文件，格式与填写说明见 [content/README.md](../content/README.md)，模板见 `content/template.yaml`。`app.knowledge` 提供以下命令（在 `backend` 目录运行）：

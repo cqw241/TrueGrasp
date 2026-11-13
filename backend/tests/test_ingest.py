@@ -658,3 +658,146 @@ def test_pending_listener_can_be_disabled(engine, tmp_path):
             assert planner.calls == [result.event_id]
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("commit", [True, False])
+def test_publication_owns_import_and_receipt_transaction(engine, commit):
+    from app.orchestration.storage import NodeReceipt
+
+    with Session(engine) as session:
+        session.add(Student(id="S01", name="学生S01"))
+        session.commit()
+
+    with Session(engine) as session:
+        result = asyncio.run(
+            HomeworkImporter(engine, Model()).import_rows(
+                [row()], TODAY, session=session, allow_new_students=False
+            )
+        )
+        event = session.get(Event, result.event_id)
+        evidence_ids = read_payload(event).evidence_ids
+        assert len(evidence_ids) == 1
+        session.add(NodeReceipt(key="publication:test", result={"evidence_ids": evidence_ids}))
+        # 导入结果已可建立来源映射，但监听连接在最终提交前看不到事件/待办。
+        with Session(engine) as observer:
+            assert observer.get(Event, result.event_id) is None
+            assert observer.get(PendingWork, f"event:{result.event_id}") is None
+        if commit:
+            session.commit()
+        else:
+            session.rollback()
+
+    with Session(engine) as session:
+        assert (session.get(NodeReceipt, "publication:test") is not None) == commit
+        for model in (Event, Evidence, Item, Mastery, PendingWork):
+            assert bool(session.exec(select(model)).all()) == commit
+        assert session.get(Student, "S01") is not None
+
+
+def test_publication_cannot_create_missing_student(engine):
+    model = Model()
+    with Session(engine) as session:
+        with pytest.raises(IngestError, match="不能隐式创建"):
+            asyncio.run(
+                HomeworkImporter(engine, model).import_rows(
+                    [row()], TODAY, session=session, allow_new_students=False
+                )
+            )
+        session.rollback()
+    assert not model.calls
+    assert_empty(engine)
+
+
+def test_publication_rechecks_membership_after_model_before_any_write(engine):
+    calls = []
+
+    def reject(session):
+        calls.append("membership rechecked")
+        assert not session.exec(select(Evidence)).all()
+        assert not session.exec(select(Event)).all()
+        raise IngestError("成员已经退班")
+
+    model = Model()
+    with Session(engine) as session:
+        with pytest.raises(IngestError, match="退班"):
+            asyncio.run(
+                HomeworkImporter(engine, model).import_rows(
+                    [row()], TODAY, session=session, validate_before_write=reject
+                )
+            )
+        session.rollback()
+    assert len(model.calls) == 1 and calls == ["membership rechecked"]
+    assert_empty(engine)
+
+
+def test_student_deleted_while_model_runs_is_not_recreated(engine):
+    with Session(engine) as session:
+        session.add(Student(id="S01", name="学生S01"))
+        session.commit()
+
+    class DeletingModel(Model):
+        async def generate(self, *args, **kwargs):
+            result = await super().generate(*args, **kwargs)
+            with Session(engine) as session:
+                session.delete(session.get(Student, "S01"))
+                session.commit()
+            return result
+
+    with pytest.raises(IngestError, match="学生已变更"):
+        run_import(engine, [row()], DeletingModel())
+    assert_empty(engine)
+
+
+def test_homework_failure_projection_retry_and_restart_keep_single_import(engine, tmp_path):
+    from app.contracts.entities import Task
+    from app.orchestration import EventBus, Orchestrator
+    from app.orchestration.storage import WorkFailure
+
+    async def scenario():
+        result = await HomeworkImporter(engine, Model()).import_rows([row()], TODAY)
+        planner = ImportPlanner()
+        planner.fail_event_id = result.event_id
+        checkpoint = str(tmp_path / "workflow.db")
+        async with Orchestrator.open(
+            engine, checkpoint, EventBus(), planner=planner, pending_poll_interval=None
+        ) as runtime:
+            with pytest.raises(ExceptionGroup):
+                await runtime.wait_idle()
+            view = runtime.homework_workflow(result.event_id)
+            assert view.state == "failed" and view.task_ids == []
+            with Session(engine) as session:
+                failure = session.get(WorkFailure, f"event:{result.event_id}")
+                assert failure.attempts == 1 and failure.error_type == "RuntimeError"
+
+        # 无 Agent 的只读进程依然能识别失败；不能把它显示成空任务/已成功。
+        async with Orchestrator.open(
+            engine, checkpoint, EventBus(), pending_poll_interval=None
+        ) as runtime:
+            assert runtime.homework_workflow(result.event_id).state == "failed"
+
+        async with Orchestrator.open(
+            engine, checkpoint, EventBus(), planner=planner, pending_poll_interval=None
+        ) as runtime:
+            with pytest.raises(ExceptionGroup):
+                await runtime.wait_idle()
+            planner.fail_event_id = None
+            await asyncio.gather(
+                runtime.retry_homework(result.event_id), runtime.retry_homework(result.event_id)
+            )
+            await runtime.wait_idle()
+            view = runtime.homework_workflow(result.event_id)
+            assert view.state == "planned" and len(view.task_ids) == 1 and view.error is None
+            # 已完成规划的重复恢复不重新导入或重新调用规划。
+            await runtime.retry_homework(result.event_id)
+            await runtime.wait_idle()
+            assert planner.calls == [result.event_id] * 3
+            with Session(engine) as session:
+                assert len(session.exec(select(Evidence)).all()) == 1
+                assert len(session.exec(select(Event)).all()) == 1
+                assert len(session.exec(select(Task)).all()) == 1
+                assert session.get(WorkFailure, f"event:{result.event_id}") is None
+
+        async with Orchestrator.open(engine, checkpoint, EventBus()) as runtime:
+            assert runtime.homework_workflow(result.event_id) == view
+
+    asyncio.run(scenario())

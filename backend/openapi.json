@@ -4163,6 +4163,220 @@
           }
         }
       }
+    },
+    "/api/homework-publications/{publication_id}/workflow-retries": {
+      "post": {
+        "tags": [
+          "homework"
+        ],
+        "summary": "Retry Publication Workflow",
+        "operationId": "retry_publication_workflow_api_homework_publications__publication_id__workflow_retries_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "publication_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Publication Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Publication"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/homework-publications/{publication_id}/progress": {
+      "get": {
+        "tags": [
+          "homework"
+        ],
+        "summary": "Get Publication Progress",
+        "operationId": "get_publication_progress_api_homework_publications__publication_id__progress_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "publication_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Publication Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationProgress"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5490,6 +5704,81 @@
         ],
         "title": "HomeworkImportResult"
       },
+      "HomeworkTaskProgress": {
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/Task"
+          },
+          "student_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Name"
+          },
+          "student_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Number"
+          },
+          "knowledge_point_name": {
+            "type": "string",
+            "title": "Knowledge Point Name"
+          },
+          "mastery_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MasteryState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verification": {
+            "items": {
+              "$ref": "#/components/schemas/DimensionResult"
+            },
+            "type": "array",
+            "title": "Verification"
+          },
+          "failed": {
+            "type": "boolean",
+            "title": "Failed"
+          },
+          "teacher_takeover": {
+            "type": "boolean",
+            "title": "Teacher Takeover"
+          },
+          "can_work": {
+            "type": "boolean",
+            "title": "Can Work"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task",
+          "student_name",
+          "student_number",
+          "knowledge_point_name",
+          "mastery_state",
+          "verification",
+          "failed",
+          "teacher_takeover",
+          "can_work"
+        ],
+        "title": "HomeworkTaskProgress"
+      },
       "HypothesisStatus": {
         "type": "string",
         "enum": [
@@ -6553,6 +6842,36 @@
           "retryable"
         ],
         "title": "PublicationError"
+      },
+      "PublicationProgress": {
+        "properties": {
+          "publication_id": {
+            "type": "string",
+            "title": "Publication Id"
+          },
+          "class_id": {
+            "type": "string",
+            "title": "Class Id"
+          },
+          "workflow": {
+            "$ref": "#/components/schemas/Workflow"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/HomeworkTaskProgress"
+            },
+            "type": "array",
+            "title": "Tasks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "publication_id",
+          "class_id",
+          "workflow",
+          "tasks"
+        ],
+        "title": "PublicationProgress"
       },
       "PublishPreview": {
         "properties": {

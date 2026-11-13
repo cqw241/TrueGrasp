@@ -38,6 +38,26 @@ class PendingWork(SQLModel, table=True):
     pending: bool = Field(default=True, index=True)
 
 
+class WorkFailure(SQLModel, table=True):
+    """可重启读取的失败摘要；不保存异常正文、模型响应或学生原始内容。"""
+
+    __tablename__ = "orchestration_failure"
+
+    key: str = Field(primary_key=True)
+    attempts: int = 1
+    error_type: str
+    failed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class EventTaskLink(SQLModel, table=True):
+    """事件到实际新建/复用任务的来源关系，不代替班级授权。"""
+
+    __tablename__ = "orchestration_event_task"
+
+    event_id: int = Field(primary_key=True, foreign_key="event.id")
+    task_id: int = Field(primary_key=True, foreign_key="task.id")
+
+
 class ItemExposure(SQLModel, table=True):
     __tablename__ = "orchestration_item_exposure"
 
@@ -144,6 +164,8 @@ def init_storage(engine: Engine) -> None:
         tables=[
             NodeReceipt.__table__,
             PendingWork.__table__,
+            WorkFailure.__table__,
+            EventTaskLink.__table__,
             ItemExposure.__table__,
             PlanningTaskContext.__table__,
             TeacherTaskControl.__table__,

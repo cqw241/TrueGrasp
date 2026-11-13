@@ -1,4 +1,6 @@
 import math
+import subprocess
+import sys
 
 import pytest
 
@@ -23,6 +25,24 @@ tools = SympyMathTools()
 )
 def test_equivalence(a, b, mode, variables, expected):
     assert tools.check_equivalent(a, b, mode, variables).equivalent is expected
+
+
+def test_periodic_domains_comparison_finishes_without_symbolic_set_intersection():
+    # Run in a bounded process so a regression cannot freeze the API/test event loop.
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from app.verify.tools import SympyMathTools; "
+            "from app.contracts.enums import EquivalenceMode; "
+            "result = SympyMathTools().check_equivalent("
+            "'1/cos(x)**2', '2/cos(2*x)**2', EquivalenceMode.EXPR, ['x']); "
+            "assert result.equivalent is False, result",
+        ],
+        check=True,
+        timeout=20,
+        capture_output=True,
+    )
 
 
 @pytest.mark.parametrize(

@@ -37,20 +37,30 @@ def _numeric(a: sp.Expr, b: sp.Expr) -> Equivalence:
     rng = random.Random(0)
     domains = {}
     for var in variables:
-        domain = sp.S.Reals
+        domains[var] = []
         for expr in (a, b):
             if expr.free_symbols <= {var}:
                 with contextlib.suppress(NotImplementedError):
-                    domain &= continuous_domain(expr, var, sp.S.Reals)
-        domains[var] = domain
+                    domain = continuous_domain(expr, var, sp.S.Reals)
+                    if domain is sp.S.EmptySet:
+                        return Equivalence(
+                            equivalent=None, method="none", detail="No real domain samples"
+                        )
+                    domains[var].append(domain)
 
     valid = 0
     for _ in range(128 if variables else 1):
         substitutions = {}
         for var in variables:
-            domain = domains[var]
-            intervals = domain.args if isinstance(domain, sp.Union) else (domain,)
-            intervals = [part for part in intervals if isinstance(part, sp.Interval)]
+            # Do not symbolically intersect periodic exclusion sets: SymPy can enter
+            # an unbounded Diophantine search. Sample from each domain separately;
+            # the real/finite checks below reject points invalid for either answer.
+            intervals = [
+                part
+                for domain in domains[var]
+                for part in (domain.args if isinstance(domain, sp.Union) else (domain,))
+                if isinstance(part, sp.Interval)
+            ]
             interval = rng.choice(intervals) if intervals else sp.Interval(-10, 10)
             lower = float(interval.start) if interval.start.is_finite else None
             upper = float(interval.end) if interval.end.is_finite else None
