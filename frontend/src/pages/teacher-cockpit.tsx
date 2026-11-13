@@ -8,14 +8,8 @@ import { PendingMisconceptionsPanel } from '@/components/cockpit/pending-misconc
 import { PlanPanel } from '@/components/cockpit/plan-panel'
 import { useInvalidate } from '@/components/cockpit/shared'
 import { PageHeader } from '@/components/layout/app-layout'
+import { Workspace, WorkspaceModule } from '@/components/layout/workspace'
 import { QueryView } from '@/components/states'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { useStreamEvent } from '@/hooks/use-event-stream'
 import { lectureLabel } from '@/lib/labels'
 
@@ -41,48 +35,66 @@ export default function TeacherCockpit() {
   )
 
   return (
-    <>
+    <div className="teacher-page">
       <PageHeader
         title="教师驾驶舱"
-        description="教学目标、班级达标情况、干预计划与转交列表"
+        description="从发现问题到验证掌握，让每一次教学干预都有依据"
+        actions={<ClockPanel />}
       />
-      <div className="grid gap-4">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <ClockPanel />
-          <OverviewPanel />
-          <div className="md:col-span-2 xl:col-span-1">
+      <Workspace>
+        <div className="workspace-column workspace-left">
+          <WorkspaceModule id="goals" title="教学目标">
             <GoalPanel />
+          </WorkspaceModule>
+          <WorkspaceModule id="issues" title="共性问题">
+            <IssuesPanel />
+          </WorkspaceModule>
+          <WorkspaceModule id="misconceptions" title="待审核错因">
+            <PendingMisconceptionsPanel />
+          </WorkspaceModule>
+        </div>
+        <div className="workspace-column workspace-center">
+          <WorkspaceModule
+            id="heatmap"
+            title="全书知识热力图"
+            className="heatmap-module"
+          >
+            <HeatmapPanel />
+          </WorkspaceModule>
+          <WorkspaceModule id="plan" title="干预计划">
+            <PlanPanel />
+          </WorkspaceModule>
+        </div>
+        <div className="workspace-column workspace-right">
+          <WorkspaceModule id="overview" title="班级达标情况">
+            <OverviewPanel />
+          </WorkspaceModule>
+          <WorkspaceModule id="escalations" title="教师接管与转交">
+            <EscalationsPanel />
+          </WorkspaceModule>
+          <div className="evidence-note">
+            <strong>以证据判断掌握</strong>
+            <p>诊断 → 针对性辅导 → 独立验证 → 延迟复测</p>
+            <span>尚无评估记录的知识点保留为“未评估”。</span>
           </div>
         </div>
-        <HeatmapPanel />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <IssuesPanel />
-          <EscalationsPanel />
-        </div>
-        <PlanPanel />
-        <PendingMisconceptionsPanel />
-      </div>
-    </>
+      </Workspace>
+    </div>
   )
 }
 
 function ClockPanel() {
   const clock = api.useQuery('get', '/api/clock')
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>教学进度</CardTitle>
-        <CardDescription>当前教学日期与所在章节</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <QueryView query={clock}>
-          {(data) => (
-            <p className="text-lg">
-              {data.teaching_date} · {lectureLabel(data.lecture)}
-            </p>
-          )}
-        </QueryView>
-      </CardContent>
-    </Card>
+    <div className="teaching-clock">
+      <span>教学进度</span>
+      <QueryView query={clock}>
+        {(data) => (
+          <p>
+            {data.teaching_date} · {lectureLabel(data.lecture)}
+          </p>
+        )}
+      </QueryView>
+    </div>
   )
 }

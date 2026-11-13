@@ -41,6 +41,13 @@ export default function StudentDesk() {
         title="学生辅导台"
         description="完成老师安排的任务，遇到不会的题可以随时提问"
       />
+      <div className="learning-strip" aria-label="学习流程">
+        <strong>你的学习路径</strong>
+        <span>诊断与辅导</span>
+        <span>独立验证</span>
+        <span>延迟复测</span>
+        <p>先尝试作答，再根据反馈继续练习。遇到困难可以随时提问。</p>
+      </div>
       <QueryView query={students} empty={<EmptyState title="暂时没有学生" />}>
         {(data) => {
           const selected =
@@ -125,8 +132,8 @@ function StudentTasks({
     (chosen === null ? defaultTask(list) : undefined)
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <Card>
+    <div className="student-workspace grid items-start gap-4 lg:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)]">
+      <Card className="student-task-list">
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>我的任务</CardTitle>
           <Button

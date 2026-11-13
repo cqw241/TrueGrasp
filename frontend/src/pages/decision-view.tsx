@@ -9,6 +9,7 @@ import {
   VerificationPanel,
 } from '@/components/decision/history-panels'
 import { PageHeader } from '@/components/layout/app-layout'
+import { Workspace, WorkspaceModule } from '@/components/layout/workspace'
 import {
   EmptyState,
   ErrorState,
@@ -270,51 +271,61 @@ function StudentDecisionContent({
           </Button>
         </CardContent>
       </Card>
-      <div
-        className={
-          showSession && task
-            ? 'grid items-start gap-4 lg:grid-cols-2'
-            : 'space-y-4'
-        }
+      <Workspace
+        className={showSession && task ? 'decision-with-session' : undefined}
       >
-        <div className="space-y-4">
-          {task?.id != null ? (
-            <DiagnosisPanel
-              key={task.id}
-              taskId={task.id}
-              studentId={studentId}
-            />
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>诊断与假设</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <EmptyState title="暂无辅导任务" />
-              </CardContent>
-            </Card>
-          )}
-          <TimelinePanel studentId={studentId} points={points} />
+        <div className="workspace-column decision-diagnosis">
+          <WorkspaceModule id="diagnosis" title="诊断与假设">
+            {task?.id != null ? (
+              <DiagnosisPanel
+                key={task.id}
+                taskId={task.id}
+                studentId={studentId}
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>诊断与假设</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <EmptyState title="暂无辅导任务" />
+                </CardContent>
+              </Card>
+            )}
+          </WorkspaceModule>
+        </div>
+        <div className="workspace-column decision-history">
+          <WorkspaceModule id="timeline" title="学习时间线">
+            <TimelinePanel studentId={studentId} points={points} />
+          </WorkspaceModule>
           {pointId && (
-            <VerificationPanel
-              key={pointId}
-              studentId={studentId}
-              pointId={pointId}
-            />
+            <WorkspaceModule id="verification" title="独立验证依据">
+              <VerificationPanel
+                key={pointId}
+                studentId={studentId}
+                pointId={pointId}
+              />
+            </WorkspaceModule>
           )}
         </div>
         {showSession && task?.id != null && (
-          <Card>
-            <CardHeader>
-              <CardTitle>学生辅导会话</CardTitle>
-              <CardDescription>当前选择的辅导任务</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <TaskSession key={task.id} taskId={task.id} />
-            </CardContent>
-          </Card>
+          <WorkspaceModule
+            id="session"
+            title="学生辅导会话"
+            className="decision-session"
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle>学生辅导会话</CardTitle>
+                <CardDescription>当前选择的辅导任务</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TaskSession key={task.id} taskId={task.id} />
+              </CardContent>
+            </Card>
+          </WorkspaceModule>
         )}
-      </div>
+      </Workspace>
     </div>
   )
 }

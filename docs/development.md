@@ -134,7 +134,8 @@ T05 合并前，入库检查跳过 `verify_item` 和 `check_distinct`，并给�
 | `api/stream.ts`、`hooks/use-event-stream.ts` | `useStreamEvent('task_changed', handler)` 订阅一种 SSE 事件；`useStreamStatus()` 读取连接状态。全站共用一条连接，出错后重新连上时自动让所有查询重新拉取 |
 | `components/math/` | `<Tex latex display?>` 渲染一段 LaTeX；`<MathText text>` 渲染夹杂 `$…$`、`$$…$$`、`\(…\)`、`\[…\]` 的文字（题干、辅导消息）；`<MathInput value onChange onSubmit?>` 是受控的 MathLive 输入框，始终显示 `value`，父组件不接受或改写输入时随之还原；回车触发 `onSubmit` |
 | `components/states.tsx` | `EmptyState`、`ErrorState`、`LoadingState`；`<QueryView query>` 统一处理一个查询的加载、出错和无数据。后端返回 501 时显示“功能开发中” |
-| `components/layout/app-layout.tsx` | 布局与 `PageHeader`。桌面（≥1024px）固定侧边栏，平板和手机用顶部栏加抽屉导航 |
+| `components/layout/app-layout.tsx` | 布局与 `PageHeader`。桌面横向导航，平板和手机使用抽屉导航 |
+| `components/layout/workspace.tsx` | 模块总览和原位展开。组件保持挂载，保留草稿和筛选；Esc 返回并恢复焦点，嵌套表单优先处理 Esc |
 | `lib/labels.ts` | 后端枚举值到中文名称的映射，以及 `lectureLabel(9)` → “第九讲” |
 
 shadcn/ui 组件用 `npx shadcn@latest add <组件>` 添加到 `components/ui/`。项目使用 TypeScript 7，它不提供旧版编译器 API，所以 `gen:api` 通过 `npx` 在独立环境中运行 openapi-typescript 和 TypeScript 5。

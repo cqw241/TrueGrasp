@@ -3,6 +3,8 @@ import {
   LayoutDashboard,
   Menu,
   Network,
+  BookOpen,
+  LogOut,
   type LucideIcon,
 } from 'lucide-react'
 import { Suspense, useState, type ReactNode } from 'react'
@@ -28,19 +30,22 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
 
 function Brand() {
   return (
-    <div className="flex items-baseline gap-2">
-      <span className="text-lg font-semibold">真懂 AI</span>
-      <span className="text-muted-foreground hidden text-xs sm:inline">
-        高等数学自主教学
+    <div className="brand">
+      <span className="brand-symbol">
+        <BookOpen size={21} aria-hidden />
       </span>
+      <div>
+        <span className="brand-name">真懂 AI</span>
+        <span className="brand-caption">高等数学自主教学</span>
+      </div>
     </div>
   )
 }
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   return (
-    <nav className="flex flex-col gap-1">
+    <nav className="workspace-nav" aria-label="主要导航">
       {NAV.filter(
         ({ to }) => user?.role === 'teacher' || to === '/student',
       ).map(({ to, label, icon: Icon }) => (
@@ -50,7 +55,7 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
+              'nav-item flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
               isActive
                 ? 'bg-secondary text-secondary-foreground font-medium'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -61,13 +66,6 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
           {label}
         </NavLink>
       ))}
-      <Button
-        variant="ghost"
-        className="justify-start"
-        onClick={() => void logout()}
-      >
-        退出登录
-      </Button>
     </nav>
   )
 }
@@ -101,44 +99,66 @@ function StreamIndicator({ compact = false }: { compact?: boolean }) {
 }
 
 /**
- * 三档屏幕：桌面（≥1024px）固定侧边栏；平板与手机顶部栏 + 抽屉导航。
- * 内容区边距随宽度收窄，页面自身的栅格用 md:/lg: 断点适配。
+ * 桌面横向导航；平板与手机用抽屉导航。教师模块可在总览和展开视图间切换。
  */
 export function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const { user, logout } = useAuth()
   return (
-    <div className="bg-background min-h-svh lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-svh flex-col gap-6 border-r p-4 lg:flex">
-        <Brand />
-        <NavItems />
-        <div className="mt-auto">
-          <StreamIndicator />
-        </div>
-      </aside>
-
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        跳到主要内容
+      </a>
       <div className="flex min-w-0 flex-col">
-        <header className="bg-background/95 sticky top-0 z-40 flex h-14 items-center gap-2 border-b px-3 backdrop-blur md:px-6 lg:hidden">
-          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="打开导航">
-                <Menu />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-64 gap-6 p-4">
-              <SheetTitle>
-                <Brand />
-              </SheetTitle>
-              <SheetDescription className="sr-only">页面导航</SheetDescription>
-              <NavItems onNavigate={() => setMenuOpen(false)} />
-            </SheetContent>
-          </Sheet>
+        <header className="app-topbar">
+          <div className="lg:hidden">
+            <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="打开导航">
+                  <Menu />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-64 gap-6 p-4">
+                <SheetTitle>
+                  <Brand />
+                </SheetTitle>
+                <SheetDescription className="sr-only">
+                  页面导航
+                </SheetDescription>
+                <NavItems onNavigate={() => setMenuOpen(false)} />
+              </SheetContent>
+            </Sheet>
+          </div>
           <Brand />
-          <div className="ml-auto">
-            <StreamIndicator compact />
+          <div className="desktop-nav">
+            <NavItems />
+          </div>
+          <div className="topbar-account">
+            <div>
+              <span className="hidden xl:block">
+                <StreamIndicator />
+              </span>
+              <span className="xl:hidden">
+                <StreamIndicator compact />
+              </span>
+            </div>
+            <span className="account-name">
+              {user?.role === 'teacher' ? '教师' : '学生'}
+              <span className="hidden sm:inline"> / {user?.username}</span>
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="退出登录"
+              title="退出登录"
+              onClick={() => void logout()}
+            >
+              <LogOut />
+            </Button>
           </div>
         </header>
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8">
+        <main id="main-content" tabIndex={-1} className="app-main">
           <Suspense fallback={<LoadingState />}>
             <Outlet />
           </Suspense>
@@ -158,7 +178,7 @@ export function PageHeader({
   actions?: ReactNode
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="page-header">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {description && (
