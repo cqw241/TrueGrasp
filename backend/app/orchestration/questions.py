@@ -28,6 +28,10 @@ from app.orchestration.storage import (
 )
 from app.verify.tools import stem_fingerprint
 
+SOLUTION_LEVEL = 4
+AFTER_SOLUTION = "有哪一步不清楚可以继续问我；觉得理解了就告诉我，我们用一道新题检查一下。"
+READY_MESSAGE = "好的，接下来用一道没见过的同类题独立检查一下。"
+
 
 def _reject_open_verification(session, student_id, stem, fingerprint: str | None = None):
     answered = (
@@ -254,11 +258,16 @@ async def question_turn(runtime, state) -> dict:
     if blocked:
         return _reply(history, blocked, finished=True)
     if first_turn and not attempt:
-        prompt = " ".join(clarifications) if clarifications else ""
-        prompt = (prompt + " " if prompt else "") + "请先写下你的尝试，或说说你卡在哪一步。"
+        # Let the model decide how to open: explain a concept directly, or frame the
+        # problem and invite an attempt. Clarifications from interpretation stay visible.
+        text = await runtime.questions.discuss(
+            item, item.stem, "opening", images=images, history=history
+        )
+        prompt = " ".join([*clarifications, text]) if clarifications else text
         return _reply(history, prompt, item_id=item.id)
 
     level = state.get("question_hint", 0)
+    solution_shown = level >= SOLUTION_LEVEL
     # Leaving the DiagnosticTutor resumes work on the student's original problem.
     if state["phase"] == "question_diagnosis" and incoming is None:
         attempt = state.get("question_attempt", "")
@@ -279,6 +288,24 @@ async def question_turn(runtime, state) -> dict:
 
     if review.intent == "correction":
         return await _correct(runtime, state, item, history, message, review, images)
+
+    if review.intent == "ready":
+        # Saying "I get it" is not evidence. Close the question so the planner schedules
+        # an unseen independent verification item.
+        return _reply(history, READY_MESSAGE, finished=True)
+
+    if solution_shown and review.intent != "attempt":
+        text = await runtime.questions.discuss(
+            item,
+            message,
+            review.intent,
+            images=images,
+            history=history,
+            level=level,
+            last_hint=last_hint,
+            solution_shown=True,
+        )
+        return _reply(history, text, item_id=item.id)
 
     if review.intent == "hint_request":
         return await _next_hint(
@@ -321,6 +348,31 @@ async def question_turn(runtime, state) -> dict:
             judged_by=judged_by,
         )
         return _reply(history, "你的结果通过了核验。接下来可以做一道同类新题。", finished=True)
+
+    if solution_shown:
+        # After the full solution, a wrong attempt gets direct feedback instead of a
+        # fresh diagnosis; the attempt is still recorded as evidence.
+        if check is not None:
+            _record_attempt(
+                runtime,
+                state,
+                item,
+                review.final_answer or message,
+                correct=check,
+                judged_by=judged_by,
+                observation=review.observation,
+            )
+        text = await runtime.questions.discuss(
+            item,
+            message,
+            "other",
+            images=images,
+            history=history,
+            level=level,
+            last_hint=last_hint,
+            solution_shown=True,
+        )
+        return _reply(history, text, item_id=item.id)
 
     should_diagnose = (
         item.spec is not None
@@ -423,7 +475,7 @@ async def _next_hint(runtime, state, item, history, attempt, observation, confir
         history=history,
         last_hint=last_hint,
     )
-    if next_level >= 4:
+    if next_level >= SOLUTION_LEVEL:
         label = (
             f"核验结果：${item.answer}$"
             if item.spec is not None and item.answer
@@ -431,8 +483,12 @@ async def _next_hint(runtime, state, item, history, attempt, observation, confir
             if item.answer
             else ""
         )
-        content = f"{text}\n\n{label}" if label else text
-        return _reply(history, content, finished=True, solution=True)
+        content = "\n\n".join(part for part in (text, label, AFTER_SOLUTION) if part)
+        # Keep the conversation open: the student can still ask about the solution.
+        return {
+            **_reply(history, content, solution=True, item_id=item.id),
+            "question_hint": next_level,
+        }
     return {
         **_reply(history, text, hint=next_level, item_id=item.id),
         "question_hint": next_level,

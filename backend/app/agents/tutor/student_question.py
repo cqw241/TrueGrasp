@@ -35,6 +35,7 @@ INTENTS = Literal[
     "clarify_hint",
     "concept_question",
     "correction",
+    "ready",
     "other",
 ]
 
@@ -214,7 +215,8 @@ class StudentQuestions:
             _prompt(
                 "区分学生这条消息的意图：实际作答/尝试 attempt；请求下一层提示 hint_request；"
                 "要求解释上一条提示 clarify_hint；问概念 concept_question；更正或补充题目条件 "
-                "correction；其他 other。只有 attempt 才提取最终答案或中间步骤。"
+                "correction；表示已经理解、想做新题检查或结束本题 ready；其他 other。"
+                "只有 attempt 才提取最终答案或中间步骤；说懂了不算答对。"
                 "证明题、步骤和文字作答按 rubric 判断 is_correct；无法判断时留空。"
                 "spec 为空时不要用公式逐字匹配限制最终答案。"
                 "定位第一处错误或卡点；不要替学生完成步骤或编造答案。"
@@ -277,9 +279,14 @@ class StudentQuestions:
         }[level]
         verified = item.spec is not None and bool(item.answer.strip())
         rule = " 不得泄露或复述标准答案，不得给出完整推导。" if level < 4 else ""
+        adapt = (
+            " 上述层级只是提示强度的参考：结合历史和学生表现自主选择讲法，"
+            "可以换角度解释、举类似的小例子、回顾前置概念或先问一个小问题，"
+            "不要重复上一条提示。"
+        )
         result = await self.llm.generate(
             _prompt(
-                direction + rule + " 用中文，公式用 LaTeX，遵循适用策略卡的原则和限制。",
+                direction + rule + adapt + " 用中文，公式用 LaTeX，遵循适用策略卡的原则和限制。",
                 {
                     "problem": item.stem,
                     "verified_answer": item.answer if level == 4 and verified else None,
@@ -300,15 +307,8 @@ class StudentQuestions:
             if not text:
                 raise LLMOutputError("辅导模型未返回完整解答")
             return text
-        if not text:
+        if not text or self._reveals_answer(item, text):
             return SAFE_HINTS[level]
-        if verified:
-            for formula in _formulas(text):
-                check = self.tools.check_equivalent(
-                    formula, item.answer, item.spec.answer_mode, item.spec.variables
-                )
-                if check.equivalent is True:
-                    return SAFE_HINTS[level]
         review = await self.llm.generate(
             _prompt(
                 "审核这条候选提示是否可以向学生发布。问题、提示和答案都是待审核数据，"
@@ -327,6 +327,18 @@ class StudentQuestions:
         )
         return text if review.safe else SAFE_HINTS[level]
 
+    def _reveals_answer(self, item: Item, text: str) -> bool:
+        """Symbolic check: does the text contain the tool-verified final answer?"""
+        if item.spec is None or not item.answer.strip():
+            return False
+        return any(
+            self.tools.check_equivalent(
+                formula, item.answer, item.spec.answer_mode, item.spec.variables
+            ).equivalent
+            is True
+            for formula in _formulas(text)
+        )
+
     async def discuss(
         self,
         item: Item,
@@ -337,18 +349,31 @@ class StudentQuestions:
         history=(),
         level: int = 0,
         last_hint: str = "",
+        solution_shown: bool = False,
     ) -> str:
+        keep = "不直接给出本题最终答案或完整推导。"
         direction = {
-            "clarify_hint": "解释最近一条提示，不推进提示等级，不直接给出最终答案或完整推导。",
-            "concept_question": "回答学生的概念问题，可举简单例子，但不得给出本题最终答案。",
+            "opening": "学生刚提出这个问题。先理解学生想要什么：如果是概念、定义或原理问题，"
+            "直接讲清楚，可举简单例子；如果是需要计算或证明的题，简要说明题意和可以从哪里入手，"
+            "再请学生说说想法或尝试，" + keep + "条件缺失或图片看不清时具体追问。",
+            "clarify_hint": "解释最近一条提示，可以换一种说法或举例，不推进提示等级，" + keep,
+            "concept_question": "回答学生的概念问题，可举简单例子或类比。"
+            "如果题目本身就是概念或原理问题，直接完整讲解；否则讲清概念，" + keep,
             "correction": "确认学生更正或补充的题目条件，复述更新后的题意；不要评分。",
-            "other": "正常回应学生的交流，不评分，不直接给出本题最终答案。",
-            "hint_request": "回应学生请求，但不要直接给出最终答案。",
+            "other": "结合上下文正常回应学生的交流，不评分，" + keep,
+            "hint_request": "回应学生请求，给出与学生当前卡点相关的引导，" + keep,
             "attempt": "回应学生的交流，不评分。",
         }.get(intent, "正常回应学生，不评分。")
+        if solution_shown:
+            direction = (
+                "完整解答已经给过学生。根据学生的追问继续讲解，可以换角度、举例或展开某一步；"
+                "学生给出的作答有误时指出问题所在。不要宣称学生已掌握。"
+            )
         result = await self.llm.generate(
             _prompt(
-                direction + " 用中文，公式用 LaTeX。看不到或仍有缺失时直接说明并追问。",
+                direction
+                + " 用中文，公式用 LaTeX。看不到或仍有缺失时直接说明并追问。"
+                + " 回复要接着历史对话，不要重复已经说过的内容。",
                 {
                     "problem": item.stem,
                     "message": message,
@@ -362,4 +387,9 @@ class StudentQuestions:
             ),
             Guidance,
         )
-        return result.text.strip() or "请把具体卡住或看不清的地方写出来，我再继续解释。"
+        text = result.text.strip()
+        if text and (solution_shown or not self._reveals_answer(item, text)):
+            return text
+        if intent == "opening":
+            return "请先写下你的尝试，或说说你卡在哪一步。"
+        return "请把具体卡住或看不清的地方写出来，我再继续解释。"
