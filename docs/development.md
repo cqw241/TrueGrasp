@@ -108,6 +108,14 @@ uv run pytest tests/test_orchestration.py -q
 
 验收覆盖完整教学链路、验证信息隔离、两个等待阶段及业务提交/checkpoint/调度之间的中断恢复、跨会话未答题指纹去重、失败重试、事件与任务去重、重规划与取消、到期任务、HTTP 异步受理以及 SSE 广播和订阅释放。
 
+### OPT-05 发布衔接与恢复
+
+OPT-05 的发布事务接入、作业编排状态和失败恢复见 [OPT-05 后端衔接记录](reviews/OPT-05.md)。
+`HomeworkImporter.import_rows` 可接收调用方业务 Session，发布方在同一事务写入回执后再提交；
+`runtime.homework_workflow(event_id)` 读取真实编排状态，`await runtime.retry_homework(event_id)`
+恢复原事件或失败任务。上述方法均为内部服务能力，调用方须落实教师/班级授权及发布幂等。
+辅导和验证回复先持久化再后台执行，服务重启可以恢复已经受理的作答，无需学生重新提交。
+
 ## T04 知识图谱与内容管线
 
 教学内容在 `content/lectures/`，每讲一个 YAML 文件，格式与填写说明见 [content/README.md](../content/README.md)，模板见 `content/template.yaml`。`app.knowledge` 提供以下命令（在 `backend` 目录运行）：

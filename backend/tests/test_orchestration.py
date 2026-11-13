@@ -36,7 +36,7 @@ from app.contracts.values import Prediction
 from app.db import init_db, make_engine
 from app.main import create_app
 from app.orchestration import EventBus, OrchestrationError, Orchestrator, build_verifier_input
-from app.orchestration.storage import ItemExposure, PendingWork
+from app.orchestration.storage import ItemExposure, PendingWork, WorkFailure
 
 TODAY = date(2026, 9, 7)
 pytestmark = pytest.mark.anyio
@@ -420,8 +420,9 @@ async def test_slip_and_missing_misconception(business, tmp_path, dependencies):
         assert inp.confirmed_misconceptions == []
 
 
+@pytest.mark.parametrize("background", [False, True])
 async def test_judgement_failure_retries_without_duplicate_question(
-    business, tmp_path, dependencies
+    business, tmp_path, dependencies, background
 ):
     async with Orchestrator.open(
         business, str(tmp_path / "checkpoint.db"), EventBus(), **dependencies
@@ -433,16 +434,30 @@ async def test_judgement_failure_retries_without_duplicate_question(
         )
         question = (await runtime.get_messages(1))[-1].item.id
         dependencies["verifier"].fail_judgement = True
-        with pytest.raises(RuntimeError, match="判定失败"):
-            await runtime.submit_message(
-                1, MessageCreate(content="independent-answer", answering_item_id=question)
-            )
+        reply = MessageCreate(content="independent-answer", answering_item_id=question)
+        if background:
+            await runtime.enqueue_message(1, reply)
+            with pytest.raises(ExceptionGroup, match="编排后台执行失败"):
+                await runtime.wait_idle()
+            assert runtime.homework_workflow(1).state == "failed"
+        else:
+            with pytest.raises(RuntimeError, match="判定失败"):
+                await runtime.submit_message(1, reply)
         with Session(business) as session:
             assert session.get(Task, 1).status == TaskStatus.ACTIVE
             assert session.exec(select(Evidence).where(Evidence.task_id == 1)).all() == []
+            work = session.get(PendingWork, "task:1")
+            assert work.pending
+            assert work.payload["reply"]["content"] == "independent-answer"
+            if background:
+                assert session.get(WorkFailure, "task:1").error_type == "RuntimeError"
         dependencies["verifier"].fail_judgement = False
-        await runtime.start_task(1)
+        if background:
+            await runtime.retry_homework(1)
+        else:
+            await runtime.start_task(1)
         await runtime.wait_idle()
+        assert runtime.homework_workflow(1).state == "planned"
         messages = await runtime.get_messages(1)
         assert (
             sum(
@@ -453,6 +468,43 @@ async def test_judgement_failure_retries_without_duplicate_question(
         )
         with Session(business) as session:
             assert len(session.exec(select(Evidence).where(Evidence.task_id == 1)).all()) == 1
+            assert session.get(WorkFailure, "task:1") is None
+
+
+@pytest.mark.parametrize("verification", [False, True])
+async def test_accepted_reply_survives_restart_before_graph_runs(
+    business, tmp_path, dependencies, monkeypatch, verification
+):
+    checkpoint = str(tmp_path / "checkpoint.db")
+    async with Orchestrator.open(
+        business, checkpoint, EventBus(), pending_poll_interval=None, **dependencies
+    ) as runtime:
+        await runtime.handle_event(1)
+        await runtime.wait_idle()
+        if verification:
+            await runtime.submit_message(
+                1, MessageCreate(content="SECRET_TUTOR_ANSWER", answering_item_id="probe")
+            )
+            await runtime.wait_idle()
+        messages = await runtime.get_messages(1)
+        content = "independent-answer" if verification else "SECRET_TUTOR_ANSWER"
+        reply = MessageCreate(content=content, answering_item_id=messages[-1].item.id)
+        # Simulate exit after acceptance commits but before the background job runs.
+        monkeypatch.setattr(runtime, "_spawn", lambda key, action: None)
+        await runtime.enqueue_message(1, reply, expected_turn=len(messages))
+        assert await runtime.get_messages(1) == messages
+        with pytest.raises(OrchestrationError, match="正在处理上一条消息"):
+            await runtime.enqueue_message(1, reply, expected_turn=len(messages))
+
+    async with Orchestrator.open(business, checkpoint, EventBus(), **dependencies) as recovered:
+        await recovered.wait_idle()
+        messages = await recovered.get_messages(1)
+        assert sum(m.role == "user" and m.content == content for m in messages) == 1
+        assert recovered.homework_workflow(1).state == "planned"
+        with Session(business) as session:
+            assert not session.get(PendingWork, "task:1").pending
+            evidence = session.exec(select(Evidence).where(Evidence.task_id == 1)).all()
+            assert len(evidence) == int(verification)
 
 
 async def test_http_acceptance_and_validation(business, tmp_path, dependencies):
@@ -1049,11 +1101,17 @@ async def test_background_failure_can_resume(business, tmp_path, dependencies, c
         with pytest.raises(ExceptionGroup, match="编排后台执行失败"):
             await runtime.wait_idle()
         assert "task:1" in caplog.text
+        assert runtime.homework_workflow(1).state == "failed"
         with Session(business) as session:
             assert session.get(Task, 1).status == TaskStatus.ACTIVE
+            assert session.get(WorkFailure, "task:1").error_type == "RuntimeError"
         tutor.turn = original_turn
-        await runtime.start_task(1)
+        await runtime.retry_homework(1)
+        await runtime.wait_idle()
         assert (await runtime.get_messages(1))[-1].item.id == "probe"
+        assert runtime.homework_workflow(1).state == "planned"
+        with Session(business) as session:
+            assert session.get(WorkFailure, "task:1") is None
 
 
 async def test_planner_cancels_a_waiting_session(business, tmp_path, dependencies):

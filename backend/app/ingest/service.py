@@ -4,6 +4,7 @@ import csv
 import io
 import json
 from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 from datetime import date
 
 from pydantic import ValidationError
@@ -134,15 +135,31 @@ class HomeworkImporter:
         )
 
     async def import_rows(
-        self, rows: Sequence[HomeworkRow], teaching_date: date
+        self,
+        rows: Sequence[HomeworkRow],
+        teaching_date: date,
+        *,
+        session: Session | None = None,
+        allow_new_students: bool = True,
+        validate_before_write: Callable[[Session], None] | None = None,
     ) -> HomeworkImportResult:
+        """沿用一次导入算法；传入 session 时由调用方提交或回滚整个发布事务。
+
+        网页发布应禁止隐式创建学生，并在 validate_before_write 中重新校验
+        班级成员/确认版本。回调与业务写入在同一 Session 中，模型调用全部结束后执行。
+        返回事件的 evidence_ids 顺序与 rows 一致，可在提交前写来源映射及幂等回执。
+        只有提交成功后才可唤醒编排；本方法不负责发布鉴权或发布幂等。
+        """
+        owns_session = session is None
+        if session is not None and session.get_bind() is not self.engine:
+            raise IngestError("导入 Session 必须使用同一业务数据库引擎")
         if not rows or len(rows) > MAX_ROWS:
             raise IngestError(f"作业需包含 1 到 {MAX_ROWS} 份作答")
         keys = [(row.student_id, row.item_id) for row in rows]
         if len(keys) != len(set(keys)):
             raise IngestError("同批次学生和题目组合重复")
         # 模型调用前不写业务数据；任何行失败都不留下半批导入。
-        with Session(self.engine) as session:
+        with Session(self.engine) if owns_session else nullcontext(session) as session:
             points = {
                 point.id: point
                 for point in session.exec(select(KnowledgePoint)).all()
@@ -159,6 +176,8 @@ class HomeworkImporter:
             for row in rows:
                 student = students.get(row.student_id) or session.get(Student, row.student_id)
                 if student is None:
+                    if not allow_new_students:
+                        raise IngestError(f"学生不存在，发布不能隐式创建学生：{row.student_id}")
                     if not row.student_name:
                         raise IngestError(f"学生不存在且未提供 student_name：{row.student_id}")
                     student = Student(id=row.student_id, name=row.student_name)
@@ -280,6 +299,17 @@ class HomeworkImporter:
                         teaching_date=teaching_date,
                     )
                 )
+            # 模型调用期间成员或身份可能变化；不要把被删除的旧学生静默建回去。
+            for student_id, student in students.items():
+                current_name = session.exec(
+                    select(Student.name).where(Student.id == student_id)
+                ).one_or_none()
+                if current_name is None and (student in session or not allow_new_students):
+                    raise IngestError(f"学生已变更，请刷新后重新确认：{student_id}")
+                if current_name is not None and current_name != student.name:
+                    raise IngestError(f"学生姓名已变更，请刷新后重新确认：{student_id}")
+            if validate_before_write is not None:
+                validate_before_write(session)
             for student in students.values():
                 session.add(student)
             session.flush()
@@ -306,5 +336,6 @@ class HomeworkImporter:
             result = HomeworkImportResult(
                 event_id=event.id, students=len(students), items=len(items), evidence=len(ids)
             )
-            session.commit()
+            if owns_session:
+                session.commit()
             return result

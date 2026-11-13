@@ -6,7 +6,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -58,10 +58,12 @@ from app.orchestration.graphs import RunState, build_graph
 from app.orchestration.inputs import build_verifier_input
 from app.orchestration.storage import (
     QUESTION_FOLLOWUP,
+    EventTaskLink,
     NodeReceipt,
     PendingWork,
     PlanningTaskContext,
     TeacherTaskControl,
+    WorkFailure,
     init_storage,
     matches_teacher_override,
     question_photo_urls,
@@ -69,6 +71,7 @@ from app.orchestration.storage import (
     record_exposure,
     teacher_has_student,
 )
+from app.orchestration.workflow import HomeworkWorkflow, homework_event_ids, homework_workflow
 
 logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
@@ -191,14 +194,55 @@ class Orchestrator:
         with Session(self.engine) as session:
             if work := session.get(PendingWork, key):
                 work.pending = False
-                session.commit()
+            if failure := session.get(WorkFailure, key):
+                session.delete(failure)
+            session.commit()
+        self._failed_work.discard(key)
 
-    def _pending_question_reply(self, key: str) -> dict | None:
+    def homework_workflow(self, event_id: int) -> HomeworkWorkflow:
+        with Session(self.engine) as session:
+            return homework_workflow(session, event_id)
+
+    async def retry_homework(self, event_id: int) -> None:
+        """供授权后的发布服务恢复原事件/失败任务；不会重新导入或新建事件。"""
+        workflow = self.homework_workflow(event_id)
+        with Session(self.engine) as session:
+            event_keys = [
+                f"event:{i}" for i in homework_event_ids(session, event_id, workflow.task_ids)
+            ]
+            pending_events = {
+                work.key: dict(work.payload)
+                for work in session.exec(
+                    select(PendingWork).where(PendingWork.key.in_(event_keys), PendingWork.pending)
+                ).all()
+            }
+            failed_tasks = [
+                task_id
+                for task_id in workflow.task_ids
+                if session.get(WorkFailure, f"task:{task_id}") is not None
+                and self._pending(f"task:{task_id}")
+            ]
+        # 先检查接管、结束和日期约束，避免部分启动后才发现其他任务不可重试。
+        for task_id in failed_tasks:
+            snapshot = await self.graph.aget_state(self._config(f"task:{task_id}"))
+            task = self._check_task(
+                task_id, recovering=self._recovering_terminal(task_id, snapshot)
+            )
+            if task.due_date is not None and task.due_date > self._task_date(task, snapshot):
+                raise OrchestrationError(409, "任务尚未到期")
+        if pending_events:
+            self._require("planner")
+            for key, payload in pending_events.items():
+                self._spawn(key, lambda key=key, payload=payload: self._run_work(key, payload))
+        for task_id in failed_tasks:
+            await self.enqueue_start(task_id)
+
+    def _pending_reply(self, key: str) -> dict | None:
         with Session(self.engine) as session:
             work = session.get(PendingWork, key)
             return work.payload if work and work.pending and "reply" in work.payload else None
 
-    def _persist_question_reply(self, key, snapshot, body, teaching_date=None) -> dict:
+    def _persist_reply(self, key, snapshot, body, teaching_date=None) -> dict:
         today = teaching_date or (self.teaching_date() if self.teaching_date else None)
         payload = {
             "teaching_date": today.isoformat() if today else snapshot.values["teaching_date"],
@@ -322,6 +366,17 @@ class Orchestrator:
             except Exception as exc:
                 self._failed_work.add(key)
                 self._errors.append(exc)
+                with Session(self.engine) as session:
+                    if (work := session.get(PendingWork, key)) and work.pending:
+                        failure = session.get(WorkFailure, key)
+                        if failure is None:
+                            failure = WorkFailure(key=key, error_type=type(exc).__name__)
+                        else:
+                            failure.attempts += 1
+                            failure.error_type = type(exc).__name__
+                            failure.failed_at = datetime.now(UTC)
+                        session.add(failure)
+                        session.commit()
                 logger.exception("编排后台执行失败：%s", key)
             finally:
                 self._jobs.pop(key, None)
@@ -391,7 +446,7 @@ class Orchestrator:
             if task.due_date is not None and task.due_date > max(today, teaching_date):
                 raise OrchestrationError(409, "任务尚未到期")
             if snapshot.interrupts:
-                reply = self._pending_question_reply(key)
+                reply = self._pending_reply(key)
                 if reply and reply["turn"] == len(snapshot.values["messages"]):
                     await self._run_task(key, self._reply_command(reply))
                 else:
@@ -484,18 +539,8 @@ class Orchestrator:
             snapshot = await self._validate_message(
                 task_id, body, expected_turn=expected_turn, teaching_date=teaching_date
             )
-            if snapshot.values["phase"] in ("question", "question_diagnosis"):
-                payload = self._persist_question_reply(key, snapshot, body, teaching_date)
-                await self._run_task(key, self._reply_command(payload))
-                return
-            current_date = teaching_date or (self.teaching_date() if self.teaching_date else None)
-            await self._run_task(
-                key,
-                Command(
-                    resume=body.model_dump(mode="json"),
-                    update={"teaching_date": current_date.isoformat()} if current_date else None,
-                ),
-            )
+            payload = self._persist_reply(key, snapshot, body, teaching_date)
+            await self._run_task(key, self._reply_command(payload))
 
     async def enqueue_start(self, task_id: int) -> None:
         key = f"task:{task_id}"
@@ -511,7 +556,7 @@ class Orchestrator:
             today = self._task_date(task, snapshot)
             if task.due_date is not None and task.due_date > today:
                 raise OrchestrationError(409, "任务尚未到期")
-            if snapshot.interrupts and not self._pending_question_reply(key):
+            if snapshot.interrupts and not self._pending_reply(key):
                 return
             self._spawn(key, lambda: self.start_task(task_id))
 
@@ -526,13 +571,8 @@ class Orchestrator:
             if key in self._jobs:
                 raise OrchestrationError(409, "该任务正在处理上一条消息")
             snapshot = await self._validate_message(task_id, body, expected_turn=expected_turn)
-            if snapshot.values["phase"] in ("question", "question_diagnosis"):
-                self._persist_question_reply(key, snapshot, body)
-                self._spawn(key, lambda: self.start_task(task_id))
-                return
-            self._spawn(
-                key, lambda: self.submit_message(task_id, body, expected_turn=expected_turn)
-            )
+            self._persist_reply(key, snapshot, body)
+            self._spawn(key, lambda: self.start_task(task_id))
 
     async def get_messages(self, task_id: int, *, student_view: bool = False) -> list[ChatTurn]:
         with Session(self.engine) as session:
@@ -579,6 +619,7 @@ class Orchestrator:
                 return AnswerTarget(phase="idle", prompt=f"任务将在 {task.due_date} 开放。")
             item = session.get(Item, item_id) if item_id is not None else None
             stem = item.stem if item else ""
+            durable_failure = session.get(WorkFailure, key) is not None and self._pending(key)
         messages = snapshot.values.get("messages", [])
         prompt = next(
             (
@@ -590,7 +631,11 @@ class Orchestrator:
         )
         if processing or key in self._jobs:
             phase = "processing"
-        elif key in self._failed_work or (not snapshot.interrupts and snapshot.next):
+        elif (
+            durable_failure
+            or key in self._failed_work
+            or (not snapshot.interrupts and snapshot.next)
+        ):
             phase = "failed"
         else:
             phase = "waiting" if snapshot.interrupts else "idle"
@@ -647,6 +692,7 @@ class Orchestrator:
     async def _save_plan(self, state: RunState) -> dict:
         plan = PlannerOutput.model_validate(state["plan"])
         changed = []
+        linked_task_ids: set[int] = set()
         with Session(self.engine) as session:
             receipt_key = f"event:{state['event_id']}:save_plan"
             if receipt := session.get(NodeReceipt, receipt_key):
@@ -702,16 +748,21 @@ class Orchestrator:
                             Task.type != TaskType.QUESTION,
                         )
                     ).all()
-                    if any(
-                        (
-                            old_context.root_knowledge_point_id
-                            if (old_context := session.get(PlanningTaskContext, old.id))
-                            else old.knowledge_point_id
-                        )
-                        == context["root_knowledge_point_id"]
-                        or old.knowledge_point_id == planned.knowledge_point_id
+                    reused_active = [
+                        old.id
                         for old in active
-                    ):
+                        if (
+                            (
+                                old_context.root_knowledge_point_id
+                                if (old_context := session.get(PlanningTaskContext, old.id))
+                                else old.knowledge_point_id
+                            )
+                            == context["root_knowledge_point_id"]
+                            or old.knowledge_point_id == planned.knowledge_point_id
+                        )
+                    ]
+                    if reused_active:
+                        linked_task_ids.update(reused_active)
                         continue
                 existing = session.exec(
                     select(Task).where(
@@ -750,6 +801,7 @@ class Orchestrator:
                     if duplicate:
                         break
                 if duplicate:
+                    linked_task_ids.add(old.id)
                     continue
                 if (
                     task.type == TaskType.ESCALATION
@@ -784,6 +836,20 @@ class Orchestrator:
             if isinstance(payload, TaskDue) and payload.task_id not in task_ids:
                 self._task(session, payload.task_id)
                 task_ids.append(payload.task_id)
+            linked_task_ids.update(task_ids)
+            source_event_ids = {event.id}
+            if isinstance(payload, (AnswerSubmitted, TaskDue)):
+                source_event_ids.update(
+                    session.exec(
+                        select(EventTaskLink.event_id).where(
+                            EventTaskLink.task_id == payload.task_id
+                        )
+                    ).all()
+                )
+            for source_event_id in source_event_ids:
+                for task_id in linked_task_ids:
+                    if session.get(EventTaskLink, (source_event_id, task_id)) is None:
+                        session.add(EventTaskLink(event_id=source_event_id, task_id=task_id))
             changed.extend(created)
             dispatch = state.get("dispatch", True)
             result = {"task_ids": task_ids}
