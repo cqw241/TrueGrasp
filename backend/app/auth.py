@@ -122,6 +122,17 @@ class AuthStore:
             if student_id:
                 db.execute("DELETE FROM student_setup WHERE student_id=?", (student_id,))
 
+    def create_teacher(self, username: str, password: str) -> bool:
+        """Public signup is insert-only; never reset an existing account or its sessions."""
+        hashed = password_hash(password)
+        with self.connect() as db:
+            inserted = db.execute(
+                "INSERT INTO account(username,password_hash,role,student_id,teacher_id) "
+                "VALUES (?, ?, 'teacher', NULL, ?) ON CONFLICT(username) DO NOTHING",
+                (username, hashed, "tch_" + secrets.token_hex(16)),
+            )
+            return inserted.rowcount == 1
+
     def issue_setup(self, student_id: str, class_id: str) -> tuple[str, str]:
         """Return a one-time setup token; the stored value is a digest."""
         token = secrets.token_urlsafe(32)

@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input'
 import { BookOpen, ArrowRight, Check, Network } from 'lucide-react'
 
 export default function Login() {
-  const { user, login } = useAuth()
+  const { user, login, registerTeacher } = useAuth()
+  const [registering, setRegistering] = useState(false)
+  const [again, setAgain] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -14,18 +16,31 @@ export default function Login() {
   if (user)
     return (
       <Navigate
-        to={user.role === 'teacher' ? '/teacher' : '/student'}
+        to={
+          user.role === 'teacher'
+            ? registering
+              ? '/classes'
+              : '/teacher'
+            : '/student'
+        }
         replace
       />
     )
   async function submit(event: FormEvent) {
     event.preventDefault()
-    setBusy(true)
     setError('')
+    if (registering && password !== again) {
+      setError('两次输入的密码不一致')
+      return
+    }
+    setBusy(true)
     try {
-      await login(username, password)
-    } catch {
-      setError('登录失败，请检查账号、密码和网络连接')
+      if (registering) await registerTeacher(username.trim(), password)
+      else await login(username, password)
+    } catch (failure) {
+      setError(
+        failure instanceof Error ? failure.message : '操作失败，请稍后重试',
+      )
     } finally {
       setBusy(false)
     }
@@ -72,11 +87,15 @@ export default function Login() {
         <p className="login-footnote">教师看见证据，学生获得及时的帮助。</p>
       </section>
       <section className="login-entry">
-        <form onSubmit={submit} className="login-form">
+        <form onSubmit={submit} className="login-form" aria-busy={busy}>
           <div className="mb-8">
-            <h2 className="text-2xl font-semibold">进入教学工作台</h2>
+            <h2 className="text-2xl font-semibold">
+              {registering ? '注册教师账号' : '进入教学工作台'}
+            </h2>
             <p className="text-muted-foreground mt-3 text-sm">
-              使用教师或学生账号，继续你的教学与学习。
+              {registering
+                ? '注册后可创建班级、添加学生并发布作业。'
+                : '使用教师或学生账号，继续你的教学与学习。'}
             </p>
           </div>
           <label className="block space-y-1 text-sm">
@@ -84,6 +103,8 @@ export default function Login() {
             <Input
               required
               autoComplete="username"
+              maxLength={128}
+              disabled={busy}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
@@ -93,21 +114,72 @@ export default function Login() {
             <Input
               required
               type="password"
-              autoComplete="current-password"
+              autoComplete={registering ? 'new-password' : 'current-password'}
+              minLength={registering ? 12 : 1}
+              maxLength={registering ? 128 : 1024}
+              disabled={busy}
+              aria-describedby={
+                registering ? 'registration-password-help' : undefined
+              }
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </label>
+          {registering && (
+            <>
+              <p
+                id="registration-password-help"
+                className="text-muted-foreground text-xs"
+              >
+                密码需为 12～128 个字符。
+              </p>
+              <label className="block space-y-1 text-sm">
+                确认密码
+                <Input
+                  required
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={12}
+                  maxLength={128}
+                  disabled={busy}
+                  value={again}
+                  onChange={(e) => setAgain(e.target.value)}
+                />
+              </label>
+            </>
+          )}
           {error && (
             <p role="alert" className="text-destructive text-sm">
               {error}
             </p>
           )}
           <Button className="w-full" disabled={busy} type="submit">
-            {busy ? '正在登录…' : '登录工作台'}
+            {registering
+              ? busy
+                ? '正在注册…'
+                : '注册并进入班级管理'
+              : busy
+                ? '正在登录…'
+                : '登录工作台'}
+          </Button>
+          <Button
+            type="button"
+            variant="link"
+            className="w-full"
+            disabled={busy}
+            onClick={() => {
+              setRegistering(!registering)
+              setPassword('')
+              setAgain('')
+              setError('')
+            }}
+          >
+            {registering
+              ? '已有账号？返回登录'
+              : '还没有教师账号？注册教师账号'}
           </Button>
           <p className="text-muted-foreground text-xs leading-6">
-            账号由教师或管理员分配。学生登录后仅可查看本人的学习任务与进度。
+            教师可自行注册。学生请使用教师发放的登录设置链接，登录后仅可查看本人的任务与进度。
           </p>
         </form>
       </section>

@@ -1,9 +1,9 @@
-"""登录、当前会话与退出。"""
+"""教师注册、登录、当前会话与退出。"""
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlmodel import Session
 
 from app.auth import COOKIE, business_error, check_origin, current_principal, password_hash
@@ -16,6 +16,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 class Login(BaseModel):
     username: str = Field(min_length=1, max_length=128)
     password: str = Field(min_length=1, max_length=1024)
+
+
+class TeacherRegistration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    password: str = Field(min_length=12, max_length=128)
 
 
 class User(BaseModel):
@@ -44,6 +51,17 @@ def login(body: Login, request: Request, response: Response) -> User:
         path="/",
     )
     return User(username=principal.username, role=principal.role, student_id=principal.student_id)
+
+
+@router.post("/register", status_code=201)
+def register_teacher(body: TeacherRegistration, request: Request, response: Response) -> User:
+    check_origin(request)
+    if not request.app.state.auth_store.create_teacher(body.username, body.password):
+        raise HTTPException(
+            409, business_error("username_taken", "账号已存在，请更换账号或直接登录")
+        )
+    response.headers["Cache-Control"] = "no-store"
+    return login(Login(username=body.username, password=body.password), request, response)
 
 
 @router.get("/me")
